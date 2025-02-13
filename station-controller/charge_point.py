@@ -83,13 +83,10 @@ class ChargePoint(BaseChargePoint):
             logging.error(f"Failed to log rejected RFID {rfid_tag}: {e}")
 
     @on("MeterValues")
-    async def on_meter_values(self, **kwargs):
+    async def on_meter_values(self, connectorId, transactionId, meterValue):
         """Handles MeterValues event and logs readings to file."""
-        connector_id = kwargs.get("connectorId")
-        transaction_id = kwargs.get("transactionId")
-        meter_values = kwargs.get("meterValues", [])
-        logging.info(f"Received MeterValues for connector {connector_id}, transaction {transaction_id}")
+        logging.info(f"Received MeterValues for connector {connectorId}, transaction {transactionId}")
 
-        self.meter_values_manager.log_meter_values(connector_id, transaction_id, meter_values)
+        self.meter_values_manager.log_meter_values(connectorId, transactionId, meterValue)
 
         return call_result.MeterValues()
