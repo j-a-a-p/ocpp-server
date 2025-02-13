@@ -91,7 +91,7 @@ class ChargePoint(BaseChargePoint):
 
         return call_result.MeterValues()
     
-    @on("OnStatusNotification")
+    @on("StatusNotification")
     async def on_status_notification(self, connector_id, error_code, status, timestamp=None, info=None, vendor_id=None, vendor_error_code=None):
         """Handle the StatusNotification event from the charge point."""
         
