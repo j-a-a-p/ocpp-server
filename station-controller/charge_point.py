@@ -1,5 +1,5 @@
 import logging
-import csv
+import uuid
 from datetime import datetime
 from ocpp.v16 import ChargePoint as BaseChargePoint
 from ocpp.v16 import call_result
@@ -7,6 +7,7 @@ from ocpp.v16.enums import RegistrationStatus, AuthorizationStatus
 from ocpp.routing import on
 from rfid_log import RFIDLog
 from meter_values_log import MeterValuesLog
+from transaction_log import TransactionLog
 
 class ChargePoint(BaseChargePoint):
     """ Handles communication with the charging station. """
@@ -15,6 +16,7 @@ class ChargePoint(BaseChargePoint):
         super().__init__(id, websocket)
         self.rfid = RFIDLog()
         self.meter_values = MeterValuesLog()
+        self.transations = TransactionLog()
 
     @on("BootNotification")
     async def on_boot_notification(self, **kwargs):
@@ -60,10 +62,15 @@ class ChargePoint(BaseChargePoint):
 
     @on("StartTransaction")
     async def on_start_transaction(self, connector_id, id_tag, meter_start, timestamp, **kwargs):
+        """ Handle a StartTransaction event and log it. """
         logging.info(f"StartTransaction {kwargs}")
         #todo add rfid check (maybe unneccessary)
+        
+        transaction_id = str(uuid.uuid4())
+        self.transations.log_transaction(transaction_id, connector_id, id_tag, meter_start, timestamp)
+
         return call_result.StartTransaction(
-            transaction_id=12345,
+            transaction_id=transaction_id,
             id_tag_info={"status": AuthorizationStatus.accepted}
         )
 
