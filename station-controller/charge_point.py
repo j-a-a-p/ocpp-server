@@ -5,9 +5,9 @@ from ocpp.v16 import ChargePoint as BaseChargePoint
 from ocpp.v16 import call_result
 from ocpp.v16.enums import RegistrationStatus, AuthorizationStatus
 from ocpp.routing import on
-from rfid_log import RFIDLog
-from meter_values_log import MeterValuesLog
-from transaction_log import TransactionLog
+from loggers.rfid_log import RFIDLog
+from loggers.meter_values_log import MeterValuesLog
+from loggers.transaction_log import TransactionLog
 
 class ChargePoint(BaseChargePoint):
     """ Handles communication with the charging station. """

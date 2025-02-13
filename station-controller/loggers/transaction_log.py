@@ -1,14 +1,14 @@
 import csv
 import os
 import logging
-from constants import TRNSACTIONS_CSV
-from file_manager import FileManager
+from constants import TRANSACTIONS_CSV
+from loggers.file_manager import FileManager
 
 class TransactionLog(FileManager):
     """Logs meter values to a CSV file."""
 
     def __init__(self):
-        self.file_path = self._ensure_file_exists(TRNSACTIONS_CSV)
+        self.file_path = self._ensure_file_exists(TRANSACTIONS_CSV)
         self._ensure_file_exists()
         self._ensure_header()
 

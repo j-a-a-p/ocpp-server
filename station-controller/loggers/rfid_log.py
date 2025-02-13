@@ -5,7 +5,7 @@ from datetime import datetime
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from constants import ACCEPTED_RFIDS_CSV, REJECTED_RFIDS_CSV
-from file_manager import FileManager
+from loggers.file_manager import FileManager
 
 logging.basicConfig(level=logging.INFO)
 

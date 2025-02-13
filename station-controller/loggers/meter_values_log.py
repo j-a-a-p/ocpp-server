@@ -2,7 +2,7 @@ import csv
 import os
 import logging
 from constants import METER_VALUES_CSV
-from file_manager import FileManager
+from loggers.file_manager import FileManager
 
 class MeterValuesLog(FileManager):
     """Logs meter values to a CSV file."""
