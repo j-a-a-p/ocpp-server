@@ -94,4 +94,4 @@ class ChargePoint(BaseChargePoint):
 
         self.meter_values_manager.log_meter_values(connector_id, transaction_id, meter_values)
 
-        return call_result.MeterValuesPayload()
+        return call_result.MeterValues()
