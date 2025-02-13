@@ -1,0 +1,5 @@
+{
+    "python.analysis.extraPaths": [
+        "./station-controller/loggers"
+    ]
+}

@@ -1,23 +1,16 @@
 import csv
 import os
 import logging
+from constants import METER_VALUES_CSV
+from file_manager import FileManager
 
-METER_VALUES_CSV = "meter_values.csv"
+class MeterValuesManager(FileManager):
+    """Logs meter values to a CSV file."""
 
-class MeterValuesManager:
-    """Manages logging of meter values to a CSV file."""
-
-    def __init__(self, file_path=METER_VALUES_CSV):
-        self.file_path = file_path
+    def __init__(self):
+        self.file_path = self._ensure_file_exists(METER_VALUES_CSV)
         self._ensure_file_exists()
-
-    def _ensure_file_exists(self):
-        """Ensure the CSV file exists with the correct header."""
-        if not os.path.exists(self.file_path):
-            with open(self.file_path, mode='w', newline='', encoding="utf-8") as file:
-                writer = csv.writer(file)
-                writer.writerow(["timestamp", "connectorId", "transactionId", "measurand", "phase", "unit", "value", "context"])
-            logging.info(f"Created new meter values log: {self.file_path}")
+        self._ensure_header()
 
     def log_meter_values(self, connector_id, transaction_id, meter_values):
         """Logs meter values to the CSV file."""
@@ -44,3 +37,10 @@ class MeterValuesManager:
 
         except Exception as e:
             logging.error(f"Error logging MeterValues: {e}")
+
+    def _ensure_header(self):
+        """Ensure CSV has a header row."""
+        if os.stat(self.csv_file).st_size == 0:
+            with open(self.csv_file, "w", newline="", encoding="utf-8") as file:
+                writer = csv.writer(file)
+                writer.writerow(["timestamp", "connectorId", "transactionId", "measurand", "phase", "unit", "value", "context"])
