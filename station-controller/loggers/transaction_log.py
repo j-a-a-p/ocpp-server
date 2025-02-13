@@ -17,8 +17,8 @@ class TransactionLog(FileManager):
         try:
             with open(self.file_path, mode='a', newline='', encoding="utf-8") as file:
                 writer = csv.writer(file)
-                writer.writerow([timestamp, connector_id, transaction_id, id_tag, meter_start])
-                logging.debug(f"Transaction logged: {transaction_id}, Connector: {connector_id}, ID Tag: {id_tag}, Meter Start: {meter_start}, Timestamp: {timestamp}")
+                writer.writerow([timestamp, connector_id, transaction_id, id_tag, meter_start, meter_stop, reason])
+                logging.debug(f"Transaction logged: {transaction_id}, Connector: {connector_id}, ID Tag: {id_tag}, Meter: {meter_start}/{meter_stop}, Timestamp: {timestamp}")
         except Exception as e:
             logging.error(f"Error logging MeterValues: {e}")
 

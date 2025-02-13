@@ -21,7 +21,7 @@ class ChargePoint(BaseChargePoint):
     @on("BootNotification")
     async def on_boot_notification(self, **kwargs):
         logging.info(f"Raw BootNotification payload: {kwargs}")
-
+        #todo log this
         # Extract values safely
         charging_station = {
             "model": kwargs.get("charge_point_model", "Unknown Model"),
@@ -64,15 +64,20 @@ class ChargePoint(BaseChargePoint):
     async def on_start_transaction(self, connector_id, id_tag, meter_start, timestamp, **kwargs):
         """ Handle a StartTransaction event and log it. """
         logging.info(f"StartTransaction {kwargs}")
-        #todo add rfid check (maybe unneccessary)
-        
-        transaction_id = str(uuid.uuid4())
-        self.transations.log_transaction(timestamp, transaction_id, connector_id, id_tag, meter_start, None, None)
+        if self.rfid.is_authorized(id_tag):
+            transaction_id = str(uuid.uuid4())
+            self.transations.log_transaction(timestamp, transaction_id, connector_id, id_tag, meter_start, None, None)
 
-        return call_result.StartTransaction(
-            transaction_id=transaction_id,
-            id_tag_info={"status": AuthorizationStatus.accepted}
-        )
+            return call_result.StartTransaction(
+                transaction_id=transaction_id,
+                id_tag_info={"status": AuthorizationStatus.accepted}
+            )
+        else:
+            logging.warning("Refusing transaction from unregistered RFID tag {id_tag}")
+            return call_result.StartTransaction(
+                transaction_id="refused",
+                id_tag_info={"status": AuthorizationStatus.refused}
+            )
     
     @on("StopTransaction")
     async def on_stop_transaction(self, transaction_id, meter_stop, timestamp, reason=None, **kwargs):
