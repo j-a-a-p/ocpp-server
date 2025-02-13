@@ -1,0 +1,11 @@
+[Unit]
+ Description=Charge Station Controller
+
+[Service]
+ User=jaap
+ WorkingDirectory=/usr/local/
+ ExecStart=/usr/bin/python3 /path/to/your/script/my_script.py
+ Restart=always
+
+[Install]
+ WantedBy=multi-user.target
