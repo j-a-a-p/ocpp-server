@@ -6,12 +6,14 @@ from ocpp.v16 import call_result
 from ocpp.v16.enums import RegistrationStatus, AuthorizationStatus
 from ocpp.routing import on
 from rfid_manager import RFIDManager
+from meter_values_manager import MeterValuesManager
 
 class ChargePoint(BaseChargePoint):
     """ Handles communication with the charging station. """
 
     def __init__(self, id, websocket):
         super().__init__(id, websocket)
+        self.rfid_manager = RFIDManager(rfid_file="rfid_list.csv", auto_reload=True)
 
     @on("BootNotification")
     async def on_boot_notification(self, charge_point_model, charge_point_vendor, firmware_version, charge_point_serial_number, reason, **kwargs):
@@ -46,13 +48,13 @@ class ChargePoint(BaseChargePoint):
 
         if self.rfid_manager.is_authorized(id_tag):
             logging.info(f"RFID {id_tag} authorized")
-            return call_result.AuthorizePayload(
+            return call_result.Authorize(
                 id_tag_info={"status": AuthorizationStatus.accepted}
             )
         else:
             logging.warning(f"RFID {id_tag} not authorized")
             self.log_rejected_rfid(id_tag)
-            return call_result.AuthorizePayload(
+            return call_result.Authorize(
                 id_tag_info={"status": AuthorizationStatus.accepted}
             )
 
@@ -60,7 +62,8 @@ class ChargePoint(BaseChargePoint):
     async def on_start_transaction(self, connector_id, id_tag, meter_start, timestamp, **kwargs):
         """ Handles StartTransaction event. """
         logging.info(f"StartTransaction: Connector {connector_id}, idTag {id_tag}, meter start {meter_start}")
-        return call_result.StartTransactionPayload(
+        #todo add rfid check (maybe unneccessary)
+        return call_result.StartTransaction(
             transaction_id=12345,
             id_tag_info={"status": AuthorizationStatus.accepted}
         )
@@ -78,3 +81,16 @@ class ChargePoint(BaseChargePoint):
             logging.info(f"Rejected RFID {rfid_tag} logged with timestamp {timestamp}.")
         except Exception as e:
             logging.error(f"Failed to log rejected RFID {rfid_tag}: {e}")
+
+    @on("MeterValues")
+    async def on_meter_values(self, **kwargs):
+        """Handles MeterValues event and logs readings to file."""
+        connector_id = kwargs.get("connectorId")
+        transaction_id = kwargs.get("transactionId")
+        meter_values = kwargs.get("meterValue", [])
+
+        logging.info(f"Received MeterValues for connector {connector_id}, transaction {transaction_id}")
+
+        self.meter_values_manager.log_meter_values(connector_id, transaction_id, meter_values)
+
+        return call_result.MeterValuesPayload()
