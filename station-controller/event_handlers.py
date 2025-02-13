@@ -13,7 +13,34 @@ class EventHandler:
         self.charging_profile_manager = ChargingProfileManager(self.cp)
 
     @on("BootNotification")
-    async def on_boot_notification(self, charging_station, reason, **kwargs):
+    async def on_boot_notification(self, **kwargs):
+        logging.info(f"Raw BootNotification payload: {kwargs}")
+
+        # Extract values safely
+        charging_station = {
+            "model": kwargs.get("charge_point_model", "Unknown Model"),
+            "vendor": kwargs.get("charge_point_vendor", "Unknown Vendor"),
+            "firmware": kwargs.get("firmware_version", "Unknown Firmware"),
+            "serial": kwargs.get("charge_point_serial_number", "Unknown Serial")
+        }
+
+        reason = kwargs.get("reason", "Unknown")
+
+        logging.info(f"BootNotification received from {self.id}: {charging_station}, Reason: {reason}")
+
+        return call_result.BootNotification(
+            current_time=datetime.utcnow().isoformat(),
+            interval=10,
+            status=RegistrationStatus.accepted
+        )
+
+    @on("Heartbeat")
+    async def on_heartbeat(self, **kwargs):
+        logging.info(f"Heartbeat received from {self.id}")
+        return call_result.Heartbeat(current_time=datetime.utcnow().isoformat())
+
+    @on("BootNotificationOld")
+    async def on_boot_notification_old(self, charging_station, reason, **kwargs):
         """ Handles BootNotification from the charge point. """
         logging.info(f"BootNotification received: {charging_station}, Reason: {reason}")
         return call_result.BootNotificationPayload(
