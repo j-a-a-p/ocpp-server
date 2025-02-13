@@ -16,17 +16,17 @@ class ChargePoint(BaseChargePoint):
         self.rfid_manager = RFIDManager(rfid_file="rfid_list.csv", auto_reload=True)
 
     @on("BootNotification")
-    async def on_boot_notification(self, charge_point_model, charge_point_vendor, firmware_version, charge_point_serial_number, reason, **kwargs):
-        """ Handles BootNotification event. """
-        logging.info(f"Raw BootNotification payload: {locals()}")
+    async def on_boot_notification(self, **kwargs):
+        logging.info(f"Raw BootNotification payload: {kwargs}")
 
+        # Extract values safely
         charging_station = {
-            "model": charge_point_model,
-            "vendor": charge_point_vendor,
-            "firmware": firmware_version,
-            "serial": charge_point_serial_number
+            "model": kwargs.get("charge_point_model", "Unknown Model"),
+            "vendor": kwargs.get("charge_point_vendor", "Unknown Vendor"),
+            "firmware": kwargs.get("firmware_version", "Unknown Firmware"),
+            "serial": kwargs.get("charge_point_serial_number", "Unknown Serial")
         }
-
+        reason = kwargs.get("reason", "Unknown")
         logging.info(f"BootNotification received from {self.id}: {charging_station}, Reason: {reason}")
 
         return call_result.BootNotification(
