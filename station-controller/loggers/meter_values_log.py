@@ -4,7 +4,7 @@ import logging
 from constants import METER_VALUES_CSV
 from file_manager import FileManager
 
-class MeterValuesManager(FileManager):
+class MeterValuesLog(FileManager):
     """Logs meter values to a CSV file."""
 
     def __init__(self):

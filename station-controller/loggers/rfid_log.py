@@ -9,7 +9,7 @@ from file_manager import FileManager
 
 logging.basicConfig(level=logging.INFO)
 
-class RFIDManager(FileManager):
+class RFIDLog(FileManager):
     """ Manages the RFID whitelist stored in a CSV file. """
 
     def __init__(self):
