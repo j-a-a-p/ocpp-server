@@ -67,12 +67,21 @@ class ChargePoint(BaseChargePoint):
         #todo add rfid check (maybe unneccessary)
         
         transaction_id = str(uuid.uuid4())
-        self.transations.log_transaction(transaction_id, connector_id, id_tag, meter_start, timestamp)
+        self.transations.log_transaction(timestamp, transaction_id, connector_id, id_tag, meter_start, None, None)
 
         return call_result.StartTransaction(
             transaction_id=transaction_id,
             id_tag_info={"status": AuthorizationStatus.accepted}
         )
+    
+    @on("StopTransaction")
+    async def on_stop_transaction(self, transaction_id, meter_stop, timestamp, reason=None, **kwargs):
+        """ Handle a StopTransaction event and log it. """
+
+        id_tag = kwargs.get("id_tag", "Unknown")
+        self.transations.log_transaction(timestamp, transaction_id, None, id_tag, None, meter_stop, reason or "Stopped")
+
+        return call_result.StopTransaction()
 
     @on("MeterValues")
     async def on_meter_values(self, connector_id, transaction_id, meter_value):

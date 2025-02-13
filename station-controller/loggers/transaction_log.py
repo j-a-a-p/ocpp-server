@@ -12,7 +12,7 @@ class TransactionLog(FileManager):
         self._ensure_file_exists()
         self._ensure_header()
 
-    def log_transaction(self, connector_id, transaction_id, id_tag, meter_start, timestamp):
+    def log_transaction(self, timestamp, connector_id, transaction_id, id_tag, meter_start, meter_stop, reason):
         """Logs meter values to the CSV file."""
         try:
             with open(self.file_path, mode='a', newline='', encoding="utf-8") as file:
@@ -27,4 +27,4 @@ class TransactionLog(FileManager):
         if os.stat(self.csv_file).st_size == 0:
             with open(self.csv_file, "w", newline="", encoding="utf-8") as file:
                 writer = csv.writer(file)
-                writer.writerow(["timestamp", "connector_id", "transaction_id", "tag_id", "meter_start"])
+                writer.writerow(["timestamp", "connector_id", "transaction_id", "tag_id", "meter_start", "meter_stop", "reason"])
