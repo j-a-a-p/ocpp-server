@@ -90,3 +90,16 @@ class ChargePoint(BaseChargePoint):
         self.meter_values_manager.log_meter_values(connector_id, transaction_id, meter_value)
 
         return call_result.MeterValues()
+    
+    @on("OnStatusNotification")
+    async def on_status_notification(self, connector_id, error_code, status, timestamp=None, info=None, vendor_id=None, vendor_error_code=None):
+        """Handle the StatusNotification event from the charge point."""
+        
+        logging.info(f"StatusNotification received: Connector {connector_id}, Status {status}, Error {error_code}, Timestamp {timestamp}")
+
+        # You can store this status data in a log file or a database
+        #with open("status_notifications.csv", "a", newline="", encoding="utf-8") as file:
+        #    writer = csv.writer(file)
+        #    writer.writerow([connector_id, error_code, status, timestamp, info, vendor_id, vendor_error_code])
+
+        return call_result.StatusNotification()
