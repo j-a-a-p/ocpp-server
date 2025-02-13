@@ -9,4 +9,4 @@ def register(charge_point):
         logging.info(f"Heartbeat received from {charge_point.id}")
         return call_result.Heartbeat(current_time=datetime.utcnow().isoformat())
 
-    return on_heartbeat
+    return "Heartbeat", on_heartbeat

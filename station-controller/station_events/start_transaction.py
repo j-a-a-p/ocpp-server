@@ -11,4 +11,4 @@ def register(charge_point):
             id_tag_info={"status": enums.AuthorizationStatus.accepted}
         )
     
-    return on_start_transaction
+    return "StartTransaction", on_start_transaction

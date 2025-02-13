@@ -17,11 +17,11 @@ class EventHandler:
                 module = importlib.import_module(f"station_events.{module_name}")
 
                 if hasattr(module, "register"):
-                    handler_function = module.register(self.cp)  # Get event handler function
-                    event_name = module_name.replace("_", "").lower()  # Normalize event name
+                    event_name, handler_function = module.register(self.cp)  # Get event name & function
 
-                    # Dynamically attach the function to ChargePoint
-                    setattr(self.cp, f"on_{event_name}", handler_function)
+                    # Use the @on(event_name) decorator dynamically
+                    self.cp.on(event_name)(handler_function)
+
                     logging.info(f"Registered event handler: {event_name}")
                 else:
                     logging.warning(f"Module {module_name} has no register function.")
