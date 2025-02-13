@@ -21,20 +21,26 @@ class MeterValuesManager:
 
     def log_meter_values(self, connector_id, transaction_id, meter_values):
         """Logs meter values to the CSV file."""
-        with open(self.file_path, mode='a', newline='', encoding="utf-8") as file:
-            writer = csv.writer(file)
+        try:
+            with open(self.file_path, mode='a', newline='', encoding="utf-8") as file:
+                writer = csv.writer(file)
 
-            for meter_value in meter_values:
-                timestamp = meter_value.get("timestamp")
-                sampled_values = meter_value.get("sampledValue", [])
+                entries_logged = 0
+                for meter_value in meter_values:
+                    timestamp = meter_value.get("timestamp")
+                    sampled_values = meter_value.get("sampledValue", [])
 
-                for sample in sampled_values:
-                    measurand = sample.get("measurand", "Unknown")
-                    phase = sample.get("phase", "N/A")  # Not all values have a phase
-                    unit = sample.get("unit", "")
-                    value = sample.get("value", "0")
-                    context = sample.get("context", "")
+                    for sample in sampled_values:
+                        measurand = sample.get("measurand", "Unknown")
+                        phase = sample.get("phase", "")  # Keep empty instead of "N/A"
+                        unit = sample.get("unit", "")
+                        value = sample.get("value", "0")
+                        context = sample.get("context", "")
 
-                    writer.writerow([timestamp, connector_id, transaction_id, measurand, phase, unit, value, context])
+                        writer.writerow([timestamp, connector_id, transaction_id, measurand, phase, unit, value, context])
+                        entries_logged += 1
 
-        logging.info(f"Logged MeterValues for connector {connector_id}, transaction {transaction_id}")
+            logging.info(f"Logged {entries_logged} MeterValues for connector {connector_id}, transaction {transaction_id}")
+
+        except Exception as e:
+            logging.error(f"Error logging MeterValues: {e}")

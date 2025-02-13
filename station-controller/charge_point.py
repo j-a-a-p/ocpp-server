@@ -61,8 +61,7 @@ class ChargePoint(BaseChargePoint):
 
     @on("StartTransaction")
     async def on_start_transaction(self, connector_id, id_tag, meter_start, timestamp, **kwargs):
-        """ Handles StartTransaction event. """
-        logging.info(f"StartTransaction: Connector {connector_id}, idTag {id_tag}, meter start {meter_start}")
+        logging.info(f"StartTransaction {kwargs}")
         #todo add rfid check (maybe unneccessary)
         return call_result.StartTransaction(
             transaction_id=12345,
@@ -88,8 +87,7 @@ class ChargePoint(BaseChargePoint):
         """Handles MeterValues event and logs readings to file."""
         connector_id = kwargs.get("connectorId")
         transaction_id = kwargs.get("transactionId")
-        meter_values = kwargs.get("meterValue", [])
-
+        meter_values = kwargs.get("meterValues", [])
         logging.info(f"Received MeterValues for connector {connector_id}, transaction {transaction_id}")
 
         self.meter_values_manager.log_meter_values(connector_id, transaction_id, meter_values)
