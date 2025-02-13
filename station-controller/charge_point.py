@@ -14,6 +14,7 @@ class ChargePoint(BaseChargePoint):
     def __init__(self, id, websocket):
         super().__init__(id, websocket)
         self.rfid_manager = RFIDManager(rfid_file="rfid_list.csv", auto_reload=True)
+        self.meter_values_manager = MeterValuesManager()
 
     @on("BootNotification")
     async def on_boot_notification(self, **kwargs):
@@ -30,7 +31,7 @@ class ChargePoint(BaseChargePoint):
         logging.info(f"BootNotification received from {self.id}: {charging_station}, Reason: {reason}")
 
         return call_result.BootNotification(
-            current_time=datetime.now(datetime.timezone.utc).isoformat(),
+            current_time=datetime.now().isoformat(),
             interval=10,
             status=RegistrationStatus.accepted
         )
@@ -39,7 +40,7 @@ class ChargePoint(BaseChargePoint):
     async def on_heartbeat(self, **kwargs):
         """ Handles Heartbeat event. """
         logging.info(f"Heartbeat received from {self.id}")
-        return call_result.Heartbeat(current_time=datetime.utcnow().isoformat())
+        return call_result.Heartbeat(current_time=datetime.now().isoformat())
 
     @on("Authorize")
     async def on_authorize(self, id_tag, **kwargs):
