@@ -2,10 +2,10 @@ import logging
 from datetime import datetime
 from ocpp.v16 import call_result
 
-def register(event_handler):
+def register(charge_point):
     """ Registers the Heartbeat event handler. """
 
-    @event_handler.cp.on("Heartbeat")
+    @charge_point.on("Heartbeat")
     async def on_heartbeat(**kwargs):
-        logging.info(f"Heartbeat received from {event_handler.cp.id}")
-        return call_result.Heartbeat(current_time=datetime.utcnow().isoformat())
+        logging.info(f"Heartbeat received from {charge_point.id}")
+        return call_result.Heartbeat(current_time=datetime.now(datetime.timezone.utc).isoformat())

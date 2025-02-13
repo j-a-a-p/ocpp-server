@@ -1,24 +1,20 @@
 import logging
 import importlib
 import pkgutil
-from ocpp.routing import on
-from charging_profile import ChargingProfileManager
+import station_events  # Import the station_events package
 
 class EventHandler:
     """ Dynamically loads and registers event handlers for OCPP messages. """
 
     def __init__(self, charge_point):
         self.cp = charge_point
-        self.charging_profile_manager = ChargingProfileManager(self.cp)
         self._register_event_handlers()
 
     def _register_event_handlers(self):
-        """ Dynamically loads event handlers from station_events folder. """
-        import station_events
-
+        """ Auto-discovers and registers event handlers from the station_events folder. """
         for _, module_name, _ in pkgutil.iter_modules(station_events.__path__):
             module = importlib.import_module(f"station_events.{module_name}")
-            if hasattr(module, "register"):
-                module.register(self)
 
-        logging.info("All event handlers registered successfully.")
+            if hasattr(module, "register"):
+                module.register(self.cp)  # Pass ChargePoint instance
+                logging.info(f"Registered event handler: {module_name}")

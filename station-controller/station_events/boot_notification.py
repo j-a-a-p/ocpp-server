@@ -2,10 +2,10 @@ import logging
 from datetime import datetime
 from ocpp.v16 import call_result, enums
 
-def register(event_handler):
+def register(charge_point):
     """ Registers the BootNotification event handler. """
 
-    @event_handler.cp.on("BootNotification")
+    @charge_point.on("BootNotification")
     async def on_boot_notification(**kwargs):
         logging.info(f"Raw BootNotification payload: {kwargs}")
 
