@@ -5,7 +5,6 @@ from ocpp.v16 import call_result, enums
 def register(charge_point):
     """ Registers the BootNotification event handler. """
 
-    @charge_point.on("BootNotification")
     async def on_boot_notification(**kwargs):
         logging.info(f"Raw BootNotification payload: {kwargs}")
 
@@ -25,3 +24,5 @@ def register(charge_point):
             interval=10,
             status=enums.RegistrationStatus.accepted
         )
+    
+    charge_point.add_event_listener("BootNotification", on_boot_notification)

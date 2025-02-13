@@ -13,8 +13,13 @@ class EventHandler:
     def _register_event_handlers(self):
         """ Auto-discovers and registers event handlers from the station_events folder. """
         for _, module_name, _ in pkgutil.iter_modules(station_events.__path__):
-            module = importlib.import_module(f"station_events.{module_name}")
+            try:
+                module = importlib.import_module(f"station_events.{module_name}")
 
-            if hasattr(module, "register"):
-                module.register(self.cp)  # Pass ChargePoint instance
-                logging.info(f"Registered event handler: {module_name}")
+                if hasattr(module, "register"):
+                    module.register(self.cp)  # Pass ChargePoint instance
+                    logging.info(f"Registered event handler: {module_name}")
+                else:
+                    logging.warning(f"Module {module_name} has no register function.")
+            except Exception as e:
+                logging.error(f"Failed to register event handler {module_name}: {e}")
