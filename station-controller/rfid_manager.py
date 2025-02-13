@@ -21,17 +21,23 @@ class RFIDManager:
             self.start_file_watcher()
 
     def load_rfid_whitelist(self):
-        """ Load authorized RFID tags from a CSV file. """
+        """ Load authorized RFID tags from a CSV file. Create if missing. """
         rfid_tags = set()
+        if not os.path.exists(self.rfid_file):
+            logging.warning(f"RFID whitelist file not found. Creating a new one: {self.rfid_file}")
+            with open(self.rfid_file, 'w', newline='', encoding="utf-8") as file:
+                writer = csv.writer(file)
+                writer.writerow(["RFID", "Owner"])  # Optional: Add a header row
+            return
+
         try:
             with open(self.rfid_file, newline='', encoding="utf-8") as file:
                 reader = csv.reader(file)
+                next(reader, None)  # Skip header if present
                 for row in reader:
                     if row and row[0]:  # Ensure the row is not empty
                         rfid_tags.add(row[0].strip().upper())
             logging.info(f"Loaded {len(rfid_tags)} RFID tags from {self.rfid_file}")
-        except FileNotFoundError:
-            logging.error(f"RFID whitelist file not found: {self.rfid_file}")
         except Exception as e:
             logging.error(f"Error reading RFID whitelist: {e}")
 
