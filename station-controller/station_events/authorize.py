@@ -10,4 +10,4 @@ def register(charge_point):
             id_tag_info={"status": enums.AuthorizationStatus.accepted}
         )
 
-    charge_point.add_event_listener("Authorize", on_authorize)
+    return on_authorize

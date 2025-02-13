@@ -25,4 +25,4 @@ def register(charge_point):
             status=enums.RegistrationStatus.accepted
         )
     
-    charge_point.add_event_listener("BootNotification", on_boot_notification)
+    return on_boot_notification
