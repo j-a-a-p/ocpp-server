@@ -12,11 +12,11 @@ from loggers.transaction_log import TransactionLog
 class ChargePoint(BaseChargePoint):
     """ Handles communication with the charging station. """
 
-    def __init__(self, id, websocket):
-        super().__init__(id, websocket)
+    def __init__(self, charge_point_id, websocket):
+        super().__init__(charge_point_id, websocket)
         self.rfid = RFIDLog()
-        self.meter_values = MeterValuesLog()
-        self.transations = TransactionLog()
+        self.meter_values = MeterValuesLog(self.id)
+        self.transations = TransactionLog(self.id)
 
     @on("BootNotification")
     async def on_boot_notification(self, **kwargs):
@@ -76,7 +76,7 @@ class ChargePoint(BaseChargePoint):
             logging.warning("Refusing transaction from unregistered RFID tag {id_tag}")
             return call_result.StartTransaction(
                 transaction_id="refused",
-                id_tag_info={"status": AuthorizationStatus.refused}
+                id_tag_info={"status": AuthorizationStatus.rejected}
             )
     
     @on("StopTransaction")
