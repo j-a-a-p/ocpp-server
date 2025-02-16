@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from models import Owner, OwnerReference, Card, FailedAuthentication
+from models import Owner, Card, FailedAuthentication
 from schemas import OwnerBase, CardBase
 
 def get_owners(db: Session, skip: int = 0, limit: int = 100):
@@ -9,10 +9,7 @@ def get_owner(db: Session, owner_id: int):
     return db.query(Owner).filter(Owner.id == owner_id).first()
 
 def create_owner(db: Session, owner: OwnerBase):
-    reference = db.query(OwnerReference).filter(OwnerReference.reference == owner.reference).first()
-    if not reference:
-        return None
-    db_owner = Owner(full_name=owner.full_name, email=owner.email, reference_id=reference.id)
+    db_owner = Owner(full_name=owner.full_name, email=owner.email, reference=owner.reference)
     db.add(db_owner)
     db.commit()
     db.refresh(db_owner)

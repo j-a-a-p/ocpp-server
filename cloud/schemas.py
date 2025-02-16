@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from typing import List
 from datetime import datetime
 
 class OwnerBase(BaseModel):
@@ -9,13 +8,6 @@ class OwnerBase(BaseModel):
 
 class OwnerResponse(OwnerBase):
     id: int
-
-    class Config:
-        from_attributes = True
-
-class ReferenceResponse(BaseModel):
-    id: int
-    reference: str
 
     class Config:
         from_attributes = True

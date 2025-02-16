@@ -9,12 +9,6 @@ class Owner(Base):
     id = Column(Integer, primary_key=True, index=True)
     full_name = Column(String, index=True)
     email = Column(String, unique=True, index=True)
-    reference_id = Column(Integer, ForeignKey("owner_references.id"))
-
-class OwnerReference(Base):
-    __tablename__ = "owner_references"
-
-    id = Column(Integer, primary_key=True, index=True)
     reference = Column(String, unique=True, index=True)
 
 class Card(Base):

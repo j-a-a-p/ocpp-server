@@ -1,16 +1,9 @@
--- Owner References Table
-CREATE TABLE IF NOT EXISTS owner_references (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    reference TEXT UNIQUE NOT NULL
-);
-
 -- Owners Table
 CREATE TABLE IF NOT EXISTS owners (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     full_name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
-    reference_id INTEGER,
-    FOREIGN KEY (reference_id) REFERENCES owner_references (id) ON DELETE SET NULL
+    reference TEXT UNIQUE NOT NULL
 );
 
 -- Cards Table

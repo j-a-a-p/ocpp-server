@@ -1,6 +1,7 @@
 import subprocess
 from fastapi import FastAPI
-from routes import owners, references, cards
+from fastapi.middleware.cors import CORSMiddleware
+from routes import owners, cards
 
 def run_flyway():
     """Run Flyway migrations before starting the app."""
@@ -16,8 +17,14 @@ run_flyway()
 
 app = FastAPI()
 app.include_router(owners.router)
-app.include_router(references.router)
 app.include_router(cards.router)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Change to "*" to allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],  # Allow all headers
+)
 
 if __name__ == "__main__":
     import uvicorn

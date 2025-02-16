@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from schemas import OwnerResponse, OwnerBase
-from models import OwnerReference
 from crud import get_owners, get_owner, create_owner
 from dependencies import get_db_dependency
 
