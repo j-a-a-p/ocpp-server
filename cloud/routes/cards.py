@@ -29,8 +29,4 @@ def authenticate_card(
         log_failed_authentication(db, rfid, station_id)
         raise HTTPException(status_code=404, detail="Card not found")
 
-    if not card.status:
-        log_failed_authentication(db, rfid, station_id)
-        raise HTTPException(status_code=403, detail="Card is inactive")
-
-    return {"owner_id": card.owner_id, "status": "active"}
+    return {"owner_id": card.owner_id}

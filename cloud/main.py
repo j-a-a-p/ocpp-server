@@ -2,13 +2,6 @@ import subprocess
 from fastapi import FastAPI
 from routes import owners, references, cards
 
-app = FastAPI()
-
-# Include routers
-app.include_router(owners.router)
-app.include_router(references.router)
-app.include_router(cards.router)
-
 def run_flyway():
     """Run Flyway migrations before starting the app."""
     print("Running Flyway migrations...")
@@ -20,6 +13,11 @@ def run_flyway():
 
 # Run Flyway before starting FastAPI
 run_flyway()
+
+app = FastAPI()
+app.include_router(owners.router)
+app.include_router(references.router)
+app.include_router(cards.router)
 
 if __name__ == "__main__":
     import uvicorn
