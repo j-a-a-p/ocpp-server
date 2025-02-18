@@ -11,7 +11,7 @@ const App: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingOwner, setEditingOwner] = useState<any>(null);
   const [form] = Form.useForm();
-  
+
   useEffect(() => {
     if (selectedMenu === "residents") fetchOwners();
   }, [selectedMenu]);
@@ -77,8 +77,24 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteOwner = async (ownerId: number) => {
+    try {
+      const response = await fetch(`http://localhost:8000/owners/${ownerId}`, {
+        method: "DELETE",
+      });
+  
+      if (response.status === 204) {
+        message.success("Owner deleted successfully!");
+        fetchOwners(); // Refresh the list
+      } else {
+        message.error("Failed to delete owner.");
+      }
+    } catch (error) {
+      message.error("An error occurred while deleting the owner.");
+    }
+  };
+  
   const columns = [
-    { title: "ID", dataIndex: "id", key: "id" },
     { title: "Full Name", dataIndex: "full_name", key: "full_name" },
     { title: "Email", dataIndex: "email", key: "email" },
     { title: "Reference", dataIndex: "reference", key: "reference" },
@@ -89,6 +105,11 @@ const App: React.FC = () => {
         <>
           <Button onClick={() => showModal(record)}>Edit</Button>
           <Button onClick={() => handleAddCard(record.id)} style={{ marginLeft: 8 }}>Add Card</Button>
+          <Button
+            onClick={() => handleDeleteOwner(record.id)}
+            style={{ marginLeft: 8 }}
+            danger
+          >Delete</Button>
         </>
       ),
     },

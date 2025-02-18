@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
 
 class OwnerBase(BaseModel):
     full_name: str
@@ -8,6 +9,8 @@ class OwnerBase(BaseModel):
 
 class OwnerResponse(OwnerBase):
     id: int
+    status: str
+    invite_expires_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

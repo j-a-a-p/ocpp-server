@@ -1,2 +1,6 @@
 DATA_DIRECTORY = "charge-cloud"
 DB_FILE = "cloud.db"
+SES_ACCESS_KEY = "AKIAYGI6U6SIWCWUWI5M"
+SES_SECRET_KEY = "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"
+SES_REGION = "eu-central-1"
+JWT_SECRET = "sef3t3po4ru3mcu34 tc305c4nu4irj4mxrg495 0gu405gmenbxb9ut4n0298ontlvk.sdmalm;efwm;a"
