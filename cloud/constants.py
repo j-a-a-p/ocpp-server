@@ -1,6 +1,35 @@
+import os
+import platform
+import configparser
+
+APP_NAME = "charge-apt"
+
+# Determine OS and set config file path
+if platform.system() == "Darwin":  # macOS
+    CONFIG_FILE = os.path.expanduser(f"~/.config/{APP_NAME}/configuration.ini")
+elif platform.system() == "Linux":
+    CONFIG_FILE = "/etc/{APP_NAME}/configuration.ini"
+else:
+    raise RuntimeError("Unsupported OS")
+
+config = configparser.ConfigParser()
+config.read(CONFIG_FILE)
+
+def load_secret(key):
+    """Loads secret values from a key-value configuration file."""
+    try:
+        with open(CONFIG_FILE) as f:
+            for line in f:
+                k, v = line.strip().split("=", 1)
+                if k == key:
+                    return v
+    except Exception as e:
+        print(f"Error loading secret {key}: {e}")
+        return None
+
 DATA_DIRECTORY = "charge-cloud"
 DB_FILE = "cloud.db"
-SES_ACCESS_KEY = "AKIAYGI6U6SIWCWUWI5M"
-SES_SECRET_KEY = "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"
-SES_REGION = "eu-central-1"
-JWT_SECRET = "sef3t3po4ru3mcu34 tc305c4nu4irj4mxrg495 0gu405gmenbxb9ut4n0298ontlvk.sdmalm;efwm;a"
+SES_ACCESS_KEY = config.get("SimpleEmailService", "SES_ACCESS_KEY", fallback=None)
+SES_SECRET_KEY = config.get("SimpleEmailService", "SES_SECRET_KEY", fallback=None)
+AWS_REGION = config.get("AWS", "REGION", fallback=None)
+JWT_SECRET = config.get("Cloud", "JWT_SECRET", fallback=None)
