@@ -5,7 +5,8 @@ from crud import get_owners, get_owner, update_owner, delete_owner, create_invit
 from dependencies import get_db_dependency
 from invite import generate_invitation_token, send_invitation_email, generate_auth_token
 from datetime import datetime
-from models import Owner
+from models import Owner, OwnerStatus
+from constants import JWT_EXPIRATION_DAYS
 
 router = APIRouter(prefix="/owners", tags=["owners"])
 
@@ -61,7 +62,7 @@ def activate_owner(token: str, response: Response, db: Session = get_db_dependen
         raise HTTPException(status_code=400, detail="Invitation has expired")
     
     owner = update_owner(db, owner.id, {
-        "status": "active",
+        "status": OwnerStatus.ACTIVE,
         "invite_token": None,
         "invite_expires_at": None
     })
@@ -73,8 +74,8 @@ def activate_owner(token: str, response: Response, db: Session = get_db_dependen
         key="auth_token",
         value=auth_token,
         httponly=True,
-        secure=True,  # Enable in production
-        max_age=30 * 24 * 60 * 60  # 30 days
+        #secure=True,  # Enable in production
+        max_age=JWT_EXPIRATION_DAYS * 24 * 60 * 60
     )
     
     return {"message": "Account activated successfully"}

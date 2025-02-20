@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Depends, HTTPException, Security
+from fastapi import APIRouter, Cookie, HTTPException, Security
 from sqlalchemy.orm import Session
 from schemas import CardResponse, CardBase
 from models import Card, FailedAuthentication
 from crud import get_cards, create_card, log_failed_authentication
 from dependencies import get_db_dependency
 from security import verify_api_key
+from invite import verify_auth_token
 
 router = APIRouter(prefix="/cards", tags=["cards"])
 
@@ -32,24 +33,50 @@ def authenticate_card(
 
     return {"owner_id": card.owner_id}
 
-@router.post("/add_card/{owner_id}", response_model=CardResponse)
-def add_card(owner_id: int, db: Session = get_db_dependency()):
+@router.post("/add_card/{station_id}", response_model=CardResponse)
+def add_card(station_id: str, db: Session = get_db_dependency(), auth_token: str = Cookie(None)):
     """ Finds the latest FailedAuthentication within 5 minutes and registers a new card for the given owner_id. """
 
-    five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
-    latest_failed_auth = (
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Unauthorized: Missing auth token")
+    
+    owner_id = verify_auth_token(auth_token)
+    if not owner_id:
+        raise HTTPException(status_code=401, detail="Unauthorized: wrong credentials")
+
+
+    latest_failed_auth_by_station = (
         db.query(FailedAuthentication)
-        .filter(FailedAuthentication.timestamp >= five_minutes_ago)
+        .filter(FailedAuthentication.station_id == station_id)
         .order_by(FailedAuthentication.timestamp.desc())
         .first()
     )
-    if not latest_failed_auth:
+    if not latest_failed_auth_by_station:
         raise HTTPException(status_code=404, detail="No recent failed authentication found")
 
-    # Create new card entry
-    new_card = Card(rfid=latest_failed_auth.rfid, owner_id=owner_id)
+    new_card = Card(rfid=latest_failed_auth_by_station.rfid, owner_id=owner_id)
     db.add(new_card)
     db.commit()
     db.refresh(new_card)
 
     return new_card
+
+@router.get("/refused")
+def list_refused_cards(db: Session = get_db_dependency(), auth_token: str = Cookie(None)):
+    """ Returns distinct failed authentications from the last 5 minutes, ordered by timestamp descending. """
+    #if not verify_auth_token(auth_token):
+    #    raise HTTPException(status_code=401, detail="Unauthorized: please login (again).")
+    
+    five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
+    refused_cards = (
+        db.query(FailedAuthentication)
+        .filter(FailedAuthentication.timestamp >= five_minutes_ago)
+        .order_by(FailedAuthentication.timestamp.desc())
+        .distinct(FailedAuthentication.rfid)
+        .all()
+    )
+    
+    if not refused_cards:
+        raise HTTPException(status_code=404, detail="No refused cards found")
+    
+    return {"refused_cards": refused_cards}

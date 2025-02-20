@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 import secrets
-from constants import JWT_SECRET
+from constants import JWT_SECRET, INVITE_URL, INVITE_EXPIRATION_DAYS, JWT_EXPIRATION_DAYS
 import jwt
 from typing import Optional
 from ses_mail_sender import SESEmailSender
@@ -8,13 +8,13 @@ from ses_mail_sender import SESEmailSender
 def generate_invitation_token() -> tuple[str, datetime]:
     """Generate a secure token and expiration date."""
     token = secrets.token_urlsafe(32)
-    expires_at = datetime.utcnow() + timedelta(days=30)
+    expires_at = datetime.utcnow() + timedelta(days=INVITE_EXPIRATION_DAYS)
     return token, expires_at
 
 def generate_auth_token(owner_id: int) -> str:
     """Generate a JWT token for authenticated owners."""
     return jwt.encode(
-        {"owner_id": owner_id, "exp": datetime.utcnow() + timedelta(days=30)},
+        {"owner_id": owner_id, "exp": datetime.utcnow() + timedelta(days=JWT_EXPIRATION_DAYS)},
         JWT_SECRET,
         algorithm="HS256"
     )
@@ -31,7 +31,7 @@ def verify_auth_token(token: str) -> Optional[int]:
     
 def send_invitation_email(email: str, token: str):
     sender = SESEmailSender()
-    activation_link = f"http://aircokopen.nu:8000/owners/activate/{token}"
+    activation_link = f"{INVITE_URL}/activate?token={token}"
     
     subject = "Invitation to Access System"
     body = f"""
@@ -40,7 +40,7 @@ def send_invitation_email(email: str, token: str):
     
     {activation_link}
     
-    This invitation will expire in 30 days.
+    This invitation will expire in {INVITE_EXPIRATION_DAYS} days.
     """
     
     sender.send_email(

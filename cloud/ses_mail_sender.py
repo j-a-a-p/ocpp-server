@@ -1,6 +1,6 @@
 import boto3
 from botocore.exceptions import BotoCoreError, NoCredentialsError
-from constants import SES_ACCESS_KEY, SES_SECRET_KEY, SES_REGION
+from constants import SES_ACCESS_KEY, SES_SECRET_KEY, AWS_REGION
 
 class SESEmailSender:
     def __init__(self):
@@ -9,7 +9,7 @@ class SESEmailSender:
             "ses",
             aws_access_key_id=SES_ACCESS_KEY,
             aws_secret_access_key=SES_SECRET_KEY,
-            region_name=SES_REGION
+            region_name=AWS_REGION
         )
 
     def send_email(self, sender, recipient, subject, body):

@@ -98,6 +98,7 @@ const App: React.FC = () => {
     { title: "Full Name", dataIndex: "full_name", key: "full_name" },
     { title: "Email", dataIndex: "email", key: "email" },
     { title: "Reference", dataIndex: "reference", key: "reference" },
+    { title: "Status", dataIndex: "status", key: "status" },
     {
       title: "Action",
       key: "action",

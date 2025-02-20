@@ -31,5 +31,10 @@ DATA_DIRECTORY = "charge-cloud"
 DB_FILE = "cloud.db"
 SES_ACCESS_KEY = config.get("SimpleEmailService", "SES_ACCESS_KEY", fallback=None)
 SES_SECRET_KEY = config.get("SimpleEmailService", "SES_SECRET_KEY", fallback=None)
-AWS_REGION = config.get("AWS", "REGION", fallback=None)
+AWS_REGION = "eu-central-1"
+
 JWT_SECRET = config.get("Cloud", "JWT_SECRET", fallback=None)
+JWT_EXPIRATION_DAYS = 180
+
+INVITE_URL = config.get("ResidentUI", "INVITE_URL", fallback=None)
+INVITE_EXPIRATION_DAYS = 180
