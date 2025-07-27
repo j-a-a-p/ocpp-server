@@ -2,6 +2,7 @@ import asyncio
 import logging
 import websockets
 from charge_point import ChargePoint
+from init_db import init_database
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -15,6 +16,10 @@ async def on_connect(websocket, path="no_station"):
     await cp.start()
 
 async def main():
+    # Initialize database
+    init_database()
+    logging.info("Database initialized")
+    
     server = await websockets.serve(on_connect, '0.0.0.0', 9000, subprotocols=['ocpp1.6'])
     logging.info("WebSocket Server Started on ws://0.0.0.0:9000")
     await server.wait_closed()

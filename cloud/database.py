@@ -8,7 +8,7 @@ os.makedirs(DATA_DIRECTORY, exist_ok=True)
 
 # Database connection URL
 DATABASE_URL = f"sqlite:///{os.path.join(DATA_DIRECTORY, DB_FILE)}"
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False, "foreign_keys": "ON"})
 
 # Create a session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

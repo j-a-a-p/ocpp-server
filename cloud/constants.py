@@ -2,7 +2,7 @@ import os
 import platform
 import configparser
 
-APP_NAME = "charge-apt"
+APP_NAME = "occp-server"
 
 # Determine OS and set config file path
 if platform.system() == "Darwin":  # macOS

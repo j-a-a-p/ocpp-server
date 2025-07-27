@@ -7,6 +7,7 @@ from ocpp.v16.enums import RegistrationStatus, AuthorizationStatus
 from ocpp.routing import on
 from rfid_manager import RFIDManager
 from meter_values_manager import MeterValuesManager
+from transaction_service import TransactionService
 import uuid
 
 class ChargePoint(BaseChargePoint):
@@ -65,6 +66,17 @@ class ChargePoint(BaseChargePoint):
         logging.info(f"StartTransaction {kwargs}")
         #todo add rfid check (maybe unneccessary)
         transaction_id = uuid.uuid4().int >> 64
+        
+        # Store transaction in database
+        try:
+            transaction = TransactionService.create_transaction(
+                station_name=self.id,
+                rfid=id_tag
+            )
+            logging.info(f"Transaction stored in database with ID: {transaction.id}")
+        except Exception as e:
+            logging.error(f"Failed to store transaction in database: {e}")
+        
         return call_result.StartTransaction(
             transaction_id=transaction_id,
             id_tag_info={"status": AuthorizationStatus.accepted}
