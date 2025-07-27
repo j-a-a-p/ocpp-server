@@ -75,7 +75,7 @@ class ChargePoint(BaseChargePoint):
             )
             logging.info(f"Transaction stored in database with ID: {transaction.id}")
         except Exception as e:
-            logging.error(f"Failed to store transaction in database: {e}")
+            logging.error(f"Failed to store transaction in database: {e}, for card: {id_tag}")
         
         return call_result.StartTransaction(
             transaction_id=transaction_id,
