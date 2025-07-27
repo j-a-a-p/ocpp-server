@@ -28,9 +28,9 @@ def load_secret(key):
         return None
 
 if platform.system() == "Darwin":  # macOS
-    DATA_DIRECTORY = os.path.expanduser(f"~/.config/{APP_NAME}/ocpp-data")
+    DATA_DIRECTORY = os.path.expanduser(f"~/.config/{APP_NAME}/ocpp-data/")
 elif platform.system() == "Linux":
-    DATA_DIRECTORY = "/home/ubuntu/ocpp-data"
+    DATA_DIRECTORY = "/home/ubuntu/ocpp-data/"
 else:
     raise RuntimeError("Unsupported OS")
 
