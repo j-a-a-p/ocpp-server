@@ -7,7 +7,7 @@ from constants import DB_FILE
 DATABASE_URL = "sqlite:///" + DB_FILE
 
 # Create SQLAlchemy engine
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False, "foreign_keys": "ON"})
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
 # Create SessionLocal class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
