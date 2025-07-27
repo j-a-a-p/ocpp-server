@@ -1,17 +1,17 @@
 #!/bin/bash
 
 # Create the OCPP systemd service file
-sudo tee /etc/systemd/system/ocpp.service > /dev/null << 'EOF'
+sudo tee /etc/systemd/system/cloud-api.service > /dev/null << 'EOF'
 [Unit]
 Description=OCPP WebSocket Server
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/ubuntu/ocpp-server/station-controller
+WorkingDirectory=/home/ubuntu/ocpp-server/cloud-api
 ExecStart=/home/ubuntu/myenv/bin/python3 main.py
-StandardOutput=append:/home/ubuntu/ocpp.log
-StandardError=append:/home/ubuntu/ocpp.log
+StandardOutput=append:/home/ubuntu/cloud-api.log
+StandardError=append:/home/ubuntu/cloud-api.log
 Restart=on-failure
 User=ubuntu
 Environment=PYTHONUNBUFFERED=1
@@ -26,5 +26,5 @@ echo "OCPP systemd service file created at /etc/systemd/system/ocpp.service"
 sudo systemctl daemon-reload
 
 echo "Systemd daemon reloaded. You can now enable and start the service with:"
-echo "sudo systemctl enable ocpp.service"
-echo "sudo systemctl start ocpp.service" 
+echo "sudo systemctl enable cloud-api.service"
+echo "sudo systemctl start cloud-api.service" 
