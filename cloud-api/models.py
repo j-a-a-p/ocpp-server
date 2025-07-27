@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum
-from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from database import Base
 from datetime import datetime
 import enum
@@ -34,10 +34,18 @@ class Card(Base):
     rfid = Column(String, primary_key=True, index=True)  # Using RFID as primary key
     owner_id = Column(Integer, ForeignKey("owners.id"))
 
+class ChargeTransaction(Base):
+    __tablename__ = "charge_transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    station_id = Column(String, nullable=False)
+    rfid = Column(String, index=True, nullable=False)
+    created = Column(DateTime(timezone=True), server_default=func.now()) 
+
 class FailedAuthentication(Base):
     __tablename__ = "failed_authentications"
 
     id = Column(Integer, primary_key=True, index=True)
-    rfid = Column(String, nullable=False)  # Store the RFID, even if it doesn't exist in cards
+    rfid = Column(String, nullable=False)
     station_id = Column(String, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
