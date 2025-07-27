@@ -27,7 +27,13 @@ def load_secret(key):
         print(f"Error loading secret {key}: {e}")
         return None
 
-DATA_DIRECTORY = "~/ocpp-data"
+if platform.system() == "Darwin":  # macOS
+    DATA_DIRECTORY = os.path.expanduser(f"~/.config/{APP_NAME}/ocpp-data")
+elif platform.system() == "Linux":
+    DATA_DIRECTORY = "/ubuntu/home/ocpp-data"
+else:
+    raise RuntimeError("Unsupported OS")
+
 DB_FILE = "cloud.db"
 SES_ACCESS_KEY = config.get("SimpleEmailService", "SES_ACCESS_KEY", fallback=None)
 SES_SECRET_KEY = config.get("SimpleEmailService", "SES_SECRET_KEY", fallback=None)
