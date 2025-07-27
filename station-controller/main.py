@@ -5,8 +5,9 @@ from charge_point import ChargePoint
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-async def on_connect(websocket, path):
+async def on_connect(websocket, path="no_station"):
     """ Handle new charge point connections. """
+    logging.info(f"On Connect {path}")
     charge_point_id = path.strip('/')
     logging.info(f"New ChargePoint connected: {charge_point_id}")
 

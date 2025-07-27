@@ -1,6 +1,8 @@
 
 # State files
-BASE_FOLDER = "/var/lib/station-controller/"
-METER_VALUES_CSV = BASE_FOLDER + "meter_values.csv"
-TRANSACTIONS_CSV = BASE_FOLDER + "transactions.csv"
-STATUS_NOTIFICATIONS_CSV = BASE_FOLDER + "status_notifications.csv"
+
+METER_VALUES_CSV = "/var/www/html/meter_values.csv"
+STATUS_JSON = "/var/www/html/meter_values.json"
+
+DATA_DIRECTORY = "~/ocpp-data"
+DB_FILE = "cloud.db"

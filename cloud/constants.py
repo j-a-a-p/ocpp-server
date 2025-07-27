@@ -27,7 +27,7 @@ def load_secret(key):
         print(f"Error loading secret {key}: {e}")
         return None
 
-DATA_DIRECTORY = "charge-cloud"
+DATA_DIRECTORY = "~/ocpp-data"
 DB_FILE = "cloud.db"
 SES_ACCESS_KEY = config.get("SimpleEmailService", "SES_ACCESS_KEY", fallback=None)
 SES_SECRET_KEY = config.get("SimpleEmailService", "SES_SECRET_KEY", fallback=None)
