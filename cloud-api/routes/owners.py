@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Response
 from sqlalchemy.orm import Session
 from schemas import OwnerResponse, OwnerBase
-from crud import get_owners, get_owner, update_owner, delete_owner, create_invited_owner
+from crud import get_owners, get_owner, update_owner, create_invited_owner
 from dependencies import get_db_dependency
 from invite import generate_invitation_token, send_invitation_email, generate_auth_token
 from datetime import datetime
@@ -79,22 +79,3 @@ def activate_owner(token: str, response: Response, db: Session = get_db_dependen
     )
     
     return {"message": "Account activated successfully"}
-
-@router.delete("/{owner_id}", status_code=204)
-def delete_existing_owner(owner_id: int, db: Session = get_db_dependency()):
-    """
-    Delete an owner if they have no associated cards.
-    Returns 204 on success, 404 if owner not found, 400 if owner has cards.
-    """
-    result = delete_owner(db, owner_id)
-    if not result:
-        # Check if owner exists first to give accurate error message
-        owner = get_owner(db, owner_id)
-        if not owner:
-            raise HTTPException(status_code=404, detail="Owner not found")
-        else:
-            raise HTTPException(
-                status_code=400, 
-                detail="Cannot delete owner with associated cards"
-            )
-    return None  # 204 No Content
