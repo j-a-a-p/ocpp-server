@@ -11,6 +11,7 @@ class OwnerResponse(OwnerBase):
     id: int
     status: str
     invite_expires_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

@@ -22,33 +22,25 @@ class Owner(Base):
     
     cards = relationship("Card", back_populates="owner")
 
-class Invitation(Base):
-    __tablename__ = "invitations"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True)
-    token = Column(String, unique=True, index=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    expires_at = Column(DateTime)
-
 class Card(Base):
     __tablename__ = "cards"
 
     #TODO at some point you want to add a tenant id to this key
     rfid = Column(String, primary_key=True, index=True)  # Using RFID as primary key
-    owner_id = Column(Integer, ForeignKey("owners.id"))
+    owner_id = Column(Integer, ForeignKey("owners.id", ondelete="RESTRICT"))
     
     owner = relationship("Owner", back_populates="cards")
+    charge_transactions = relationship("ChargeTransaction", back_populates="card")
 
 class ChargeTransaction(Base):
     __tablename__ = "charge_transactions"
 
     id = Column(Integer, primary_key=True, index=True)
     station_id = Column(String, nullable=False)
-    rfid = Column(String, index=True, nullable=False)
+    rfid = Column(String, ForeignKey("cards.rfid"), nullable=False)
     created = Column(DateTime(timezone=True), server_default=func.now())
 
-    cards = relationship("Card", back_populates="charge_transactions")
+    card = relationship("Card", back_populates="charge_transactions")
 
 class FailedAuthentication(Base):
     __tablename__ = "failed_authentications"
@@ -56,4 +48,4 @@ class FailedAuthentication(Base):
     id = Column(Integer, primary_key=True, index=True)
     rfid = Column(String, nullable=False)
     station_id = Column(String, nullable=False)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    created = Column(DateTime, default=func.now())
