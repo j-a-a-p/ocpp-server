@@ -48,4 +48,4 @@ class FailedAuthentication(Base):
     id = Column(Integer, primary_key=True, index=True)
     rfid = Column(String, nullable=False)
     station_id = Column(String, nullable=False)
-    created = Column(DateTime, default=func.now())
+    created = Column(DateTime, default=datetime.utcnow)
