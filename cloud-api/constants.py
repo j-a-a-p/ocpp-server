@@ -2,7 +2,7 @@ import os
 import platform
 import configparser
 
-APP_NAME = "occp-server"
+APP_NAME = "ocpp-server"
 
 # Determine OS and set config file path
 if platform.system() == "Darwin":  # macOS

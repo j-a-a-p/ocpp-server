@@ -19,8 +19,8 @@ def test_email_configuration():
     if not SES_ACCESS_KEY or not SES_SECRET_KEY:
         print("❌ AWS SES credentials not configured!")
         print("Please check your configuration file at:")
-        print("  - macOS: ~/.config/occp-server/configuration.ini")
-        print("  - Linux: /etc/occp-server/configuration.ini")
+        print("  - macOS: ~/.config/ocpp-server/configuration.ini")
+        print("  - Linux: /etc/ocpp-server/configuration.ini")
         print("\nMake sure it contains:")
         print("[SimpleEmailService]")
         print("SES_ACCESS_KEY=your_access_key")
