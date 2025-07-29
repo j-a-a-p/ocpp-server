@@ -1,5 +1,4 @@
 import logging
-import csv
 from datetime import datetime
 from ocpp.v16 import ChargePoint as BaseChargePoint
 from ocpp.v16 import call_result
@@ -8,6 +7,7 @@ from ocpp.routing import on
 from rfid_manager import RFIDManager
 from meter_values_manager import MeterValuesManager
 from transaction_service import TransactionService
+from refused_card_service import RefusedCardService
 import uuid
 
 class ChargePoint(BaseChargePoint):
@@ -83,18 +83,15 @@ class ChargePoint(BaseChargePoint):
         )
 
     def log_rejected_rfid(self, rfid_tag):
-        """ Appends rejected RFID tags with a timestamp to the rejected_rfids.csv file. """
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        """ Store rejected RFID tags in the database. """
         try:
-            with open("rejected_rfids.csv", mode="a", newline="", encoding="utf-8") as file:
-                writer = csv.writer(file)
-                # Check if the file is empty to write the header only once
-                if file.tell() == 0:
-                    writer.writerow(["RFID", "Timestamp"])  # Add header row if file is empty
-                writer.writerow([rfid_tag, timestamp])
-            logging.info(f"Rejected RFID {rfid_tag} logged with timestamp {timestamp}.")
+            refused_card = RefusedCardService.create_refused_card(
+                station_id=self.id,
+                rfid=rfid_tag
+            )
+            logging.info(f"Rejected RFID {rfid_tag} stored in database with ID: {refused_card.id}")
         except Exception as e:
-            logging.error(f"Failed to log rejected RFID {rfid_tag}: {e}")
+            logging.error(f"Failed to store rejected RFID {rfid_tag} in database: {e}")
 
     @on("MeterValues")
     async def on_meter_values(self, connector_id, transaction_id, meter_value):
