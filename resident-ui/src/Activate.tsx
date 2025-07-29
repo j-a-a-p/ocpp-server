@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Card } from "antd";
 import { Button } from "antd";
+import { API_BASE_URL } from "./config";
 
 export default function Activate() {
+  console.log("Activate component rendering...");
   const [message, setMessage] = useState("Activating account...");
   const [status, setStatus] = useState("loading");
   const [searchParams] = useSearchParams();
@@ -17,7 +19,7 @@ export default function Activate() {
       return;
     }
 
-    fetch(`http://localhost:8000/residents/activate/${token}`, {
+    fetch(`${API_BASE_URL}/residents/activate/${token}`, {
       method: "POST",
       credentials: "include",
     })
@@ -37,11 +39,36 @@ export default function Activate() {
   }, [searchParams, navigate]);
 
   return (
-    <div className="flex justify-center items-center h-screen bg-gray-100">
-      <Card className="w-96 p-6 shadow-lg bg-white" title="Account Activation">
-        <p className={status === "error" ? "text-red-500" : "text-gray-700"}>{message}</p>
+    <div style={{
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      minHeight: "100vh",
+      backgroundColor: "#f5f5f5"
+    }}>
+      <Card 
+        style={{
+          width: "400px",
+          padding: "24px",
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+          backgroundColor: "#fff"
+        }} 
+        title="Account Activation"
+      >
+        <p style={{
+          color: status === "error" ? "#ff4d4f" : "#262626",
+          marginBottom: status === "error" ? "16px" : "0"
+        }}>
+          {message}
+        </p>
         {status === "error" && (
-          <Button className="mt-4" type="primary" onClick={() => navigate("/")}>Go Home</Button>
+          <Button 
+            type="primary" 
+            onClick={() => navigate("/")}
+            style={{ marginTop: "16px" }}
+          >
+            Go Home
+          </Button>
         )}
       </Card>
     </div>

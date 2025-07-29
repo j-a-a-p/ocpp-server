@@ -4,8 +4,10 @@ import Activate from "./Activate";
 import Home from "./Home";
 
 function App() {
+  console.log("App component rendering...");
+  
   return (
-    <Router>
+    <Router basename="/resident-ui">
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/activate" element={<Activate />} />

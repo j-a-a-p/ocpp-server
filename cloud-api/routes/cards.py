@@ -48,7 +48,7 @@ def add_card(station_id: str, db: Session = get_db_dependency(), auth_token: str
     latest_failed_auth_by_station = (
         db.query(FailedAuthentication)
         .filter(FailedAuthentication.station_id == station_id)
-        .order_by(FailedAuthentication.timestamp.desc())
+        .order_by(FailedAuthentication.created.desc())
         .first()
     )
     if not latest_failed_auth_by_station:
@@ -63,15 +63,15 @@ def add_card(station_id: str, db: Session = get_db_dependency(), auth_token: str
 
 @router.get("/refused")
 def list_refused_cards(db: Session = get_db_dependency(), auth_token: str = Cookie(None)):
-    """ Returns distinct failed authentications from the last 5 minutes, ordered by timestamp descending. """
+    """ Returns distinct failed authentications from the last 5 minutes, ordered by created descending. """
     #if not verify_auth_token(auth_token):
     #    raise HTTPException(status_code=401, detail="Unauthorized: please login (again).")
     
     five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
     refused_cards = (
         db.query(FailedAuthentication)
-        .filter(FailedAuthentication.timestamp >= five_minutes_ago)
-        .order_by(FailedAuthentication.timestamp.desc())
+        .filter(FailedAuthentication.created >= five_minutes_ago)
+        .order_by(FailedAuthentication.created.desc())
         .distinct(FailedAuthentication.rfid)
         .all()
     )

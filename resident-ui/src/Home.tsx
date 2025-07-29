@@ -1,22 +1,23 @@
 import { useState, useEffect } from "react";
 import { Layout, Menu, message, List, Button } from "antd";
 import { HomeOutlined } from "@ant-design/icons";
+import { API_BASE_URL } from "./config";
 
 const { Content } = Layout;
 
 const Home: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>("home");
-  const [refusedCards, setRefusedCards] = useState<any[]>([]);
+  const [refusedCards, setRefusedCards] = useState<Array<{station_id: string; timestamp: string}>>([]);
 
   useEffect(() => {
-    fetch("http://localhost:8000/cards/refused")
+    fetch(`${API_BASE_URL}/cards/refused`)
       .then(response => response.json())
       .then(data => setRefusedCards(data.refused_cards))
       .catch(error => console.error("Error fetching refused cards:", error));
   }, []);
 
   const handleAddCard = (stationId: string) => {
-    fetch(`http://localhost:8000/add_card/${stationId}`, {
+    fetch(`${API_BASE_URL}/add_card/${stationId}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
