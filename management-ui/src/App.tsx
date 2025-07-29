@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Layout, Menu, Table, Button, Modal, Form, Input, message } from "antd";
 import { UserOutlined, HomeOutlined } from "@ant-design/icons";
+import { API_BASE_URL } from "./config";
 
 const { Header, Content, Sider } = Layout;
 
@@ -19,7 +20,7 @@ const App: React.FC = () => {
   const fetchOwners = async () => {
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/owners/");
+      const response = await fetch(`${API_BASE_URL}/owners/`);
       const data = await response.json();
       setOwners(data);
     } catch (error) {
@@ -38,7 +39,7 @@ const App: React.FC = () => {
     try {
       const values = await form.validateFields();
       const method = editingOwner ? "PUT" : "POST";
-      const url = editingOwner ? `http://localhost:8000/owners/${editingOwner.id}` : "http://localhost:8000/owners/";
+      const url = editingOwner ? `${API_BASE_URL}/owners/${editingOwner.id}` : `${API_BASE_URL}/owners/`;
 
       const response = await fetch(url, {
         method,
@@ -60,7 +61,7 @@ const App: React.FC = () => {
 
   const handleAddCard = async (ownerId: number) => {
     try {
-      const response = await fetch(`http://localhost:8000/cards/add_card/${ownerId}`, {
+      const response = await fetch(`${API_BASE_URL}/cards/add_card/${ownerId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -79,7 +80,7 @@ const App: React.FC = () => {
 
   const handleDeleteOwner = async (ownerId: number) => {
     try {
-      const response = await fetch(`http://localhost:8000/owners/${ownerId}`, {
+      const response = await fetch(`${API_BASE_URL}/owners/${ownerId}`, {
         method: "DELETE",
       });
   
@@ -102,6 +103,7 @@ const App: React.FC = () => {
     {
       title: "Action",
       key: "action",
+      // @ts-expect-error - Ant Design table render function types
       render: (_, record) => (
         <>
           <Button onClick={() => showModal(record)}>Edit</Button>
