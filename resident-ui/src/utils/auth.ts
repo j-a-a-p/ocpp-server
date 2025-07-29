@@ -1,4 +1,6 @@
 // Authentication utilities
+import { API_BASE_URL } from '../config';
+
 export const getAuthToken = (): string | null => {
   const cookies = document.cookie.split(';');
   const authCookie = cookies.find(cookie => 
@@ -12,8 +14,17 @@ export const getAuthToken = (): string | null => {
   return null;
 };
 
-export const isAuthenticated = (): boolean => {
-  return getAuthToken() !== null;
+export const isAuthenticated = async (): Promise<boolean> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/validate`, {
+      method: 'GET',
+      credentials: 'include', // This will send the httponly cookie
+    });
+    return response.ok;
+  } catch (error) {
+    console.error('Error checking authentication:', error);
+    return false;
+  }
 };
 
 export const setAuthToken = (token: string): void => {

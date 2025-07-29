@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { isAuthenticated, getAuthToken } from '../utils/auth';
-import { validateToken } from '../services/authService';
+import { isAuthenticated } from '../utils/auth';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -22,24 +21,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setLoading(true);
     
     try {
-      const hasToken = isAuthenticated();
-      
-      if (hasToken) {
-        const token = getAuthToken();
-        if (token) {
-          const isValid = await validateToken(token);
-          setAuthenticated(isValid);
-          
-          if (!isValid) {
-            // Token is invalid, remove it
-            document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-          }
-        } else {
-          setAuthenticated(false);
-        }
-      } else {
-        setAuthenticated(false);
-      }
+      const isAuth = await isAuthenticated();
+      setAuthenticated(isAuth);
     } catch (error) {
       console.error('Error checking authentication:', error);
       setAuthenticated(false);

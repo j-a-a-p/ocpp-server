@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Response, Cookie
 from sqlalchemy.orm import Session
 from dependencies import get_db_dependency
 from crud import get_resident_by_email, update_resident
@@ -113,7 +113,7 @@ def login_resident(token: str, response: Response, db: Session = get_db_dependen
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/validate")
-def validate_token(auth_token: str = None, db: Session = get_db_dependency()):
+def validate_token(auth_token: str = Cookie(None), db: Session = get_db_dependency()):
     """Validate the auth token and return resident info."""
     if not auth_token:
         raise HTTPException(status_code=401, detail="Missing auth token")
