@@ -1,10 +1,19 @@
 import boto3
 from botocore.exceptions import BotoCoreError, NoCredentialsError
 from constants import SES_ACCESS_KEY, SES_SECRET_KEY, AWS_REGION
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class SESEmailSender:
     def __init__(self):
         """Initialize the SES client."""
+        if not SES_ACCESS_KEY or not SES_SECRET_KEY:
+            logger.error("AWS SES credentials not configured")
+            raise ValueError("AWS SES credentials not configured")
+            
         self.ses_client = boto3.client(
             "ses",
             aws_access_key_id=SES_ACCESS_KEY,
@@ -21,8 +30,15 @@ class SESEmailSender:
         recipient (str): Recipient email address.
         subject (str): Email subject.
         body (str): Email body (plain text).
+        
+        Returns:
+        dict: AWS SES response
+        
+        Raises:
+        Exception: If email sending fails
         """
         try:
+            logger.info(f"Sending invitation email to {recipient}")
             response = self.ses_client.send_email(
                 Source=sender,
                 Destination={"ToAddresses": [recipient]},
@@ -31,8 +47,17 @@ class SESEmailSender:
                     "Body": {"Text": {"Data": body}},
                 }
             )
+            logger.info(f"Email sent successfully to {recipient}")
             return response
         except NoCredentialsError:
-            return "Error: No valid AWS credentials provided."
+            error_msg = "Error: No valid AWS credentials provided."
+            logger.error(error_msg)
+            raise Exception(error_msg)
         except BotoCoreError as e:
-            return f"Error: {str(e)}"
+            error_msg = f"Error sending email via AWS SES: {str(e)}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        except Exception as e:
+            error_msg = f"Unexpected error sending email: {str(e)}"
+            logger.error(error_msg)
+            raise Exception(error_msg)

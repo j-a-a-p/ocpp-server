@@ -7,6 +7,10 @@ from invite import generate_invitation_token, send_invitation_email, generate_au
 from datetime import datetime
 from models import Resident, ResidentStatus
 from constants import JWT_EXPIRATION_DAYS
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/residents", tags=["residents"])
 
@@ -23,34 +27,69 @@ def read_resident(resident_id: int, db: Session = get_db_dependency()):
 
 @router.post("/", response_model=ResidentResponse)
 def create_new_resident(resident: ResidentBase, db: Session = get_db_dependency()):
-    invite_token, expires_at = generate_invitation_token()
-    new_resident = create_invited_resident(db, resident, invite_token, expires_at)
+    try:
+        invite_token, expires_at = generate_invitation_token()
+        new_resident = create_invited_resident(db, resident, invite_token, expires_at)
 
-    if not new_resident:
-        raise HTTPException(status_code=400, detail="Reference does not exist")
-    
-    send_invitation_email(new_resident.email, invite_token)
-    
-    return new_resident
+        if not new_resident:
+            raise HTTPException(status_code=400, detail="Reference does not exist")
+        
+        # Try to send invitation email
+        try:
+            send_invitation_email(new_resident.email, invite_token)
+            logger.info(f"Resident created and invitation sent to {new_resident.email}")
+        except Exception as e:
+            logger.error(f"Failed to send invitation email to {new_resident.email}: {str(e)}")
+            # Still return the resident but with a warning
+            raise HTTPException(
+                status_code=201, 
+                detail=f"Resident created but invitation email failed to send: {str(e)}"
+            )
+        
+        return new_resident
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error creating resident: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @router.post("/{resident_id}/send-invitation", response_model=ResidentResponse)
 def send_invitation(resident_id: int, db: Session = get_db_dependency()):
-    resident = get_resident(db, resident_id)
-    if not resident:
-        raise HTTPException(status_code=404, detail="Resident not found")
-    
-    if resident.status == "active":
-        raise HTTPException(status_code=400, detail="Resident is already active")
-    
-    invite_token, expires_at = generate_invitation_token()
-    resident = update_resident(db, resident_id, {
-        "invite_token": invite_token,
-        "invite_expires_at": expires_at
-    })
+    try:
+        resident = get_resident(db, resident_id)
+        if not resident:
+            raise HTTPException(status_code=404, detail="Resident not found")
+        
+        if resident.status == "active":
+            raise HTTPException(status_code=400, detail="Resident is already active")
+        
+        invite_token, expires_at = generate_invitation_token()
+        resident = update_resident(db, resident_id, {
+            "invite_token": invite_token,
+            "invite_expires_at": expires_at
+        })
 
-    send_invitation_email(resident.email, invite_token)
-    
-    return resident
+        # Try to send invitation email
+        try:
+            send_invitation_email(resident.email, invite_token)
+            logger.info(f"Invitation resent to {resident.email}")
+        except Exception as e:
+            logger.error(f"Failed to send invitation email to {resident.email}: {str(e)}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to send invitation email: {str(e)}"
+            )
+        
+        return resident
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except Exception as e:
+        logger.error(f"Error sending invitation: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 @router.post("/activate/{token}")
 def activate_resident(token: str, response: Response, db: Session = get_db_dependency()):

@@ -1,5 +1,5 @@
 sqlalchemy==2.0.41
-ocpp==2.0.1
+ocpp==2.1.0
 websockets==15.0.1
 fastapi==0.116.1
 PyJWT==2.10.1

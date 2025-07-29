@@ -4,6 +4,10 @@ from constants import JWT_SECRET, INVITE_URL, INVITE_EXPIRATION_DAYS, JWT_EXPIRA
 import jwt
 from typing import Optional
 from ses_mail_sender import SESEmailSender
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 def generate_invitation_token() -> tuple[str, datetime]:
     """Generate a secure token and expiration date."""
@@ -30,22 +34,30 @@ def verify_auth_token(token: str) -> Optional[int]:
         return None
     
 def send_invitation_email(email: str, token: str):
-    sender = SESEmailSender()
-    activation_link = f"{INVITE_URL}/activate?token={token}"
-    
-    subject = "Invitation to Access System"
-    body = f"""
-    You have been invited to access the system. 
-    Please click the following link to activate your account:
-    
-    {activation_link}
-    
-    This invitation will expire in {INVITE_EXPIRATION_DAYS} days.
-    """
-    
-    sender.send_email(
-        sender="charger@aircokopen.nu",
-        recipient=email,
-        subject=subject,
-        body=body
-    )
+    """Send invitation email to the resident."""
+    try:
+        sender = SESEmailSender()
+        activation_link = f"{INVITE_URL}/activate?token={token}"
+        
+        subject = "Invitation to Access System"
+        body = f"""
+        You have been invited to access the system. 
+        Please click the following link to activate your account:
+        
+        {activation_link}
+        
+        This invitation will expire in {INVITE_EXPIRATION_DAYS} days.
+        """
+        
+        logger.info(f"Sending invitation email to {email}")
+        sender.send_email(
+            sender="charger@aircokopen.nu",
+            recipient=email,
+            subject=subject,
+            body=body
+        )
+        logger.info(f"Invitation email sent successfully to {email}")
+        
+    except Exception as e:
+        logger.error(f"Failed to send invitation email to {email}: {str(e)}")
+        raise Exception(f"Failed to send invitation email: {str(e)}")

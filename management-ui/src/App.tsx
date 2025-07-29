@@ -5,12 +5,20 @@ import { API_BASE_URL } from "./config";
 
 const { Header, Content, Sider } = Layout;
 
+interface Resident {
+  id: number;
+  full_name: string;
+  email: string;
+  reference: string;
+  status: string;
+}
+
 const App: React.FC = () => {
   const [selectedMenu, setSelectedMenu] = useState<string>("home");
-  const [residents, setResidents] = useState<any[]>([]);
+  const [residents, setResidents] = useState<Resident[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [editingResident, setEditingResident] = useState<any>(null);
+  const [editingResident, setEditingResident] = useState<Resident | null>(null);
   const [form] = Form.useForm();
 
   useEffect(() => {
@@ -24,12 +32,13 @@ const App: React.FC = () => {
       const data = await response.json();
       setResidents(data);
     } catch (error) {
+      console.error("Failed to load residents:", error);
       message.error("Failed to load residents.");
     }
     setLoading(false);
   };
 
-  const showModal = (resident = null) => {
+  const showModal = (resident: Resident | null = null) => {
     setEditingResident(resident);
     form.setFieldsValue(resident || { full_name: "", email: "", reference: "" });
     setIsModalOpen(true);
@@ -52,9 +61,16 @@ const App: React.FC = () => {
         setIsModalOpen(false);
         fetchResidents();
       } else {
-        message.error("Failed to save resident.");
+        // Try to get error details from response
+        try {
+          const errorData = await response.json();
+          message.error(errorData.detail || "Failed to save resident.");
+        } catch {
+          message.error("Failed to save resident.");
+        }
       }
     } catch (error) {
+      console.error("Error saving resident:", error);
       message.error("An error occurred while saving resident.");
     }
   };
@@ -74,6 +90,7 @@ const App: React.FC = () => {
         message.error("Failed to add card.");
       }
     } catch (error) {
+      console.error("Error adding card:", error);
       message.error("An error occurred while adding card.");
     }
   };
@@ -91,6 +108,7 @@ const App: React.FC = () => {
         message.error("Failed to delete resident.");
       }
     } catch (error) {
+      console.error("Error deleting resident:", error);
       message.error("An error occurred while deleting the resident.");
     }
   };
@@ -103,8 +121,7 @@ const App: React.FC = () => {
     {
       title: "Action",
       key: "action",
-      // @ts-expect-error - Ant Design table render function types
-      render: (_, record) => (
+      render: (_: unknown, record: Resident) => (
         <>
           <Button onClick={() => showModal(record)}>Edit</Button>
           <Button onClick={() => handleAddCard(record.id)} style={{ marginLeft: 8 }}>Add Card</Button>
