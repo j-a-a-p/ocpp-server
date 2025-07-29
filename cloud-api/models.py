@@ -19,6 +19,8 @@ class Resident(Base):
     status = Column(Enum(ResidentStatus), default=ResidentStatus.INVITED)
     invite_token = Column(String, unique=True, nullable=True)
     invite_expires_at = Column(DateTime, nullable=True)
+    login_token = Column(String, unique=True, nullable=True)
+    login_expires_at = Column(DateTime, nullable=True)
     
     cards = relationship("Card", back_populates="resident")
 

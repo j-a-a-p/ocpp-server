@@ -61,3 +61,32 @@ def send_invitation_email(email: str, token: str):
     except Exception as e:
         logger.error(f"Failed to send invitation email to {email}: {str(e)}")
         raise Exception(f"Failed to send invitation email: {str(e)}")
+
+def send_login_email(email: str, token: str):
+    """Send login email to the resident."""
+    try:
+        sender = SESEmailSender()
+        login_link = f"{INVITE_URL}/login?token={token}"
+        
+        subject = "Login to Resident Portal"
+        body = f"""
+        You have requested to log in to the resident portal.
+        Please click the following link to access your account:
+        
+        {login_link}
+        
+        This login link will expire in 1 hour.
+        """
+        
+        logger.info(f"Sending login email to {email}")
+        sender.send_email(
+            sender="charger@aircokopen.nu",
+            recipient=email,
+            subject=subject,
+            body=body
+        )
+        logger.info(f"Login email sent successfully to {email}")
+        
+    except Exception as e:
+        logger.error(f"Failed to send login email to {email}: {str(e)}")
+        raise Exception(f"Failed to send login email: {str(e)}")

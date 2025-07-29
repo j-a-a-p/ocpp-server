@@ -1,18 +1,28 @@
 // Ensure the router setup in App.tsx
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "./contexts/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 import Activate from "./Activate";
+import Login from "./Login";
 import Home from "./Home";
 
 function App() {
   console.log("App component rendering...");
   
   return (
-    <Router basename="/resident-ui">
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/activate" element={<Activate />} />
-      </Routes>
-    </Router>
+    <AuthProvider>
+      <Router basename="/resident-ui">
+        <Routes>
+          <Route path="/" element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          } />
+          <Route path="/activate" element={<Activate />} />
+          <Route path="/login" element={<Login />} />
+        </Routes>
+      </Router>
+    </AuthProvider>
   );
 }
 

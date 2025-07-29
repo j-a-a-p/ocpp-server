@@ -11,6 +11,10 @@ def get_resident(db: Session, resident_id: int):
     # Only return non-deleted resident
     return db.query(Resident).filter(Resident.id == resident_id).first()
 
+def get_resident_by_email(db: Session, email: str):
+    # Get resident by email address
+    return db.query(Resident).filter(Resident.email == email).first()
+
 def create_invited_resident(db: Session, resident: ResidentBase, invite_token: str, expires_at: datetime):
 
     db_resident = Resident(
