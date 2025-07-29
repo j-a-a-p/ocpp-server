@@ -37,7 +37,9 @@ def send_invitation_email(email: str, token: str):
     """Send invitation email to the resident."""
     try:
         sender = SESEmailSender()
-        activation_link = f"{INVITE_URL}/activate?token={token}"
+        # Ensure INVITE_URL has a trailing slash
+        base_url = INVITE_URL.rstrip('/')
+        activation_link = f"{base_url}/activate?token={token}"
         
         subject = "Invitation to Access System"
         body = f"""
@@ -66,7 +68,9 @@ def send_login_email(email: str, token: str):
     """Send login email to the resident."""
     try:
         sender = SESEmailSender()
-        login_link = f"{INVITE_URL}/login?token={token}"
+        # Ensure INVITE_URL has a trailing slash
+        base_url = INVITE_URL.rstrip('/')
+        login_link = f"{base_url}/login?token={token}"
         
         subject = "Login to Resident Portal"
         body = f"""
