@@ -77,23 +77,7 @@ const App: React.FC = () => {
 
 
 
-  const handleDeleteResident = async (residentId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/residents/${residentId}`, {
-        method: "DELETE",
-      });
-  
-      if (response.status === 204) {
-        message.success("Resident deleted successfully!");
-        fetchResidents(); // Refresh the list
-      } else {
-        message.error("Failed to delete resident.");
-      }
-    } catch (error) {
-      console.error("Error deleting resident:", error);
-      message.error("An error occurred while deleting the resident.");
-    }
-  };
+
   
   const columns = [
     { title: "Full Name", dataIndex: "full_name", key: "full_name" },
@@ -106,11 +90,6 @@ const App: React.FC = () => {
       render: (_: unknown, record: Resident) => (
         <>
           <Button onClick={() => showModal(record)}>Edit</Button>
-          <Button
-            onClick={() => handleDeleteResident(record.id)}
-            style={{ marginLeft: 8 }}
-            danger
-          >Delete</Button>
         </>
       ),
     },
