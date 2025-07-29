@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from models import Resident, ResidentStatus, Card, FailedAuthentication
+from models import Resident, ResidentStatus, Card, RefusedCard
 from schemas import ResidentBase, CardBase
 from datetime import datetime
 
@@ -48,7 +48,7 @@ def create_card(db: Session, card: CardBase):
     db.refresh(db_card)
     return db_card
 
-def log_failed_authentication(db: Session, rfid: str, station_id: str):
-    failed_attempt = FailedAuthentication(rfid=rfid, station_id=station_id)
-    db.add(failed_attempt)
+def log_refused_card(db: Session, rfid: str, station_id: str):
+    refused_card = RefusedCard(rfid=rfid, station_id=station_id)
+    db.add(refused_card)
     db.commit()

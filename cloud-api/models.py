@@ -42,8 +42,8 @@ class ChargeTransaction(Base):
 
     card = relationship("Card", back_populates="charge_transactions")
 
-class FailedAuthentication(Base):
-    __tablename__ = "failed_authentications"
+class RefusedCard(Base):
+    __tablename__ = "refused_cards"
 
     id = Column(Integer, primary_key=True, index=True)
     rfid = Column(String, nullable=False)

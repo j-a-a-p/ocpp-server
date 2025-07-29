@@ -24,11 +24,11 @@ class CardResponse(CardBase):
     class Config:
         from_attributes = True
 
-class FailedAuthenticationBase(BaseModel):
+class RefusedCardBase(BaseModel):
     rfid: str
     station_id: str
 
-class FailedAuthenticationResponse(FailedAuthenticationBase):
+class RefusedCardResponse(RefusedCardBase):
     id: int
     timestamp: datetime
 

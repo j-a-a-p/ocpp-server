@@ -18,8 +18,8 @@ CREATE TABLE cards (
     FOREIGN KEY (resident_id) REFERENCES residents (id) ON DELETE RESTRICT
 );
 
--- Failed Authentications Table
-CREATE TABLE failed_authentications (
+-- Refused Cards Table
+CREATE TABLE refused_cards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     rfid TEXT NOT NULL,
     station_id TEXT NOT NULL,
