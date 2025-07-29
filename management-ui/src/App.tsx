@@ -75,25 +75,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddCard = async (residentId: number) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/cards/add_card/${residentId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
 
-      if (response.ok) {
-        message.success("Card added to resident.");
-      } else if (response.status === 404) {
-        message.error("Could not find the card.");
-      } else {
-        message.error("Failed to add card.");
-      }
-    } catch (error) {
-      console.error("Error adding card:", error);
-      message.error("An error occurred while adding card.");
-    }
-  };
 
   const handleDeleteResident = async (residentId: number) => {
     try {
@@ -124,7 +106,6 @@ const App: React.FC = () => {
       render: (_: unknown, record: Resident) => (
         <>
           <Button onClick={() => showModal(record)}>Edit</Button>
-          <Button onClick={() => handleAddCard(record.id)} style={{ marginLeft: 8 }}>Add Card</Button>
           <Button
             onClick={() => handleDeleteResident(record.id)}
             style={{ marginLeft: 8 }}
