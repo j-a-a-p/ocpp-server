@@ -11,10 +11,10 @@ def generate_invitation_token() -> tuple[str, datetime]:
     expires_at = datetime.utcnow() + timedelta(days=INVITE_EXPIRATION_DAYS)
     return token, expires_at
 
-def generate_auth_token(owner_id: int) -> str:
-    """Generate a JWT token for authenticated owners."""
+def generate_auth_token(resident_id: int) -> str:
+    """Generate a JWT token for authenticated residents."""
     return jwt.encode(
-        {"owner_id": owner_id, "exp": datetime.utcnow() + timedelta(days=JWT_EXPIRATION_DAYS)},
+        {"resident_id": resident_id, "exp": datetime.utcnow() + timedelta(days=JWT_EXPIRATION_DAYS)},
         JWT_SECRET,
         algorithm="HS256"
     )
@@ -23,7 +23,7 @@ def verify_auth_token(token: str) -> Optional[int]:
     """Verify and decode the JWT token."""
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-        return payload.get("owner_id")
+        return payload.get("resident_id")
     except jwt.ExpiredSignatureError:
         return None
     except jwt.InvalidTokenError:

@@ -6,26 +6,26 @@
 
 ## Available GET Endpoints
 
-### Owners Endpoints
+### Residents Endpoints
 
-1. **Get all owners** (with pagination)
+1. **Get all residents** (with pagination)
    ```
-   GET https://apt.aircokopen.nu/api/owners/
-   GET https://apt.aircokopen.nu/api/owners/?skip=0&limit=100
-   GET https://apt.aircokopen.nu/api/owners/?skip=10&limit=50
-   ```
-
-2. **Get specific owner by ID**
-   ```
-   GET https://apt.aircokopen.nu/api/owners/{owner_id}
-   GET https://apt.aircokopen.nu/api/owners/1
-   GET https://apt.aircokopen.nu/api/owners/123
+   GET https://apt.aircokopen.nu/api/residents/
+   GET https://apt.aircokopen.nu/api/residents/?skip=0&limit=100
+   GET https://apt.aircokopen.nu/api/residents/?skip=10&limit=50
    ```
 
-3. **Activate owner account with token**
+2. **Get specific resident by ID**
    ```
-   GET https://apt.aircokopen.nu/api/owners/activate/{token}
-   GET https://apt.aircokopen.nu/api/owners/activate/abc123def456
+   GET https://apt.aircokopen.nu/api/residents/{resident_id}
+   GET https://apt.aircokopen.nu/api/residents/1
+   GET https://apt.aircokopen.nu/api/residents/123
+   ```
+
+3. **Activate resident account with token**
+   ```
+   GET https://apt.aircokopen.nu/api/residents/activate/{token}
+   GET https://apt.aircokopen.nu/api/residents/activate/abc123def456
    ```
 
 ### Cards Endpoints
@@ -54,11 +54,11 @@
 ## Example Usage with curl
 
 ```bash
-# Get all owners
-curl https://apt.aircokopen.nu/api/owners/
+# Get all residents
+curl https://apt.aircokopen.nu/api/residents/
 
-# Get specific owner
-curl https://apt.aircokopen.nu/api/owners/1
+# Get specific resident
+curl https://apt.aircokopen.nu/api/residents/1
 
 # Get all cards
 curl https://apt.aircokopen.nu/api/cards/
@@ -72,19 +72,19 @@ curl -b "auth_token=YOUR_AUTH_TOKEN" \
      https://apt.aircokopen.nu/api/cards/refused
 
 # Activate account
-curl https://apt.aircokopen.nu/api/owners/activate/your_invitation_token
+curl https://apt.aircokopen.nu/api/residents/activate/your_invitation_token
 ```
 
 ## Example Usage with JavaScript/fetch
 
 ```javascript
-// Get all owners
-fetch('https://apt.aircokopen.nu/api/owners/')
+// Get all residents
+fetch('https://apt.aircokopen.nu/api/residents/')
   .then(response => response.json())
   .then(data => console.log(data));
 
-// Get specific owner
-fetch('https://apt.aircokopen.nu/api/owners/1')
+// Get specific resident
+fetch('https://apt.aircokopen.nu/api/residents/1')
   .then(response => response.json())
   .then(data => console.log(data));
 
@@ -107,7 +107,7 @@ fetch('https://apt.aircokopen.nu/api/cards/refused', {
 
 ## Response Formats
 
-### Owners Response
+### Residents Response
 ```json
 {
   "id": 1,
@@ -123,14 +123,14 @@ fetch('https://apt.aircokopen.nu/api/cards/refused', {
 ```json
 {
   "rfid": "123456789",
-  "owner_id": 1
+  "resident_id": 1
 }
 ```
 
 ### Card Authentication Response
 ```json
 {
-  "owner_id": 1
+  "resident_id": 1
 }
 ```
 
@@ -153,7 +153,7 @@ fetch('https://apt.aircokopen.nu/api/cards/refused', {
 ### 404 - Not Found
 ```json
 {
-  "detail": "Owner not found"
+  "detail": "Resident not found"
 }
 ```
 
@@ -167,7 +167,7 @@ fetch('https://apt.aircokopen.nu/api/cards/refused', {
 ### 400 - Bad Request
 ```json
 {
-  "detail": "Owner is already active"
+  "detail": "Resident is already active"
 }
 ```
 

@@ -17,7 +17,7 @@ export default function Activate() {
       return;
     }
 
-    fetch(`http://localhost:8000/owners/activate/${token}`, {
+    fetch(`http://localhost:8000/residents/activate/${token}`, {
       method: "POST",
       credentials: "include",
     })

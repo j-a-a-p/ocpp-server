@@ -1,48 +1,48 @@
 from sqlalchemy.orm import Session
-from models import Owner, OwnerStatus, Card, FailedAuthentication
-from schemas import OwnerBase, CardBase
+from models import Resident, ResidentStatus, Card, FailedAuthentication
+from schemas import ResidentBase, CardBase
 from datetime import datetime
 
-def get_owners(db: Session, skip: int = 0, limit: int = 100):
-    # Only return non-deleted owners
-    return db.query(Owner).offset(skip).limit(limit).all()
+def get_residents(db: Session, skip: int = 0, limit: int = 100):
+    # Only return non-deleted residents
+    return db.query(Resident).offset(skip).limit(limit).all()
 
-def get_owner(db: Session, owner_id: int):
-    # Only return non-deleted owner
-    return db.query(Owner).filter(Owner.id == owner_id).first()
+def get_resident(db: Session, resident_id: int):
+    # Only return non-deleted resident
+    return db.query(Resident).filter(Resident.id == resident_id).first()
 
-def create_invited_owner(db: Session, owner: OwnerBase, invite_token: str, expires_at: datetime):
+def create_invited_resident(db: Session, resident: ResidentBase, invite_token: str, expires_at: datetime):
 
-    db_owner = Owner(
-        full_name=owner.full_name,
-        email=owner.email,
-        reference=owner.reference,
-        status=OwnerStatus.INVITED,
+    db_resident = Resident(
+        full_name=resident.full_name,
+        email=resident.email,
+        reference=resident.reference,
+        status=ResidentStatus.INVITED,
         invite_token=invite_token,
         invite_expires_at=expires_at
     )
-    db.add(db_owner)
+    db.add(db_resident)
     db.commit()
-    db.refresh(db_owner)
-    return db_owner
+    db.refresh(db_resident)
+    return db_resident
 
-def update_owner(db: Session, owner_id: int, updates: dict):
-    owner = db.query(Owner).filter(Owner.id == owner_id).first()
-    if not owner:
+def update_resident(db: Session, resident_id: int, updates: dict):
+    resident = db.query(Resident).filter(Resident.id == resident_id).first()
+    if not resident:
         return None
         
     for key, value in updates.items():
-        setattr(owner, key, value)
+        setattr(resident, key, value)
     
     db.commit()
-    db.refresh(owner)
-    return owner
+    db.refresh(resident)
+    return resident
 
 def get_cards(db: Session, skip: int = 0, limit: int = 100):
     return db.query(Card).offset(skip).limit(limit).all()
 
 def create_card(db: Session, card: CardBase):
-    db_card = Card(rfid=card.rfid, owner_id=card.owner_id)
+    db_card = Card(rfid=card.rfid, resident_id=card.resident_id)
     db.add(db_card)
     db.commit()
     db.refresh(db_card)

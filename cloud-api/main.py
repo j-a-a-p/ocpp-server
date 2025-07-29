@@ -1,7 +1,7 @@
 import subprocess
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import owners, cards
+from routes import residents, cards
 
 def run_flyway():
     """Run Flyway migrations before starting the app."""
@@ -16,7 +16,7 @@ def run_flyway():
 run_flyway()
 
 app = FastAPI()
-app.include_router(owners.router)
+app.include_router(residents.router)
 app.include_router(cards.router)
 app.add_middleware(
     CORSMiddleware,

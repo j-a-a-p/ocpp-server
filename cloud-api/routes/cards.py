@@ -31,17 +31,17 @@ def authenticate_card(
         log_failed_authentication(db, rfid, station_id)
         raise HTTPException(status_code=404, detail="Card not found")
 
-    return {"owner_id": card.owner_id}
+    return {"resident_id": card.resident_id}
 
 @router.post("/add_card/{station_id}", response_model=CardResponse)
 def add_card(station_id: str, db: Session = get_db_dependency(), auth_token: str = Cookie(None)):
-    """ Finds the latest FailedAuthentication within 5 minutes and registers a new card for the given owner_id. """
+    """ Finds the latest FailedAuthentication within 5 minutes and registers a new card for the given resident_id. """
 
     if not auth_token:
         raise HTTPException(status_code=401, detail="Unauthorized: Missing auth token")
     
-    owner_id = verify_auth_token(auth_token)
-    if not owner_id:
+    resident_id = verify_auth_token(auth_token)
+    if not resident_id:
         raise HTTPException(status_code=401, detail="Unauthorized: wrong credentials")
 
 
@@ -54,7 +54,7 @@ def add_card(station_id: str, db: Session = get_db_dependency(), auth_token: str
     if not latest_failed_auth_by_station:
         raise HTTPException(status_code=404, detail="No recent failed authentication found")
 
-    new_card = Card(rfid=latest_failed_auth_by_station.rfid, owner_id=owner_id)
+    new_card = Card(rfid=latest_failed_auth_by_station.rfid, resident_id=resident_id)
     db.add(new_card)
     db.commit()
     db.refresh(new_card)

@@ -1,5 +1,5 @@
--- Owners Table
-CREATE TABLE owners (
+-- Residents Table
+CREATE TABLE residents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     full_name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
@@ -9,13 +9,13 @@ CREATE TABLE owners (
     invite_expires_at DATETIME
 );
 
-CREATE INDEX idx_owners_email ON owners(email);
+CREATE INDEX idx_residents_email ON residents(email);
 
 -- Cards Table
 CREATE TABLE cards (
     rfid TEXT PRIMARY KEY,  -- Using RFID as primary key
-    owner_id INTEGER,
-    FOREIGN KEY (owner_id) REFERENCES owners (id) ON DELETE RESTRICT
+    resident_id INTEGER,
+    FOREIGN KEY (resident_id) REFERENCES residents (id) ON DELETE RESTRICT
 );
 
 -- Failed Authentications Table

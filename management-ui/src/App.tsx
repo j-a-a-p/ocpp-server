@@ -7,39 +7,39 @@ const { Header, Content, Sider } = Layout;
 
 const App: React.FC = () => {
   const [selectedMenu, setSelectedMenu] = useState<string>("home");
-  const [owners, setOwners] = useState<any[]>([]);
+  const [residents, setResidents] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-  const [editingOwner, setEditingOwner] = useState<any>(null);
+  const [editingResident, setEditingResident] = useState<any>(null);
   const [form] = Form.useForm();
 
   useEffect(() => {
-    if (selectedMenu === "residents") fetchOwners();
+    if (selectedMenu === "residents") fetchResidents();
   }, [selectedMenu]);
 
-  const fetchOwners = async () => {
+  const fetchResidents = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/owners/`);
+      const response = await fetch(`${API_BASE_URL}/residents/`);
       const data = await response.json();
-      setOwners(data);
+      setResidents(data);
     } catch (error) {
-      message.error("Failed to load owners.");
+      message.error("Failed to load residents.");
     }
     setLoading(false);
   };
 
-  const showModal = (owner = null) => {
-    setEditingOwner(owner);
-    form.setFieldsValue(owner || { full_name: "", email: "", reference: "" });
+  const showModal = (resident = null) => {
+    setEditingResident(resident);
+    form.setFieldsValue(resident || { full_name: "", email: "", reference: "" });
     setIsModalOpen(true);
   };
 
   const handleOk = async () => {
     try {
       const values = await form.validateFields();
-      const method = editingOwner ? "PUT" : "POST";
-      const url = editingOwner ? `${API_BASE_URL}/owners/${editingOwner.id}` : `${API_BASE_URL}/owners/`;
+      const method = editingResident ? "PUT" : "POST";
+      const url = editingResident ? `${API_BASE_URL}/residents/${editingResident.id}` : `${API_BASE_URL}/residents/`;
 
       const response = await fetch(url, {
         method,
@@ -48,9 +48,9 @@ const App: React.FC = () => {
       });
 
       if (response.ok) {
-        message.success(editingOwner ? "Resident updated!" : "Resident added!");
+        message.success(editingResident ? "Resident updated!" : "Resident added!");
         setIsModalOpen(false);
-        fetchOwners();
+        fetchResidents();
       } else {
         message.error("Failed to save resident.");
       }
@@ -59,9 +59,9 @@ const App: React.FC = () => {
     }
   };
 
-  const handleAddCard = async (ownerId: number) => {
+  const handleAddCard = async (residentId: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/cards/add_card/${ownerId}`, {
+      const response = await fetch(`${API_BASE_URL}/cards/add_card/${residentId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
@@ -78,20 +78,20 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeleteOwner = async (ownerId: number) => {
+  const handleDeleteResident = async (residentId: number) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/owners/${ownerId}`, {
+      const response = await fetch(`${API_BASE_URL}/residents/${residentId}`, {
         method: "DELETE",
       });
   
       if (response.status === 204) {
-        message.success("Owner deleted successfully!");
-        fetchOwners(); // Refresh the list
+        message.success("Resident deleted successfully!");
+        fetchResidents(); // Refresh the list
       } else {
-        message.error("Failed to delete owner.");
+        message.error("Failed to delete resident.");
       }
     } catch (error) {
-      message.error("An error occurred while deleting the owner.");
+      message.error("An error occurred while deleting the resident.");
     }
   };
   
@@ -109,7 +109,7 @@ const App: React.FC = () => {
           <Button onClick={() => showModal(record)}>Edit</Button>
           <Button onClick={() => handleAddCard(record.id)} style={{ marginLeft: 8 }}>Add Card</Button>
           <Button
-            onClick={() => handleDeleteOwner(record.id)}
+            onClick={() => handleDeleteResident(record.id)}
             style={{ marginLeft: 8 }}
             danger
           >Delete</Button>
@@ -135,9 +135,9 @@ const App: React.FC = () => {
           {selectedMenu === "home" && <h1>Home Page</h1>}
           {selectedMenu === "residents" && (
             <>
-              <Button type="primary" onClick={() => showModal()}>Add Owner</Button>
-              <Table columns={columns} dataSource={owners} loading={loading} rowKey="id" style={{ marginTop: 16 }} />
-              <Modal title={editingOwner ? "Edit Owner" : "Add Owner"} open={isModalOpen} onOk={handleOk} onCancel={() => setIsModalOpen(false)}>
+              <Button type="primary" onClick={() => showModal()}>Add Resident</Button>
+              <Table columns={columns} dataSource={residents} loading={loading} rowKey="id" style={{ marginTop: 16 }} />
+              <Modal title={editingResident ? "Edit Resident" : "Add Resident"} open={isModalOpen} onOk={handleOk} onCancel={() => setIsModalOpen(false)}>
                 <Form form={form} layout="vertical">
                   <Form.Item name="full_name" label="Full Name" rules={[{ required: true, message: "Please enter full name" }]}>
                     <Input />

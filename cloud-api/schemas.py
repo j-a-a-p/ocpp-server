@@ -2,12 +2,12 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 
-class OwnerBase(BaseModel):
+class ResidentBase(BaseModel):
     full_name: str
     email: str
     reference: str
 
-class OwnerResponse(OwnerBase):
+class ResidentResponse(ResidentBase):
     id: int
     status: str
     invite_expires_at: Optional[datetime] = None
@@ -18,7 +18,7 @@ class OwnerResponse(OwnerBase):
 
 class CardBase(BaseModel):
     rfid: str
-    owner_id: int
+    resident_id: int
 
 class CardResponse(CardBase):
     class Config:
