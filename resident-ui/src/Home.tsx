@@ -9,15 +9,19 @@ const Home: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>("home");
   const [refusedCards, setRefusedCards] = useState<Array<{station_id: string; timestamp: string}>>([]);
 
-  useEffect(() => {
+  const fetchRefusedCards = () => {
     fetch(`${API_BASE_URL}/cards/refused`)
       .then(response => response.json())
       .then(data => setRefusedCards(data.refused_cards))
       .catch(error => console.error("Error fetching refused cards:", error));
+  };
+
+  useEffect(() => {
+    fetchRefusedCards();
   }, []);
 
   const handleAddCard = (stationId: string) => {
-    fetch(`${API_BASE_URL}/add_card/${stationId}`, {
+    fetch(`${API_BASE_URL}/cards/add_card/${stationId}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -31,6 +35,8 @@ const Home: React.FC = () => {
       })
       .then(() => {
         message.success("Card added successfully");
+        // Refresh the refused cards list after successful addition
+        fetchRefusedCards();
       })
       .catch(error => {
         console.error("Error adding card:", error);

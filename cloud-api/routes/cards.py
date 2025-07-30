@@ -56,6 +56,10 @@ def add_card(station_id: str, db: Session = get_db_dependency(), auth_token: str
 
     new_card = Card(rfid=latest_refused_card_by_station.rfid, resident_id=resident_id)
     db.add(new_card)
+    
+    # Delete the refused card after successfully adding it to the cards table
+    db.delete(latest_refused_card_by_station)
+    
     db.commit()
     db.refresh(new_card)
 
