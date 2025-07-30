@@ -65,6 +65,24 @@ def add_card(station_id: str, db: Session = get_db_dependency(), auth_token: str
 
     return new_card
 
+@router.get("/my_cards")
+def get_my_cards(db: Session = get_db_dependency(), auth_token: str = Cookie(None)):
+    """ Returns all cards for the authenticated resident. """
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Unauthorized: Missing auth token")
+    
+    resident_id = verify_auth_token(auth_token)
+    if not resident_id:
+        raise HTTPException(status_code=401, detail="Unauthorized: wrong credentials")
+    
+    cards = (
+        db.query(Card)
+        .filter(Card.resident_id == resident_id)
+        .all()
+    )
+    
+    return {"cards": cards}
+
 @router.get("/refused")
 def list_refused_cards(db: Session = get_db_dependency(), auth_token: str = Cookie(None)):
     """ Returns distinct refused cards from the last 5 minutes, ordered by created descending. """
