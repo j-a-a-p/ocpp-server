@@ -49,7 +49,7 @@ class ChargePoint(BaseChargePoint):
         """ Handles Authorize event and checks if the RFID is authorized. """
         logging.info(f"Authorization request for idTag {id_tag}")
 
-        if self.rfid_manager.is_authorized(id_tag):
+        if self.rfid_manager.is_authorized(id_tag, self.id):
             logging.info(f"RFID {id_tag} authorized")
             return call_result.Authorize(
                 id_tag_info={"status": AuthorizationStatus.accepted}
@@ -58,7 +58,7 @@ class ChargePoint(BaseChargePoint):
             logging.warning(f"RFID {id_tag} not authorized")
             self.log_rejected_rfid(id_tag)
             return call_result.Authorize(
-                id_tag_info={"status": AuthorizationStatus.accepted}
+                id_tag_info={"status": AuthorizationStatus.rejected}
             )
 
     @on("StartTransaction")

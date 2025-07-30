@@ -10,9 +10,9 @@ class AuthorizeHandler:
     def __init__(self):
         self.rfid_manager = RFIDManager()
 
-    async def on_authorize(self, id_tag):
+    async def on_authorize(self, id_tag, station_id=None):
         """ Handle the Authorize event from the OCPP server. """
-        if self.rfid_manager.is_authorized(id_tag):
+        if self.rfid_manager.is_authorized(id_tag, station_id):
             logging.info(f"Authorization successful for RFID {id_tag}")
             return call_result.AuthorizePayload(id_tag_info={"status": "Accepted"})
         else:
