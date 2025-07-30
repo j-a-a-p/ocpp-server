@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 class ResidentBase(BaseModel):
     full_name: str
@@ -31,6 +31,31 @@ class RefusedCardBase(BaseModel):
 class RefusedCardResponse(RefusedCardBase):
     id: int
     timestamp: datetime
+
+    class Config:
+        from_attributes = True
+
+class PowerLogBase(BaseModel):
+    power_kw: float
+    energy_kwh: float
+
+class PowerLogResponse(PowerLogBase):
+    id: int
+    charge_transaction_id: int
+    created: datetime
+
+    class Config:
+        from_attributes = True
+
+class ChargeTransactionBase(BaseModel):
+    station_id: str
+    rfid: str
+
+class ChargeTransactionResponse(ChargeTransactionBase):
+    id: int
+    created: datetime
+    final_energy_kwh: Optional[float] = None
+    power_logs: List[PowerLogResponse] = []
 
     class Config:
         from_attributes = True
