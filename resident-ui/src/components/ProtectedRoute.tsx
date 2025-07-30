@@ -10,20 +10,24 @@ interface ProtectedRouteProps {
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, isLoading, checkAuth } = useAuth();
   const [showAuthPopup, setShowAuthPopup] = useState(false);
+  const [popupManuallyClosed, setPopupManuallyClosed] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!isLoading && !isAuthenticated && !popupManuallyClosed) {
       setShowAuthPopup(true);
     }
-  }, [isLoading, isAuthenticated]);
+    
+    // Reset popupManuallyClosed when user becomes authenticated
+    if (isAuthenticated) {
+      setPopupManuallyClosed(false);
+    }
+  }, [isLoading, isAuthenticated, popupManuallyClosed]);
 
-  const handleAuthSuccess = async () => {
+  const handleAuthClose = async () => {
     setShowAuthPopup(false);
+    setPopupManuallyClosed(true);
+    // Re-check authentication in case user has logged in through email link
     await checkAuth();
-  };
-
-  const handleAuthClose = () => {
-    setShowAuthPopup(false);
   };
 
   if (isLoading) {
@@ -57,7 +61,6 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         <AuthPopup
           visible={showAuthPopup}
           onClose={handleAuthClose}
-          onSuccess={handleAuthSuccess}
         />
       </>
     );

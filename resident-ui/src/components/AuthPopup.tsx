@@ -6,10 +6,9 @@ import { submitEmail } from '../services/authService';
 interface AuthPopupProps {
   visible: boolean;
   onClose: () => void;
-  onSuccess: () => void;
 }
 
-const AuthPopup: React.FC<AuthPopupProps> = ({ visible, onClose, onSuccess }) => {
+const AuthPopup: React.FC<AuthPopupProps> = ({ visible, onClose }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +21,9 @@ const AuthPopup: React.FC<AuthPopupProps> = ({ visible, onClose, onSuccess }) =>
       if (response.success) {
         message.success(response.message || 'Email submitted successfully!');
         form.resetFields();
-        onSuccess();
+        // Don't call onSuccess() here since the user hasn't actually logged in yet
+        // Just close the popup and let them check their email
+        onClose();
       } else {
         message.error(response.message || 'Failed to submit email. Please try again.');
       }
