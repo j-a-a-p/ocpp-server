@@ -16,5 +16,5 @@ class AuthorizeHandler:
             logging.info(f"Authorization successful for RFID {id_tag}")
             return call_result.AuthorizePayload(id_tag_info={"status": "Accepted"})
         else:
-            logging.warning(f"Unauthorized RFID attempt: {id_tag}")
+            logging.info(f"Unauthorized RFID attempt: {id_tag}")
             return call_result.AuthorizePayload(id_tag_info={"status": "Rejected"})

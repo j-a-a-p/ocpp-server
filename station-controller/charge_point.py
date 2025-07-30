@@ -8,7 +8,6 @@ from rfid_manager import RFIDManager
 from meter_values_manager import MeterValuesManager
 from transaction_service import TransactionService
 from refused_card_service import RefusedCardService
-import uuid
 
 class ChargePoint(BaseChargePoint):
     """ Handles communication with the charging station. """
@@ -41,13 +40,13 @@ class ChargePoint(BaseChargePoint):
     @on("Heartbeat")
     async def on_heartbeat(self, **kwargs):
         """ Handles Heartbeat event. """
-        logging.info(f"Heartbeat received from {self.id}")
+        logging.debug(f"Heartbeat received from {self.id}")
         return call_result.Heartbeat(current_time=datetime.now().isoformat())
 
     @on("Authorize")
     async def on_authorize(self, id_tag, **kwargs):
         """ Handles Authorize event and checks if the RFID is authorized. """
-        logging.info(f"Authorization request for idTag {id_tag}")
+        logging.debug(f"Authorization request for idTag {id_tag}")
 
         if self.rfid_manager.is_authorized(id_tag, self.id):
             logging.info(f"RFID {id_tag} authorized")
@@ -55,7 +54,7 @@ class ChargePoint(BaseChargePoint):
                 id_tag_info={"status": AuthorizationStatus.accepted}
             )
         else:
-            logging.warning(f"RFID {id_tag} not authorized")
+            logging.info(f"RFID {id_tag} not authorized")
             self.log_rejected_rfid(id_tag)
             return call_result.Authorize(
                 id_tag_info={"status": AuthorizationStatus.rejected}
@@ -63,14 +62,12 @@ class ChargePoint(BaseChargePoint):
 
     @on("StartTransaction")
     async def on_start_transaction(self, connector_id, id_tag, meter_start, timestamp, **kwargs):
-        logging.info(f"StartTransaction {kwargs}")
-        #todo add rfid check (maybe unneccessary)
-        transaction_id = uuid.uuid4().int >> 64
+        logging.info(f"StartTransaction {kwargs}")        
         
         # Store transaction in database
         try:
             transaction = TransactionService.create_transaction(
-                station_name=self.id,
+                station_id=self.id,
                 rfid=id_tag
             )
             logging.info(f"Transaction stored in database with ID: {transaction.id}")
@@ -78,7 +75,7 @@ class ChargePoint(BaseChargePoint):
             logging.error(f"Failed to store transaction in database: {e}, for card: {id_tag}")
         
         return call_result.StartTransaction(
-            transaction_id=transaction_id,
+            transaction_id=transaction.id,
             id_tag_info={"status": AuthorizationStatus.accepted}
         )
 
@@ -96,7 +93,7 @@ class ChargePoint(BaseChargePoint):
     @on("MeterValues")
     async def on_meter_values(self, connector_id, transaction_id, meter_value):
         """Handles MeterValues event and logs readings to file."""
-        logging.info(f"Received MeterValues for connector {connector_id}, transaction {transaction_id}")
+        logging.debug(f"Received MeterValues for connector {connector_id}, transaction {transaction_id}")
 
         self.meter_values_manager.log_meter_values(connector_id, transaction_id, meter_value)
 
@@ -107,10 +104,5 @@ class ChargePoint(BaseChargePoint):
         """Handle the StatusNotification event from the charge point."""
 
         logging.info(f"StatusNotification received: Connector {connector_id}, Status {status}, Error {error_code}, Timestamp {timestamp}")
-
-        # You can store this status data in a log file or a database
-        #with open("status_notifications.csv", "a", newline="", encoding="utf-8") as file:
-        #    writer = csv.writer(file)
-        #    writer.writerow([connector_id, error_code, status, timestamp, info, vendor_id, vendor_error_code])
 
         return call_result.StatusNotification()

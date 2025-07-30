@@ -1,11 +1,8 @@
 import csv
 import os
 import logging
-
-import csv
-import os
-import logging
 import json
+from power_log_service import PowerLogService
 
 METER_VALUES_CSV = "/var/www/html/meter_values.csv"
 METER_VALUES_JSON = "/var/www/html/meter_values.json"
@@ -24,8 +21,7 @@ class MeterValuesManager:
             with open(self.file_path, mode='w', newline='', encoding="utf-8") as file:
                 writer = csv.writer(file)
                 writer.writerow([
-                    "timestamp", "connectorId", "transactionId",
-                    "measurand", "phase", "unit", "value", "context"
+                    "timestamp", "transactionId", "measurand", "phase", "unit", "value"
                 ])
             logging.info(f"Created new meter values log: {self.file_path}")
             
@@ -46,6 +42,10 @@ class MeterValuesManager:
                 "context": "",
                 "data": {}
             }
+            
+            # Variables to track power and energy values for PowerLog
+            power_kw = None
+            energy_kwh = None
 
             with open(self.file_path, mode='a', newline='', encoding="utf-8") as file:
                 writer = csv.writer(file)
@@ -63,12 +63,10 @@ class MeterValuesManager:
                         phase = sample.get("phase", "")
                         unit = sample.get("unit", "")
                         value = sample.get("value", "0")
-                        context = sample.get("context", "")
 
                         # Write to CSV
                         writer.writerow([
-                            timestamp, connector_id, transaction_id,
-                            measurand, phase, unit, value, context
+                            timestamp, transaction_id, measurand, phase, unit, value
                         ])
                         entries_logged += 1
 
@@ -76,9 +74,42 @@ class MeterValuesManager:
                         key = measurand if not phase else f"{measurand}.{phase}"
                         condensed_data["data"][key] = float(value)
                         condensed_data["timestamp"] = timestamp
-                        condensed_data["context"] = context
+                        
+                        # Extract power and energy values for PowerLog
+                        try:
+                            float_value = float(value)
+                            if measurand == "Power.Active.Import" and unit == "kW":
+                                power_kw = float_value
+                            elif measurand == "Energy.Active.Import.Register" and unit == "kWh":
+                                energy_kwh = float_value
+                        except (ValueError, TypeError):
+                            logging.warning(f"Could not convert value '{value}' to float for measurand '{measurand}'")
 
             self._write_condensed_json(condensed_data)
+            
+            # Create PowerLog record if we have power or energy data
+            if power_kw is not None or energy_kwh is not None:
+                try:
+                    # Use 0.0 as default if values are None
+                    power_kw = power_kw if power_kw is not None else 0.0
+                    energy_kwh = energy_kwh if energy_kwh is not None else 0.0
+                    
+                    PowerLogService.create_power_log(
+                        charge_transaction_id=transaction_id,
+                        power_kw=power_kw,
+                        energy_kwh=energy_kwh
+                    )
+                    
+                    # Update the transaction's final_energy_kwh with the latest energy value
+                    if energy_kwh is not None and energy_kwh > 0:
+                        PowerLogService.update_transaction_final_energy(
+                            transaction_id=transaction_id,
+                            final_energy_kwh=energy_kwh
+                        )
+                    
+                    logging.info(f"Created PowerLog record for transaction {transaction_id}: power_kw={power_kw}, energy_kwh={energy_kwh}")
+                except Exception as e:
+                    logging.error(f"Failed to create PowerLog record for transaction {transaction_id}: {e}")
 
             logging.info(f"Logged {entries_logged} MeterValues for connector {connector_id}, transaction {transaction_id}")
 

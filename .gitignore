@@ -1,3 +1,5 @@
 cloud/.DS_Store
 cloud/charge-cloud
 resident-ui/package-lock.json
+
+*.pyc

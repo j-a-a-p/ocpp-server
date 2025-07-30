@@ -4,12 +4,12 @@ from database import SessionLocal
 
 class TransactionService:
     @staticmethod
-    def create_transaction(station_name: str, rfid: str) -> ChargeTransaction:
+    def create_transaction(station_id: str, rfid: str) -> ChargeTransaction:
         """Create a new charge transaction in the database."""
         db = SessionLocal()
         try:
             transaction = ChargeTransaction(
-                station_name=station_name,
+                station_id=station_id,
                 rfid=rfid
             )
             db.add(transaction)
@@ -29,11 +29,11 @@ class TransactionService:
             db.close()
     
     @staticmethod
-    def get_transactions_by_station(station_name: str) -> list[ChargeTransaction]:
+    def get_transactions_by_station(station_id: str) -> list[ChargeTransaction]:
         """Get all transactions for a specific station."""
         db = SessionLocal()
         try:
-            return db.query(ChargeTransaction).filter(ChargeTransaction.station_name == station_name).all()
+            return db.query(ChargeTransaction).filter(ChargeTransaction.station_id == station_id).all()
         finally:
             db.close()
     
