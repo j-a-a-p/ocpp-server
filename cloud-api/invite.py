@@ -68,11 +68,15 @@ def send_login_email(email: str, token: str, flow: str = "resident"):
     """Send login email to the resident."""
     try:
         sender = SESEmailSender()
-        # Ensure INVITE_URL has a trailing slash
+        
+        # Extract base domain from INVITE_URL (remove /resident-ui if present)
         base_url = INVITE_URL.rstrip('/')
+        if base_url.endswith('/resident-ui'):
+            base_url = base_url[:-len('/resident-ui')]
         
         # Generate different login links based on flow
         if flow == "management":
+            # For management flow, use the base URL with management-ui path
             login_link = f"{base_url}/management-ui/login?token={token}"
             subject = "Login to Management Portal"
             body = f"""
@@ -84,6 +88,7 @@ def send_login_email(email: str, token: str, flow: str = "resident"):
             This login link will expire in 1 hour.
             """
         else:
+            # For resident flow, use the resident-ui path
             login_link = f"{base_url}/resident-ui/login?token={token}"
             subject = "Login to Resident Portal"
             body = f"""
