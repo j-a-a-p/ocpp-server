@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Layout, Menu, message, List, Button, Table, Card, Space, Typography } from "antd";
 import { HomeOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
-import { getCurrentResidentTransactions, ChargeTransaction } from "./services/chargeTransactionService";
+import { getCurrentResidentTransactions, getAllCurrentResidentTransactions, calculateMonthlyEnergyStats, ChargeTransaction, MonthlyEnergyStats } from "./services/chargeTransactionService";
 
 const { Content } = Layout;
 const { Text } = Typography;
@@ -21,6 +21,8 @@ const Home: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [totalTransactions, setTotalTransactions] = useState(0);
+  const [monthlyStats, setMonthlyStats] = useState<MonthlyEnergyStats[]>([]);
+  const [monthlyStatsLoading, setMonthlyStatsLoading] = useState(false);
 
   const fetchMyCards = () => {
     fetch(`${API_BASE_URL}/cards/my_cards`, {
@@ -60,10 +62,25 @@ const Home: React.FC = () => {
     }
   };
 
+  const fetchMonthlyStats = async () => {
+    setMonthlyStatsLoading(true);
+    try {
+      const allTransactions = await getAllCurrentResidentTransactions();
+      const stats = calculateMonthlyEnergyStats(allTransactions);
+      setMonthlyStats(stats);
+    } catch (error) {
+      console.error("Error fetching monthly stats:", error);
+      message.error("Failed to load monthly statistics");
+    } finally {
+      setMonthlyStatsLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchMyCards();
     fetchRefusedCards();
     fetchChargeTransactions();
+    fetchMonthlyStats();
   }, []);
 
   const handleAddCard = (stationId: string) => {
@@ -139,7 +156,7 @@ const Home: React.FC = () => {
       key: 'final_energy_kwh',
       render: (energy: number | null) => (
         <Text type={energy ? 'success' : 'secondary'}>
-          {energy ? `${Math.round(energy)} kWh` : 'N/A'}
+          {energy ? `${energy.toFixed(1)} kWh` : 'N/A'}
         </Text>
       ),
     },
@@ -165,9 +182,59 @@ const Home: React.FC = () => {
               fontSize: "24px",
               marginBottom: "16px"
             }}>
-              Charge APT
+              EV Charger Resident app
             </h1>
             
+            {/* Monthly Energy Statistics Card */}
+            <Card
+              title={
+                <Space>
+                  <span>Monthly Usage</span>
+                </Space>
+              }
+              style={{ marginBottom: "24px" }}
+            >
+              <Table
+                dataSource={monthlyStats}
+                columns={[
+                  {
+                    title: 'Month',
+                    dataIndex: 'month',
+                    key: 'month',
+                    render: (month: string, record: MonthlyEnergyStats) => (
+                      <Text strong>{`${month} '${String(record.year).slice(-2)}`}</Text>
+                    ),
+                  },
+                  {
+                    title: 'Energy (kWh)',
+                    dataIndex: 'totalEnergy',
+                    key: 'totalEnergy',
+                    render: (energy: number) => (
+                      <Text type="success" strong>
+                        {energy.toFixed(1)} kWh
+                      </Text>
+                    ),
+                  },
+                  {
+                    title: 'Transactions',
+                    dataIndex: 'transactionCount',
+                    key: 'transactionCount',
+                    render: (count: number) => (
+                      <Text>{count}</Text>
+                    ),
+                  },
+                ]}
+                rowKey={(record) => `${record.month}-${record.year}`}
+                loading={monthlyStatsLoading}
+                pagination={false}
+                size="small"
+                bordered
+                locale={{ 
+                  emptyText: 'No monthly data found'
+                }}
+              />
+            </Card>
+
             {/* Charges Card - Full Width */}
             <Card
               title={

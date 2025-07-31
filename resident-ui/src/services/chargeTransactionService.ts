@@ -24,6 +24,13 @@ export interface ChargeTransactionsResponse {
   limit: number;
 }
 
+export interface MonthlyEnergyStats {
+  month: string;
+  year: number;
+  totalEnergy: number;
+  transactionCount: number;
+}
+
 export const getCurrentResidentTransactions = async (
   skip: number = 0,
   limit: number = 10
@@ -53,4 +60,64 @@ export const getCurrentResidentTransactions = async (
     console.error('Error fetching charge transactions:', error);
     throw error;
   }
+};
+
+export const getAllCurrentResidentTransactions = async (): Promise<ChargeTransaction[]> => {
+  try {
+    // Get all transactions for the currently authenticated resident (no pagination)
+    const transactionsResponse = await fetch(
+      `${API_BASE_URL}/charge-transactions/my-transactions?skip=0&limit=1000`,
+      {
+        credentials: 'include',
+      }
+    );
+
+    if (!transactionsResponse.ok) {
+      throw new Error('Failed to fetch transactions');
+    }
+
+    const transactions = await transactionsResponse.json();
+    return transactions;
+  } catch (error) {
+    console.error('Error fetching all charge transactions:', error);
+    throw error;
+  }
+};
+
+export const calculateMonthlyEnergyStats = (transactions: ChargeTransaction[]): MonthlyEnergyStats[] => {
+  const monthlyStats = new Map<string, MonthlyEnergyStats>();
+
+  transactions.forEach(transaction => {
+    if (transaction.final_energy_kwh) {
+      const date = new Date(transaction.created);
+      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      
+      if (!monthlyStats.has(monthKey)) {
+        const monthNames = [
+          'January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December'
+        ];
+        
+        monthlyStats.set(monthKey, {
+          month: monthNames[date.getMonth()],
+          year: date.getFullYear(),
+          totalEnergy: 0,
+          transactionCount: 0
+        });
+      }
+      
+      const stats = monthlyStats.get(monthKey)!;
+      stats.totalEnergy += transaction.final_energy_kwh;
+      stats.transactionCount += 1;
+    }
+  });
+
+  // Convert to array and sort by date (newest first)
+  return Array.from(monthlyStats.values())
+    .sort((a, b) => {
+      if (a.year !== b.year) return b.year - a.year;
+      const monthOrder = ['January', 'February', 'March', 'April', 'May', 'June',
+                         'July', 'August', 'September', 'October', 'November', 'December'];
+      return monthOrder.indexOf(b.month) - monthOrder.indexOf(a.month);
+    });
 }; 
