@@ -11,11 +11,36 @@ from invite import verify_auth_token
 router = APIRouter(prefix="/cards", tags=["cards"])
 
 @router.get("/", response_model=list[CardResponse])
-def read_cards(skip: int = 0, limit: int = 100, db: Session = get_db_dependency()):
+def read_cards(
+    skip: int = 0, 
+    limit: int = 100, 
+    db: Session = get_db_dependency(),
+    auth_token: str = Cookie(None)
+):
+    """Get all cards. Requires cookie-based authentication for management access."""
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Missing auth token")
+    
+    resident_id = verify_auth_token(auth_token)
+    if not resident_id:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+    
     return get_cards(db, skip=skip, limit=limit)
 
 @router.post("/", response_model=CardResponse)
-def create_new_card(card: CardBase, db: Session = get_db_dependency()):
+def create_new_card(
+    card: CardBase, 
+    db: Session = get_db_dependency(),
+    auth_token: str = Cookie(None)
+):
+    """Create a new card. Requires cookie-based authentication for management access."""
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Missing auth token")
+    
+    resident_id = verify_auth_token(auth_token)
+    if not resident_id:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+    
     return create_card(db, card)
 
 @router.get("/authenticate/{rfid}")
@@ -25,6 +50,7 @@ def authenticate_card(
     db: Session = get_db_dependency(),
     _: str = Security(verify_api_key),
 ):
+    """Authenticate a card for station access. Requires API key authentication."""
     card = db.query(Card).filter(Card.rfid == rfid).first()
     
     if not card:
@@ -84,10 +110,17 @@ def get_my_cards(db: Session = get_db_dependency(), auth_token: str = Cookie(Non
     return {"cards": cards}
 
 @router.get("/refused")
-def list_refused_cards(db: Session = get_db_dependency(), auth_token: str = Cookie(None)):
-    """ Returns distinct refused cards from the last 5 minutes, ordered by created descending. """
-    #if not verify_auth_token(auth_token):
-    #    raise HTTPException(status_code=401, detail="Unauthorized: please login (again).")
+def list_refused_cards(
+    db: Session = get_db_dependency(), 
+    auth_token: str = Cookie(None)
+):
+    """ Returns distinct refused cards from the last 5 minutes, ordered by created descending. Requires cookie-based authentication. """
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Missing auth token")
+    
+    resident_id = verify_auth_token(auth_token)
+    if not resident_id:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
     
     five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
     refused_cards = (

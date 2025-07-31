@@ -28,7 +28,9 @@ const ManagementDashboard: React.FC = () => {
   const fetchResidents = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/residents/`);
+      const response = await fetch(`${API_BASE_URL}/residents/`, {
+        credentials: 'include', // This will send the auth_token cookie
+      });
       const data = await response.json();
       setResidents(data);
     } catch (error) {
@@ -52,7 +54,10 @@ const ManagementDashboard: React.FC = () => {
 
       const response = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+        },
+        credentials: 'include', // This will send the auth_token cookie
         body: JSON.stringify(values),
       });
 
