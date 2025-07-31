@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Layout, Menu, message, List, Button, Table, Card, Space, Typography } from "antd";
-import { HomeOutlined, ThunderboltOutlined } from "@ant-design/icons";
+import { Layout, Menu, message, List, Button, Table, Card, Space, Typography, Tag } from "antd";
+import { HomeOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
 import { getCurrentResidentTransactions, getAllCurrentResidentTransactions, calculateMonthlyEnergyStats, ChargeTransaction, MonthlyEnergyStats } from "./services/chargeTransactionService";
 
@@ -10,6 +10,24 @@ const { Text } = Typography;
 interface Card {
   rfid: string;
   resident_id: number;
+}
+
+interface MeterValues {
+  timestamp: string;
+  connectorId: number;
+  transactionId: number;
+  context: string;
+  data: {
+    "Current.Offered": number;
+    "Current.Import.L1": number;
+    "Current.Import.L2": number;
+    "Current.Import.L3": number;
+    "Voltage.L1": number;
+    "Voltage.L2": number;
+    "Voltage.L3": number;
+    "Energy.Active.Import.Register": number;
+    "Power.Active.Import": number;
+  };
 }
 
 const Home: React.FC = () => {
@@ -23,6 +41,13 @@ const Home: React.FC = () => {
   const [totalTransactions, setTotalTransactions] = useState(0);
   const [monthlyStats, setMonthlyStats] = useState<MonthlyEnergyStats[]>([]);
   const [monthlyStatsLoading, setMonthlyStatsLoading] = useState(false);
+  
+  // New state for station status
+  const [meterValues, setMeterValues] = useState<MeterValues | null>(null);
+  const [stationStatus, setStationStatus] = useState<'available' | 'charging' | 'unknown'>('unknown');
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
+  const [isResidentCharging, setIsResidentCharging] = useState(false);
+  const [myCardsLoaded, setMyCardsLoaded] = useState(false);
 
   const fetchMyCards = () => {
     fetch(`${API_BASE_URL}/cards/my_cards`, {
@@ -34,7 +59,10 @@ const Home: React.FC = () => {
         }
         throw new Error('Failed to fetch cards');
       })
-      .then(data => setMyCards(data.cards))
+      .then(data => {
+        setMyCards(data.cards);
+        setMyCardsLoaded(true);
+      })
       .catch(error => console.error("Error fetching my cards:", error));
   };
 
@@ -76,12 +104,60 @@ const Home: React.FC = () => {
     }
   };
 
+  const fetchMeterValues = async () => {
+    try {
+      const response = await fetch('/meter_values.json');
+      if (response.ok) {
+        const data: MeterValues = await response.json();
+        setMeterValues(data);
+        setLastUpdateTime(new Date());
+        
+        // Check if the file was updated recently (within 2 minutes)
+        const fileTimestamp = new Date(data.timestamp);
+        const now = new Date();
+        const timeDiff = now.getTime() - fileTimestamp.getTime();
+        const twoMinutes = 2 * 60 * 1000; // 2 minutes in milliseconds
+        
+        if (timeDiff < twoMinutes) {
+          setStationStatus('charging');
+          // Check if the resident is charging by comparing RFID
+          if (myCards.length > 0 && data.context) {
+            const isResidentCard = myCards.some(card => card.rfid === data.context);
+            setIsResidentCharging(isResidentCard);
+          } else {
+            setIsResidentCharging(false);
+          }
+        } else {
+          setStationStatus('available');
+          setIsResidentCharging(false);
+        }
+      } else {
+        setStationStatus('unknown');
+        setIsResidentCharging(false);
+      }
+    } catch (error) {
+      console.error("Error fetching meter values:", error);
+      setStationStatus('unknown');
+      setIsResidentCharging(false);
+    }
+  };
+
   useEffect(() => {
     fetchMyCards();
     fetchRefusedCards();
     fetchChargeTransactions();
     fetchMonthlyStats();
+    fetchMeterValues(); // Fetch meter values on mount
   }, []);
+
+  // Set up interval to fetch meter values every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchMeterValues();
+    }, 10000); // 10 seconds
+
+    return () => clearInterval(interval);
+  }, [myCards]); // Re-run when myCards changes to update resident charging status
 
   const handleAddCard = (stationId: string) => {
     fetch(`${API_BASE_URL}/cards/add_card/${stationId}`, {
@@ -185,6 +261,97 @@ const Home: React.FC = () => {
               EV Charger Resident app
             </h1>
             
+            {/* Current Station Status Card - Only show after My Cards have loaded */}
+            {myCardsLoaded && (
+              <Card
+                title={
+                  <Space>
+                    <span>Current Station Status</span>
+                  </Space>
+                }
+                style={{ marginBottom: "24px" }}
+              >
+                {stationStatus === 'available' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Tag color="success" icon={<CheckCircleOutlined />}>
+                      Available
+                    </Tag>
+                    {lastUpdateTime && (
+                      <Text type="secondary" style={{ fontSize: '12px' }}>
+                        Last updated: {lastUpdateTime.toLocaleTimeString()}
+                      </Text>
+                    )}
+                  </div>
+                )}
+                
+                {stationStatus === 'charging' && isResidentCharging && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                      <Tag color="success" icon={<CheckCircleOutlined />}>
+                        Charging
+                      </Tag>
+                      {lastUpdateTime && (
+                        <Text type="secondary" style={{ fontSize: '12px' }}>
+                          Last updated: {lastUpdateTime.toLocaleTimeString()}
+                        </Text>
+                      )}
+                    </div>
+                    <Text type="success" strong style={{ display: 'block', marginBottom: '8px' }}>
+                      You are charging now.
+                    </Text>
+                    {meterValues && (
+                      <div>
+                        <Text type="secondary" style={{ fontSize: '12px', display: 'block' }}>
+                          Power: {meterValues.data["Power.Active.Import"].toFixed(2)} kW
+                        </Text>
+                        <Text type="secondary" style={{ fontSize: '12px' }}>
+                          Energy: {meterValues.data["Energy.Active.Import.Register"].toFixed(2)} kWh
+                        </Text>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {stationStatus === 'charging' && !isResidentCharging && (
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                      <Tag color="warning" icon={<CheckCircleOutlined />}>
+                        Charging
+                      </Tag>
+                      {lastUpdateTime && (
+                        <Text type="secondary" style={{ fontSize: '12px' }}>
+                          Last updated: {lastUpdateTime.toLocaleTimeString()}
+                        </Text>
+                      )}
+                    </div>
+                    <Text type="warning" strong style={{ display: 'block', marginBottom: '8px' }}>
+                      Another resident is charging.
+                    </Text>
+                    {meterValues && (
+                      <div>
+                        <Text type="secondary" style={{ fontSize: '12px' }}>
+                          Energy: {meterValues.data["Energy.Active.Import.Register"].toFixed(2)} kWh
+                        </Text>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {stationStatus === 'unknown' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Tag color="error" icon={<CloseCircleOutlined />}>
+                      Unknown
+                    </Tag>
+                    {lastUpdateTime && (
+                      <Text type="secondary" style={{ fontSize: '12px' }}>
+                        Last updated: {lastUpdateTime.toLocaleTimeString()}
+                      </Text>
+                    )}
+                  </div>
+                )}
+              </Card>
+            )}
+            
             {/* Monthly Energy Statistics Card */}
             <Card
               title={
@@ -268,7 +435,7 @@ const Home: React.FC = () => {
                 }}
                 scroll={{ x: 800 }}
               />
-            </Card>
+                          </Card>
 
             {/* Responsive Layout for My Cards and Refused Cards */}
             <div style={{ 
