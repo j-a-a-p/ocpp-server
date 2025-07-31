@@ -8,7 +8,7 @@ export interface AuthResponse {
 
 export const submitEmail = async (email: string): Promise<AuthResponse> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/auth/request-access?email=${encodeURIComponent(email)}&flow=resident`, {
+    const response = await fetch(`${API_BASE_URL}/auth/request-access?email=${encodeURIComponent(email)}&flow=management`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -35,6 +35,4 @@ export const submitEmail = async (email: string): Promise<AuthResponse> => {
       message: 'Network error. Please check your connection and try again.',
     };
   }
-};
-
- 
+}; 

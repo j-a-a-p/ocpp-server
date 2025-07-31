@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Response, Cookie
+from fastapi import APIRouter, HTTPException, Response, Cookie, Query
 from sqlalchemy.orm import Session
 from dependencies import get_db_dependency
 from crud import get_resident_by_email, update_resident
@@ -14,9 +14,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/request-access")
-def request_access(email: str, db: Session = get_db_dependency()):
+def request_access(email: str, flow: str = Query("resident", description="Flow type: resident or management"), db: Session = get_db_dependency()):
     """Request access by email - sends login link if resident exists and is active."""
     try:
+        # Validate flow parameter
+        if flow not in ["resident", "management"]:
+            raise HTTPException(status_code=400, detail="Invalid flow parameter. Must be 'resident' or 'management'")
+        
         # Check if resident exists
         resident = get_resident_by_email(db, email)
         
@@ -46,10 +50,10 @@ def request_access(email: str, db: Session = get_db_dependency()):
             "login_expires_at": expires_at
         })
         
-        # Send login email
+        # Send login email with flow parameter
         try:
-            send_login_email(resident.email, login_token)
-            logger.info(f"Login email sent to {resident.email}")
+            send_login_email(resident.email, login_token, flow)
+            logger.info(f"Login email sent to {resident.email} for {flow} flow")
         except Exception as e:
             logger.error(f"Failed to send login email to {resident.email}: {str(e)}")
             raise HTTPException(

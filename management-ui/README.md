@@ -1,50 +1,53 @@
-# React + TypeScript + Vite
+# Management UI
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This is the management portal for the OCPP charging station system. It provides administrative functions for managing residents and charging stations.
 
-Currently, two official plugins are available:
+## Authentication
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+The management UI uses the same authentication system as the resident UI, but with a different flow parameter. Users can access both the resident portal and management portal using the same email address.
 
-## Expanding the ESLint configuration
+### Authentication Flow
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+1. **Email-based Login**: Users enter their email address in a popup that appears when they're not authenticated
+2. **Email Link**: A login link is sent to their email with a token
+3. **Token-based Login**: Clicking the link logs them in automatically
+4. **Session Management**: Authentication is maintained via HTTP-only cookies
 
-- Configure the top-level `parserOptions` property like this:
+### Flow Parameter
 
-```js
-export default tseslint.config({
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+The system supports two authentication flows:
+- `resident`: For the resident portal (default)
+- `management`: For the management portal
+
+The flow parameter is included in the email links to direct users to the appropriate UI.
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
 ```
 
-- Replace `tseslint.configs.recommended` to `tseslint.configs.recommendedTypeChecked` or `tseslint.configs.strictTypeChecked`
-- Optionally add `...tseslint.configs.stylisticTypeChecked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and update the config:
+## Features
 
-```js
-// eslint.config.js
-import react from 'eslint-plugin-react'
+- **Resident Management**: Add, edit, and view residents
+- **Authentication**: Secure email-based authentication
+- **Responsive Design**: Works on desktop and mobile devices
 
-export default tseslint.config({
-  // Set the react version
-  settings: { react: { version: '18.3' } },
-  plugins: {
-    // Add the react plugin
-    react,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended rules
-    ...react.configs.recommended.rules,
-    ...react.configs['jsx-runtime'].rules,
-  },
-})
-```
+## API Endpoints
+
+The management UI communicates with the cloud API for:
+- Authentication (`/auth/request-access`, `/auth/login/{token}`, `/auth/validate`)
+- Resident management (`/residents/`)
+
+## Security
+
+- Uses HTTP-only cookies for session management
+- Email-based authentication with time-limited tokens
+- Same user base as resident portal with different access levels

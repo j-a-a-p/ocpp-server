@@ -64,25 +64,38 @@ def send_invitation_email(email: str, token: str):
         logger.error(f"Failed to send invitation email to {email}: {str(e)}")
         raise Exception(f"Failed to send invitation email: {str(e)}")
 
-def send_login_email(email: str, token: str):
+def send_login_email(email: str, token: str, flow: str = "resident"):
     """Send login email to the resident."""
     try:
         sender = SESEmailSender()
         # Ensure INVITE_URL has a trailing slash
         base_url = INVITE_URL.rstrip('/')
-        login_link = f"{base_url}/login?token={token}"
         
-        subject = "Login to Resident Portal"
-        body = f"""
-        You have requested to log in to the resident portal.
-        Please click the following link to access your account:
+        # Generate different login links based on flow
+        if flow == "management":
+            login_link = f"{base_url}/management-ui/login?token={token}"
+            subject = "Login to Management Portal"
+            body = f"""
+            You have requested to log in to the management portal.
+            Please click the following link to access your account:
+            
+            {login_link}
+            
+            This login link will expire in 1 hour.
+            """
+        else:
+            login_link = f"{base_url}/resident-ui/login?token={token}"
+            subject = "Login to Resident Portal"
+            body = f"""
+            You have requested to log in to the resident portal.
+            Please click the following link to access your account:
+            
+            {login_link}
+            
+            This login link will expire in 1 hour.
+            """
         
-        {login_link}
-        
-        This login link will expire in 1 hour.
-        """
-        
-        logger.info(f"Sending login email to {email}")
+        logger.info(f"Sending login email to {email} for {flow} flow")
         sender.send_email(
             sender="charger@aircokopen.nu",
             recipient=email,
