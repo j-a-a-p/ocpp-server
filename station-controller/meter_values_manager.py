@@ -1,32 +1,17 @@
-import csv
-import os
 import logging
 import json
 from power_log_service import PowerLogService
 
-METER_VALUES_CSV = "/var/www/html/meter_values.csv"
 METER_VALUES_JSON = "/var/www/html/meter_values.json"
 
 class MeterValuesManager:
-    """Manages logging of meter values to a CSV and condensed JSON file."""
+    """Manages logging of meter values to a condensed JSON file."""
 
-    def __init__(self, file_path=METER_VALUES_CSV, json_path=METER_VALUES_JSON):
-        self.file_path = file_path
+    def __init__(self, json_path=METER_VALUES_JSON):
         self.json_path = json_path
-        self._ensure_file_exists()
 
-    def _ensure_file_exists(self):
-        """Ensure the CSV file exists with the correct header."""
-        if not os.path.exists(self.file_path):
-            with open(self.file_path, mode='w', newline='', encoding="utf-8") as file:
-                writer = csv.writer(file)
-                writer.writerow([
-                    "timestamp", "transactionId", "measurand", "phase", "unit", "value"
-                ])
-            logging.info(f"Created new meter values log: {self.file_path}")
-            
     def log_meter_values(self, connector_id, transaction_id, meter_values):
-        """Logs meter values to the CSV file and condensed JSON file."""
+        """Logs meter values to the condensed JSON file."""
         try:
             if not meter_values:
                 logging.warning("No meter values provided to log.")
@@ -47,43 +32,36 @@ class MeterValuesManager:
             power_kw = None
             energy_kwh = None
 
-            with open(self.file_path, mode='a', newline='', encoding="utf-8") as file:
-                writer = csv.writer(file)
+            for meter_value in meter_values:
+                timestamp = meter_value.get("timestamp", "")
+                sampled_values = meter_value.get("sampled_value", [])
 
-                for meter_value in meter_values:
-                    timestamp = meter_value.get("timestamp", "")
-                    sampled_values = meter_value.get("sampled_value", [])
+                if not sampled_values:
+                    logging.warning(f"No sampled_value found in meter_value: {meter_value}")
+                    continue
 
-                    if not sampled_values:
-                        logging.warning(f"No sampled_value found in meter_value: {meter_value}")
-                        continue
+                for sample in sampled_values:
+                    measurand = sample.get("measurand", "Unknown")
+                    phase = sample.get("phase", "")
+                    unit = sample.get("unit", "")
+                    value = sample.get("value", "0")
 
-                    for sample in sampled_values:
-                        measurand = sample.get("measurand", "Unknown")
-                        phase = sample.get("phase", "")
-                        unit = sample.get("unit", "")
-                        value = sample.get("value", "0")
+                    entries_logged += 1
 
-                        # Write to CSV
-                        writer.writerow([
-                            timestamp, transaction_id, measurand, phase, unit, value
-                        ])
-                        entries_logged += 1
-
-                        # Condense to JSON
-                        key = measurand if not phase else f"{measurand}.{phase}"
-                        condensed_data["data"][key] = float(value)
-                        condensed_data["timestamp"] = timestamp
-                        
-                        # Extract power and energy values for PowerLog
-                        try:
-                            float_value = float(value)
-                            if measurand == "Power.Active.Import" and unit == "kW":
-                                power_kw = float_value
-                            elif measurand == "Energy.Active.Import.Register" and unit == "kWh":
-                                energy_kwh = float_value
-                        except (ValueError, TypeError):
-                            logging.warning(f"Could not convert value '{value}' to float for measurand '{measurand}'")
+                    # Condense to JSON
+                    key = measurand if not phase else f"{measurand}.{phase}"
+                    condensed_data["data"][key] = float(value)
+                    condensed_data["timestamp"] = timestamp
+                    
+                    # Extract power and energy values for PowerLog
+                    try:
+                        float_value = float(value)
+                        if measurand == "Power.Active.Import" and unit == "kW":
+                            power_kw = float_value
+                        elif measurand == "Energy.Active.Import.Register" and unit == "kWh":
+                            energy_kwh = float_value
+                    except (ValueError, TypeError):
+                        logging.warning(f"Could not convert value '{value}' to float for measurand '{measurand}'")
 
             self._write_condensed_json(condensed_data)
             
