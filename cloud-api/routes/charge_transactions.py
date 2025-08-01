@@ -113,3 +113,52 @@ def get_my_transactions(
     )
     
     return transactions 
+
+
+
+@router.get("/all")
+def get_all_charge_transactions(
+    db: Session = get_db_dependency(),
+    auth_token: str = Cookie(None)
+):
+    """
+    Get all charge transactions with resident information.
+    Requires cookie-based authentication for management access.
+    """
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Missing auth token")
+    
+    # For management access, we'll accept any valid auth token
+    resident_id = verify_auth_token(auth_token)
+    if not resident_id:
+        raise HTTPException(status_code=401, detail="Invalid auth token")
+    
+    # Get all charge transactions with resident information
+    transactions = (
+        db.query(
+            ChargeTransaction.id,
+            ChargeTransaction.station_id,
+            ChargeTransaction.rfid,
+            ChargeTransaction.created,
+            ChargeTransaction.final_energy_kwh,
+            Resident.full_name.label('resident_name')
+        )
+        .join(Card, ChargeTransaction.rfid == Card.rfid)
+        .join(Resident, Card.resident_id == Resident.id)
+        .order_by(ChargeTransaction.created.desc())
+        .all()
+    )
+    
+    # Convert to simple dictionary format
+    result = []
+    for transaction in transactions:
+        result.append({
+            "id": transaction.id,
+            "station_id": transaction.station_id,
+            "rfid": transaction.rfid,
+            "created": transaction.created.isoformat() if transaction.created else None,
+            "final_energy_kwh": float(transaction.final_energy_kwh) if transaction.final_energy_kwh else 0,
+            "resident_name": transaction.resident_name
+        })
+    
+    return result 

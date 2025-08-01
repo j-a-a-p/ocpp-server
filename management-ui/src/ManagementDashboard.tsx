@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Layout, Menu, Table, Button, Modal, Form, Input, message } from "antd";
-import { UserOutlined, HomeOutlined } from "@ant-design/icons";
+import { UserOutlined, HomeOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
+import Charges from "./Charges";
 
 const { Header, Content, Sider } = Layout;
 
@@ -104,7 +105,11 @@ const ManagementDashboard: React.FC = () => {
           mode="inline"
           selectedKeys={[selectedMenu]}
           onClick={(e) => setSelectedMenu(e.key)}
-          items={[{ key: "home", icon: <HomeOutlined />, label: "Home" }, { key: "residents", icon: <UserOutlined />, label: "Residents" }]}
+          items={[
+            { key: "home", icon: <HomeOutlined />, label: "Home" }, 
+            { key: "residents", icon: <UserOutlined />, label: "Residents" },
+            { key: "charges", icon: <ThunderboltOutlined />, label: "Charges" }
+          ]}
         />
       </Sider>
       <Layout>
@@ -130,6 +135,7 @@ const ManagementDashboard: React.FC = () => {
               </Modal>
             </>
           )}
+          {selectedMenu === "charges" && <Charges />}
         </Content>
       </Layout>
     </Layout>
