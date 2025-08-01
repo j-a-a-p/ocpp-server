@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Security, Cookie
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 from schemas import ChargeTransactionResponse
-from models import ChargeTransaction, PowerLog, Card, Resident, ResidentStatus
+from models import ChargeTransaction, Card, Resident, ResidentStatus
 from dependencies import get_db_dependency
 from security import verify_api_key
 from invite import verify_auth_token

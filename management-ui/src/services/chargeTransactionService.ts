@@ -20,6 +20,7 @@ export interface MonthlyData {
 
 export interface YearlySummary {
   year: number;
+  resident_name: string;
   total_energy: number;
   transaction_count: number;
 }
