@@ -89,9 +89,10 @@ const Charges: React.FC = () => {
         };
       })
       .sort((a, b) => {
-        // Sort by year desc, then month desc
+        // Sort by year desc, then month desc, then by resident name
         if (a.year !== b.year) return b.year - a.year;
-        return b.month - a.month;
+        if (a.month !== b.month) return b.month - a.month;
+        return a.resident_name.localeCompare(b.resident_name);
       });
 
     const yearly_summaries: YearlySummary[] = Array.from(yearlyGroups.entries())
@@ -120,11 +121,11 @@ const Charges: React.FC = () => {
       dataIndex: "month_display",
       key: "month_display",
       sorter: (a: MonthlyData, b: MonthlyData) => {
-        // Sort by year desc, then month desc
+        // Sort by year desc, then month desc, then by resident name
         if (a.year !== b.year) return b.year - a.year;
-        return b.month - a.month;
+        if (a.month !== b.month) return b.month - a.month;
+        return a.resident_name.localeCompare(b.resident_name);
       },
-      defaultSortOrder: 'descend' as const,
     },
     {
       title: "Resident",
