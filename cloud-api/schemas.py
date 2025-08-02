@@ -5,7 +5,6 @@ from typing import Optional, List
 class ResidentBase(BaseModel):
     full_name: str
     email: str
-    reference: str
 
 class ResidentResponse(ResidentBase):
     id: int

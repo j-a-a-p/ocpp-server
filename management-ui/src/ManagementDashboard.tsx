@@ -10,7 +10,6 @@ interface Resident {
   id: number;
   full_name: string;
   email: string;
-  reference: string;
   status: string;
 }
 
@@ -43,7 +42,7 @@ const ManagementDashboard: React.FC = () => {
 
   const showModal = (resident: Resident | null = null) => {
     setEditingResident(resident);
-    form.setFieldsValue(resident || { full_name: "", email: "", reference: "" });
+    form.setFieldsValue(resident || { full_name: "", email: "" });
     setIsModalOpen(true);
   };
 
@@ -84,7 +83,6 @@ const ManagementDashboard: React.FC = () => {
   const columns = [
     { title: "Full Name", dataIndex: "full_name", key: "full_name" },
     { title: "Email", dataIndex: "email", key: "email" },
-    { title: "Reference", dataIndex: "reference", key: "reference" },
     { title: "Status", dataIndex: "status", key: "status" },
     {
       title: "Action",
@@ -126,9 +124,6 @@ const ManagementDashboard: React.FC = () => {
                     <Input />
                   </Form.Item>
                   <Form.Item name="email" label="Email" rules={[{ required: true, type: "email", message: "Please enter a valid email" }]}>
-                    <Input />
-                  </Form.Item>
-                  <Form.Item name="reference" label="Reference" rules={[{ required: true, message: "Please enter reference" }]}>
                     <Input />
                   </Form.Item>
                 </Form>

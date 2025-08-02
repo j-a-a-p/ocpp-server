@@ -12,8 +12,7 @@ sudo apt install certbot python3-certbot-apache -y
 sudo certbot --apache
 
 sudo touch /var/www/html/meter_values.json
-sudo touch /var/www/html/meter_values.csv
-sudo chown ubuntu:www-data /var/www/html/meter_values.*
+sudo chown ubuntu:www-data /var/www/html/meter_values.json
 
 # Create management-ui directory and symbolic link for deployment
 sudo mkdir -p /var/www/html/management-ui

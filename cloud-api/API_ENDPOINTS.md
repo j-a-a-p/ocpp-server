@@ -113,7 +113,6 @@ fetch('https://apt.aircokopen.nu/api/cards/refused', {
   "id": 1,
   "full_name": "John Doe",
   "email": "john@example.com",
-  "reference": "REF123",
   "status": "active",
   "invite_expires_at": null
 }

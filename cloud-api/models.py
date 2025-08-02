@@ -15,7 +15,6 @@ class Resident(Base):
     id = Column(Integer, primary_key=True, index=True)
     full_name = Column(String, index=True)
     email = Column(String, unique=True, index=True)
-    reference = Column(String, unique=True, index=True)
     status = Column(Enum(ResidentStatus), default=ResidentStatus.INVITED)
     invite_token = Column(String, unique=True, nullable=True)
     invite_expires_at = Column(DateTime, nullable=True)

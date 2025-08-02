@@ -20,7 +20,6 @@ def test_rfid_authorization():
         test_resident = Resident(
             full_name="Test User",
             email="test@example.com",
-            reference="TEST001",
             status=ResidentStatus.ACTIVE
         )
         db.add(test_resident)

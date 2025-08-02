@@ -20,7 +20,6 @@ def create_invited_resident(db: Session, resident: ResidentBase, invite_token: s
     db_resident = Resident(
         full_name=resident.full_name,
         email=resident.email,
-        reference=resident.reference,
         status=ResidentStatus.INVITED,
         invite_token=invite_token,
         invite_expires_at=expires_at

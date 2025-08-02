@@ -69,7 +69,7 @@ def create_new_resident(
         new_resident = create_invited_resident(db, resident, invite_token, expires_at)
 
         if not new_resident:
-            raise HTTPException(status_code=400, detail="Reference does not exist")
+            raise HTTPException(status_code=400, detail="Failed to create resident")
         
         # Try to send invitation email
         try:
