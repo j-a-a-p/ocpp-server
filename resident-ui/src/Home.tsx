@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Layout, Menu, message, List, Button, Table, Card, Space, Typography, Tag } from "antd";
+import { Layout, Menu, message, List, Button, Table, Card, Space, Typography } from "antd";
 import { HomeOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
 import { getCurrentResidentTransactions, getAllCurrentResidentTransactions, calculateMonthlyEnergyStats, ChargeTransaction, MonthlyEnergyStats } from "./services/chargeTransactionService";
@@ -270,106 +270,192 @@ const Home: React.FC = () => {
               EV Charger Resident app
             </h1>
             
-            {/* Current Station Status Card - Only show after My Cards have loaded */}
-            {myCardsLoaded && (
+            {/* Responsive Layout for Current Station Status and Monthly Usage */}
+            <div style={{ 
+              display: "flex", 
+              flexDirection: "row", 
+              gap: "16px",
+              marginBottom: "24px",
+              flexWrap: "wrap"
+            }}>
+              {/* Current Station Status Card - Only show after My Cards have loaded */}
+              {myCardsLoaded && (
+                <Card
+                  title={
+                    <Space>
+                      <span>Station Status</span>
+                    </Space>
+                  }
+                  style={{ 
+                    flex: "1 1 0",
+                    minWidth: "300px"
+                  }}
+                >
+                  {stationStatus === 'available' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <Button 
+                        type="primary" 
+                        size="large"
+                        style={{ 
+                          width: '80px', 
+                          height: '80px', 
+                          borderRadius: '8px',
+                          backgroundColor: '#52c41a',
+                          borderColor: '#52c41a'
+                        }}
+                        icon={<CheckCircleOutlined style={{ fontSize: '32px' }} />}
+                      />
+                      <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h1 style={{ 
+                          color: '#52c41a', 
+                          margin: '0 0 8px 0',
+                          fontSize: '24px',
+                          fontWeight: 'bold'
+                        }}>
+                          Available
+                        </h1>
+                        {lastUpdateTime && (
+                          <Text type="secondary" style={{ fontSize: '12px', display: 'block' }}>
+                            Last updated: {lastUpdateTime.toLocaleTimeString()}
+                          </Text>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {stationStatus === 'charging' && isResidentCharging && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <Button 
+                        type="primary" 
+                        size="large"
+                        style={{ 
+                          width: '80px', 
+                          height: '80px', 
+                          borderRadius: '8px',
+                          backgroundColor: '#52c41a',
+                          borderColor: '#52c41a'
+                        }}
+                        icon={<CheckCircleOutlined style={{ fontSize: '32px' }} />}
+                      />
+                      <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h1 style={{ 
+                          color: '#52c41a', 
+                          margin: '0 0 8px 0',
+                          fontSize: '24px',
+                          fontWeight: 'bold'
+                        }}>
+                          Charging
+                        </h1>
+                        <Text type="success" strong style={{ display: 'block', marginBottom: '8px' }}>
+                          You are charging now.
+                        </Text>
+                        {lastUpdateTime && (
+                          <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
+                            Last updated: {lastUpdateTime.toLocaleTimeString()}
+                          </Text>
+                        )}
+                        {meterValues && (
+                          <div>
+                            <Text type="secondary" style={{ fontSize: '12px', display: 'block' }}>
+                              Power: {meterValues.data["Power.Active.Import"].toFixed(2)} kW
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: '12px' }}>
+                              Energy: {meterValues.data["Energy.Active.Import.Register"].toFixed(2)} kWh
+                            </Text>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {stationStatus === 'charging' && !isResidentCharging && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <Button 
+                        type="primary" 
+                        size="large"
+                        style={{ 
+                          width: '80px', 
+                          height: '80px', 
+                          borderRadius: '8px',
+                          backgroundColor: '#faad14',
+                          borderColor: '#faad14'
+                        }}
+                        icon={<CheckCircleOutlined style={{ fontSize: '32px' }} />}
+                      />
+                      <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h1 style={{ 
+                          color: '#faad14', 
+                          margin: '0 0 8px 0',
+                          fontSize: '24px',
+                          fontWeight: 'bold'
+                        }}>
+                          Charging
+                        </h1>
+                        <Text type="warning" strong style={{ display: 'block', marginBottom: '8px' }}>
+                          Another resident is charging.
+                        </Text>
+                        {lastUpdateTime && (
+                          <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
+                            Last updated: {lastUpdateTime.toLocaleTimeString()}
+                          </Text>
+                        )}
+                        {meterValues && (
+                          <div>
+                            <Text type="secondary" style={{ fontSize: '12px' }}>
+                              Energy: {meterValues.data["Energy.Active.Import.Register"].toFixed(2)} kWh
+                            </Text>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {stationStatus === 'unknown' && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <Button 
+                        type="primary" 
+                        size="large"
+                        style={{ 
+                          width: '80px', 
+                          height: '80px', 
+                          borderRadius: '8px',
+                          backgroundColor: '#ff4d4f',
+                          borderColor: '#ff4d4f'
+                        }}
+                        icon={<CloseCircleOutlined style={{ fontSize: '32px' }} />}
+                      />
+                      <div style={{ flex: 1, textAlign: 'center' }}>
+                        <h1 style={{ 
+                          color: '#ff4d4f', 
+                          margin: '0 0 8px 0',
+                          fontSize: '24px',
+                          fontWeight: 'bold'
+                        }}>
+                          Unknown
+                        </h1>
+                        {lastUpdateTime && (
+                          <Text type="secondary" style={{ fontSize: '12px', display: 'block' }}>
+                            Last updated: {lastUpdateTime.toLocaleTimeString()}
+                          </Text>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </Card>
+              )}
+              
+              {/* Monthly Energy Statistics Card */}
               <Card
                 title={
                   <Space>
-                    <span>Current Station Status</span>
+                    <span>Monthly Usage</span>
                   </Space>
                 }
-                style={{ marginBottom: "24px" }}
+                style={{ 
+                  flex: "1 1 0",
+                  minWidth: "300px"
+                }}
               >
-                {stationStatus === 'available' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Tag color="success" icon={<CheckCircleOutlined />}>
-                      Available
-                    </Tag>
-                    {lastUpdateTime && (
-                      <Text type="secondary" style={{ fontSize: '12px' }}>
-                        Last updated: {lastUpdateTime.toLocaleTimeString()}
-                      </Text>
-                    )}
-                  </div>
-                )}
-                
-                {stationStatus === 'charging' && isResidentCharging && (
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                      <Tag color="success" icon={<CheckCircleOutlined />}>
-                        Charging
-                      </Tag>
-                      {lastUpdateTime && (
-                        <Text type="secondary" style={{ fontSize: '12px' }}>
-                          Last updated: {lastUpdateTime.toLocaleTimeString()}
-                        </Text>
-                      )}
-                    </div>
-                    <Text type="success" strong style={{ display: 'block', marginBottom: '8px' }}>
-                      You are charging now.
-                    </Text>
-                    {meterValues && (
-                      <div>
-                        <Text type="secondary" style={{ fontSize: '12px', display: 'block' }}>
-                          Power: {meterValues.data["Power.Active.Import"].toFixed(2)} kW
-                        </Text>
-                        <Text type="secondary" style={{ fontSize: '12px' }}>
-                          Energy: {meterValues.data["Energy.Active.Import.Register"].toFixed(2)} kWh
-                        </Text>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {stationStatus === 'charging' && !isResidentCharging && (
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                      <Tag color="warning" icon={<CheckCircleOutlined />}>
-                        Charging
-                      </Tag>
-                      {lastUpdateTime && (
-                        <Text type="secondary" style={{ fontSize: '12px' }}>
-                          Last updated: {lastUpdateTime.toLocaleTimeString()}
-                        </Text>
-                      )}
-                    </div>
-                    <Text type="warning" strong style={{ display: 'block', marginBottom: '8px' }}>
-                      Another resident is charging.
-                    </Text>
-                    {meterValues && (
-                      <div>
-                        <Text type="secondary" style={{ fontSize: '12px' }}>
-                          Energy: {meterValues.data["Energy.Active.Import.Register"].toFixed(2)} kWh
-                        </Text>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {stationStatus === 'unknown' && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Tag color="error" icon={<CloseCircleOutlined />}>
-                      Unknown
-                    </Tag>
-                    {lastUpdateTime && (
-                      <Text type="secondary" style={{ fontSize: '12px' }}>
-                        Last updated: {lastUpdateTime.toLocaleTimeString()}
-                      </Text>
-                    )}
-                  </div>
-                )}
-              </Card>
-            )}
-            
-            {/* Monthly Energy Statistics Card */}
-            <Card
-              title={
-                <Space>
-                  <span>Monthly Usage</span>
-                </Space>
-              }
-              style={{ marginBottom: "24px" }}
-            >
               <Table
                 dataSource={monthlyStats}
                 columns={[
@@ -410,6 +496,7 @@ const Home: React.FC = () => {
                 }}
               />
             </Card>
+            </div>
 
             {/* Charges Card - Full Width */}
             <Card
@@ -442,16 +529,17 @@ const Home: React.FC = () => {
                 locale={{ 
                   emptyText: 'No charge transactions found'
                 }}
-                scroll={{ x: 800 }}
+scroll={{ x: 'max-content' }}
               />
-                          </Card>
+            </Card>
 
             {/* Responsive Layout for My Cards and Refused Cards */}
             <div style={{ 
               display: "flex", 
-              flexDirection: "column", 
+              flexDirection: "row", 
               gap: "16px",
-              marginBottom: "24px"
+              marginBottom: "24px",
+              flexWrap: "wrap"
             }}>
               {/* My Cards Card - Smaller */}
               <Card
@@ -460,7 +548,10 @@ const Home: React.FC = () => {
                     <span>My Cards</span>
                   </Space>
                 }
-                style={{ flex: "0 0 auto" }}
+                style={{ 
+                  flex: "1 1 0",
+                  minWidth: "300px"
+                }}
               >
                 <Table
                   dataSource={myCards}
@@ -490,6 +581,10 @@ const Home: React.FC = () => {
               <List
                 header={<h3>Refused Cards</h3>}
                 bordered
+                style={{ 
+                  flex: "1 1 0",
+                  minWidth: "300px"
+                }}
                 dataSource={refusedCards}
                 renderItem={item => (
                   <List.Item
