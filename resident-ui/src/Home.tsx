@@ -120,10 +120,19 @@ const Home: React.FC = () => {
         
         if (timeDiff < twoMinutes) {
           setStationStatus('charging');
-          // Check if the resident is charging by comparing RFID
-          if (myCards.length > 0 && data.context) {
-            const isResidentCard = myCards.some(card => card.rfid === data.context);
-            setIsResidentCharging(isResidentCard);
+          // Check if the resident is charging by comparing transaction ID
+          if (data.transactionId) {
+            // Get recent transactions for the resident and check if any match the current transaction ID
+            try {
+              const recentTransactions = await getAllCurrentResidentTransactions();
+              const isResidentTransaction = recentTransactions.some(
+                transaction => transaction.id === data.transactionId
+              );
+              setIsResidentCharging(isResidentTransaction);
+            } catch (error) {
+              console.error("Error checking resident charging status:", error);
+              setIsResidentCharging(false);
+            }
           } else {
             setIsResidentCharging(false);
           }
@@ -157,7 +166,7 @@ const Home: React.FC = () => {
     }, 10000); // 10 seconds
 
     return () => clearInterval(interval);
-  }, [myCards]); // Re-run when myCards changes to update resident charging status
+  }, []); // No dependencies needed since we fetch transactions inside fetchMeterValues
 
   const handleAddCard = (stationId: string) => {
     fetch(`${API_BASE_URL}/cards/add_card/${stationId}`, {
