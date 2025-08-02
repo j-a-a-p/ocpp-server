@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { isAuthenticated } from '../utils/auth';
+import { isAuthenticated, AuthResult } from '../utils/auth';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
+  serverAvailable: boolean;
   checkAuth: () => Promise<void>;
 }
 
@@ -16,16 +17,19 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [serverAvailable, setServerAvailable] = useState(true);
 
   const checkAuth = async () => {
     setLoading(true);
     
     try {
-      const isAuth = await isAuthenticated();
-      setAuthenticated(isAuth);
+      const authResult: AuthResult = await isAuthenticated();
+      setAuthenticated(authResult.isAuthenticated);
+      setServerAvailable(authResult.serverAvailable);
     } catch (error) {
       console.error('Error checking authentication:', error);
       setAuthenticated(false);
+      setServerAvailable(false);
     } finally {
       setLoading(false);
     }
@@ -35,9 +39,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     checkAuth();
   }, []);
 
+  // Periodic retry when server is unavailable
+  useEffect(() => {
+    if (!serverAvailable) {
+      const interval = setInterval(() => {
+        console.log('Retrying server connection...');
+        checkAuth();
+      }, 10000); // Retry every 10 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [serverAvailable]);
+
   const value: AuthContextType = {
     isAuthenticated: authenticated,
     isLoading: loading,
+    serverAvailable,
     checkAuth,
   };
 
