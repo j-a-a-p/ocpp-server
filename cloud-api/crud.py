@@ -122,9 +122,12 @@ def calculate_power_log_costs(db: Session, power_logs: list) -> list:
     if not power_logs:
         return power_logs
     
+    # Sort power logs by timestamp to calculate deltas correctly
+    sorted_logs = sorted(power_logs, key=lambda x: x.created)
+    
     # Get all unique dates from power logs to batch fetch charging costs
     dates = set()
-    for log in power_logs:
+    for log in sorted_logs:
         dates.add(log.created.date())
     
     # Get charging costs for all relevant dates
@@ -135,10 +138,20 @@ def calculate_power_log_costs(db: Session, power_logs: list) -> list:
             charging_costs[date] = float(cost.kwh_price)
     
     # Calculate costs for each power log
-    for log in power_logs:
+    for i, log in enumerate(sorted_logs):
         log_date = log.created.date()
         kwh_rate = charging_costs.get(log_date, 0.0)
         log.kwh_rate = float(kwh_rate)
-        log.delta_power_cost = float(log.energy_kwh * float(kwh_rate)) if log.energy_kwh and kwh_rate else 0.0
+        
+        # Calculate delta energy (difference from previous log)
+        if i == 0:
+            # First log: delta energy is the total energy
+            delta_energy = log.energy_kwh
+        else:
+            # Subsequent logs: delta energy is the difference from previous log
+            delta_energy = log.energy_kwh - sorted_logs[i-1].energy_kwh
+        
+        # Calculate the delta cost for this specific power log entry
+        log.delta_power_cost = float(delta_energy * float(kwh_rate)) if delta_energy and kwh_rate else 0.0
     
     return power_logs
