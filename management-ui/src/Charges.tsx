@@ -39,8 +39,8 @@ const Charges: React.FC = () => {
     }
 
     // Group by month and resident
-    const monthlyGroups = new Map<string, { transactions: ChargeTransaction[], total_energy: number }>();
-    const yearlyGroups = new Map<string, { transactions: ChargeTransaction[], total_energy: number }>();
+    const monthlyGroups = new Map<string, { transactions: ChargeTransaction[], total_energy: number, total_cost: number }>();
+    const yearlyGroups = new Map<string, { transactions: ChargeTransaction[], total_energy: number, total_cost: number }>();
 
     validTransactions.forEach(transaction => {
       const date = new Date(transaction.created);
@@ -49,21 +49,28 @@ const Charges: React.FC = () => {
       const monthKey = `${year}-${month.toString().padStart(2, '0')}-${transaction.resident_name}`;
       const yearKey = `${year}-${transaction.resident_name}`;
       
+      // Calculate transaction cost
+      const transactionCost = transaction.power_logs?.reduce((sum, log) => {
+        return sum + (log.delta_power_cost || 0);
+      }, 0) || 0;
+
       // Monthly grouping
       if (!monthlyGroups.has(monthKey)) {
-        monthlyGroups.set(monthKey, { transactions: [], total_energy: 0 });
+        monthlyGroups.set(monthKey, { transactions: [], total_energy: 0, total_cost: 0 });
       }
       const monthlyGroup = monthlyGroups.get(monthKey)!;
       monthlyGroup.transactions.push(transaction);
       monthlyGroup.total_energy += transaction.final_energy_kwh;
+      monthlyGroup.total_cost += transactionCost;
 
       // Yearly grouping by resident
       if (!yearlyGroups.has(yearKey)) {
-        yearlyGroups.set(yearKey, { transactions: [], total_energy: 0 });
+        yearlyGroups.set(yearKey, { transactions: [], total_energy: 0, total_cost: 0 });
       }
       const yearlyGroup = yearlyGroups.get(yearKey)!;
       yearlyGroup.transactions.push(transaction);
       yearlyGroup.total_energy += transaction.final_energy_kwh;
+      yearlyGroup.total_cost += transactionCost;
     });
 
     // Convert to arrays and format
@@ -85,7 +92,8 @@ const Charges: React.FC = () => {
           month_display: `${monthName} '${year.toString().slice(2)}`,
           resident_name,
           total_energy: group.total_energy,
-          transaction_count: group.transactions.length
+          transaction_count: group.transactions.length,
+          total_cost: group.total_cost
         };
       })
       .sort((a, b) => {
@@ -103,7 +111,8 @@ const Charges: React.FC = () => {
           year,
           resident_name,
           total_energy: group.total_energy,
-          transaction_count: group.transactions.length
+          transaction_count: group.transactions.length,
+          total_cost: group.total_cost
         };
       })
       .sort((a, b) => {
@@ -145,6 +154,13 @@ const Charges: React.FC = () => {
       key: "transaction_count",
       sorter: (a: MonthlyData, b: MonthlyData) => a.transaction_count - b.transaction_count,
     },
+    {
+      title: "Total Cost (€)",
+      dataIndex: "total_cost",
+      key: "total_cost",
+      render: (value: number) => `€${value.toFixed(2)}`,
+      sorter: (a: MonthlyData, b: MonthlyData) => a.total_cost - b.total_cost,
+    },
   ];
 
   const yearlyColumns = [
@@ -174,6 +190,13 @@ const Charges: React.FC = () => {
       key: "transaction_count",
       sorter: (a: YearlySummary, b: YearlySummary) => a.transaction_count - b.transaction_count,
     },
+    {
+      title: "Total Cost (€)",
+      dataIndex: "total_cost",
+      key: "total_cost",
+      render: (value: number) => `€${value.toFixed(2)}`,
+      sorter: (a: YearlySummary, b: YearlySummary) => a.total_cost - b.total_cost,
+    },
   ];
 
   if (loading) {
@@ -197,6 +220,12 @@ const Charges: React.FC = () => {
   const validTransactions = transactions.filter(transaction => transaction.final_energy_kwh > 0);
   const totalEnergy = validTransactions.reduce((sum, transaction) => sum + transaction.final_energy_kwh, 0);
   const totalTransactions = validTransactions.length;
+  const totalCost = validTransactions.reduce((sum, transaction) => {
+    const transactionCost = transaction.power_logs?.reduce((logSum, log) => {
+      return logSum + (log.delta_power_cost || 0);
+    }, 0) || 0;
+    return sum + transactionCost;
+  }, 0);
 
   return (
     <div>
@@ -204,7 +233,7 @@ const Charges: React.FC = () => {
       
       {/* Summary Cards */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={8}>
+        <Col span={6}>
           <Card>
             <Statistic
               title="Total Energy"
@@ -215,7 +244,7 @@ const Charges: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={8}>
+        <Col span={6}>
           <Card>
             <Statistic
               title="Total Transactions"
@@ -224,7 +253,18 @@ const Charges: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={8}>
+        <Col span={6}>
+          <Card>
+            <Statistic
+              title="Total Cost"
+              value={totalCost}
+              precision={2}
+              prefix="€"
+              valueStyle={{ color: '#3f8600' }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
           <Card>
             <Statistic
               title="Average Energy per Transaction"

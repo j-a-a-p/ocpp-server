@@ -137,7 +137,7 @@ def get_all_charge_transactions(
     auth_token: str = Cookie(None)
 ):
     """
-    Get all charge transactions with resident information.
+    Get all charge transactions with resident information and power logs for cost calculation.
     Requires cookie-based authentication for management access.
     """
     if not auth_token:
@@ -148,32 +148,46 @@ def get_all_charge_transactions(
     if not resident_id:
         raise HTTPException(status_code=401, detail="Invalid auth token")
     
-    # Get all charge transactions with resident information
+    # Get all charge transactions with power logs and resident information
     transactions = (
-        db.query(
-            ChargeTransaction.id,
-            ChargeTransaction.station_id,
-            ChargeTransaction.rfid,
-            ChargeTransaction.created,
-            ChargeTransaction.final_energy_kwh,
-            Resident.full_name.label('resident_name')
-        )
+        db.query(ChargeTransaction)
+        .options(joinedload(ChargeTransaction.power_logs))
         .join(Card, ChargeTransaction.rfid == Card.rfid)
         .join(Resident, Card.resident_id == Resident.id)
         .order_by(ChargeTransaction.created.desc())
         .all()
     )
     
-    # Convert to simple dictionary format
+    # Calculate costs for power logs and convert to dictionary format
     result = []
     for transaction in transactions:
+        # Calculate costs for power logs
+        if transaction.power_logs:
+            calculate_power_log_costs(db, transaction.power_logs)
+        
+        # Get resident name
+        resident_name = None
+        card = db.query(Card).filter(Card.rfid == transaction.rfid).first()
+        if card:
+            resident = db.query(Resident).filter(Resident.id == card.resident_id).first()
+            if resident:
+                resident_name = resident.full_name
+        
         result.append({
             "id": transaction.id,
             "station_id": transaction.station_id,
             "rfid": transaction.rfid,
             "created": transaction.created.isoformat() if transaction.created else None,
             "final_energy_kwh": float(transaction.final_energy_kwh) if transaction.final_energy_kwh else 0,
-            "resident_name": transaction.resident_name
+            "resident_name": resident_name,
+            "power_logs": [
+                {
+                    "id": log.id,
+                    "delta_power_cost": float(log.delta_power_cost) if hasattr(log, 'delta_power_cost') and log.delta_power_cost is not None else 0,
+                    "kwh_rate": float(log.kwh_rate) if hasattr(log, 'kwh_rate') and log.kwh_rate is not None else 0
+                }
+                for log in (transaction.power_logs or [])
+            ]
         })
     
     return result 

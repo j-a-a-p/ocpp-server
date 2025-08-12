@@ -7,6 +7,11 @@ export interface ChargeTransaction {
   created: string;
   final_energy_kwh: number;
   resident_name: string;
+  power_logs?: Array<{
+    id: number;
+    delta_power_cost?: number;
+    kwh_rate?: number;
+  }>;
 }
 
 export interface MonthlyData {
@@ -16,6 +21,7 @@ export interface MonthlyData {
   resident_name: string;
   total_energy: number;
   transaction_count: number;
+  total_cost: number;
 }
 
 export interface YearlySummary {
@@ -23,6 +29,7 @@ export interface YearlySummary {
   resident_name: string;
   total_energy: number;
   transaction_count: number;
+  total_cost: number;
 }
 
 export interface ChargeReportData {
