@@ -8,7 +8,7 @@ export interface PowerLog {
   energy_kwh: number;
 }
 
-export const getPowerLogs = async (skip: number = 0, limit: number = 1000): Promise<PowerLog[]> => {
+export const getPowerLogs = async (skip: number = 0, limit: number = 100000): Promise<PowerLog[]> => {
   const response = await fetch(`${API_BASE_URL}/power-logs/?skip=${skip}&limit=${limit}`, {
     credentials: 'include',
   });

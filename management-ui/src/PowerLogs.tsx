@@ -9,6 +9,7 @@ const { Title } = Typography;
 interface AnalyticsData {
   current_year_summary: {
     total_records: number;
+    total_hours: number;
     total_kwh: number;
     max_power_kw: number;
     avg_power_kw: number;
@@ -18,6 +19,7 @@ interface AnalyticsData {
     month: number;
     month_name: string;
     total_records: number;
+    total_hours: number;
     total_kwh: number;
     max_power_kw: number;
     avg_power_kw: number;
@@ -73,7 +75,8 @@ const PowerLogs: React.FC = () => {
     // Calculate current year summary
     const currentYearSummary = {
       total_records: currentYearData.length,
-      total_kwh: currentYearData.reduce((sum, log) => sum + log.energy_kwh, 0),
+      total_hours: calculateTotalHoursByTransaction(currentYearData),
+      total_kwh: calculateTotalEnergyByTransaction(currentYearData),
       max_power_kw: Math.max(...currentYearData.map(log => log.power_kw), 0),
       avg_power_kw: currentYearData.length > 0 
         ? currentYearData.reduce((sum, log) => sum + log.power_kw, 0) / currentYearData.length 
@@ -107,7 +110,8 @@ const PowerLogs: React.FC = () => {
         month,
         month_name: new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long' }),
         total_records: records.length,
-        total_kwh: records.reduce((sum, log) => sum + log.energy_kwh, 0),
+        total_hours: calculateTotalHoursByTransaction(records),
+        total_kwh: calculateTotalEnergyByTransaction(records),
         max_power_kw: Math.max(...records.map(log => log.power_kw), 0),
         avg_power_kw: records.length > 0 
           ? records.reduce((sum, log) => sum + log.power_kw, 0) / records.length 
@@ -117,10 +121,22 @@ const PowerLogs: React.FC = () => {
 
     // Calculate hourly distribution for current year
     const hourlyDistribution = new Array(24).fill(0);
+    
+    // Group current year data by hour and then by transaction
+    const hourlyMap = new Map<number, PowerLog[]>();
     currentYearData.forEach(log => {
       const logDate = new Date(log.created);
       const hour = logDate.getHours();
-      hourlyDistribution[hour] += log.energy_kwh;
+      
+      if (!hourlyMap.has(hour)) {
+        hourlyMap.set(hour, []);
+      }
+      hourlyMap.get(hour)!.push(log);
+    });
+
+    // Calculate energy consumption for each hour
+    hourlyMap.forEach((records, hour) => {
+      hourlyDistribution[hour] = calculateTotalEnergyByTransaction(records);
     });
 
     setAnalytics({
@@ -128,6 +144,95 @@ const PowerLogs: React.FC = () => {
       monthly_data: monthlyData,
       hourly_distribution: hourlyDistribution
     });
+  };
+
+  // Helper function to calculate total hours charged by grouping by ChargeTransaction ID
+  const calculateTotalHoursByTransaction = (records: PowerLog[]): number => {
+    if (records.length === 0) return 0;
+    
+    // Group records by charge_transaction_id
+    const transactionMap = new Map<number, PowerLog[]>();
+    records.forEach(log => {
+      if (!transactionMap.has(log.charge_transaction_id)) {
+        transactionMap.set(log.charge_transaction_id, []);
+      }
+      transactionMap.get(log.charge_transaction_id)!.push(log);
+    });
+    
+    // Calculate hours for each transaction and sum them up
+    let totalHours = 0;
+    transactionMap.forEach((transactionRecords) => {
+      totalHours += calculateTransactionHours(transactionRecords);
+    });
+    
+    return totalHours;
+  };
+
+  // Helper function to calculate hours for a single transaction
+  const calculateTransactionHours = (records: PowerLog[]): number => {
+    if (records.length === 0) return 0;
+    if (records.length === 1) return 0; // Single record, no duration to calculate
+    
+    // Sort records by creation time
+    const sortedRecords = [...records].sort((a, b) => 
+      new Date(a.created).getTime() - new Date(b.created).getTime()
+    );
+    
+    // Calculate duration between first and last record
+    const firstRecord = sortedRecords[0];
+    const lastRecord = sortedRecords[sortedRecords.length - 1];
+    
+    const startTime = new Date(firstRecord.created).getTime();
+    const endTime = new Date(lastRecord.created).getTime();
+    
+    // Convert milliseconds to hours
+    const durationHours = (endTime - startTime) / (1000 * 60 * 60);
+    
+    // Return 0 if duration is negative (data inconsistency) or very small
+    return durationHours > 0 ? durationHours : 0;
+  };
+
+  // Helper function to calculate total energy consumption by grouping by ChargeTransaction ID
+  const calculateTotalEnergyByTransaction = (records: PowerLog[]): number => {
+    if (records.length === 0) return 0;
+    
+    // Group records by charge_transaction_id
+    const transactionMap = new Map<number, PowerLog[]>();
+    records.forEach(log => {
+      if (!transactionMap.has(log.charge_transaction_id)) {
+        transactionMap.set(log.charge_transaction_id, []);
+      }
+      transactionMap.get(log.charge_transaction_id)!.push(log);
+    });
+    
+    // Calculate energy for each transaction and sum them up
+    let totalEnergy = 0;
+    transactionMap.forEach((transactionRecords) => {
+      totalEnergy += calculateTotalEnergy(transactionRecords);
+    });
+    
+    return totalEnergy;
+  };
+
+  // Helper function to calculate total energy consumption from time series data
+  const calculateTotalEnergy = (records: PowerLog[]): number => {
+    if (records.length === 0) return 0;
+    if (records.length === 1) return 0; // Single record, no delta to calculate
+    
+    // Sort records by creation time
+    const sortedRecords = [...records].sort((a, b) => 
+      new Date(a.created).getTime() - new Date(b.created).getTime()
+    );
+    
+    // Calculate delta between first and last record
+    const firstRecord = sortedRecords[0];
+    const lastRecord = sortedRecords[sortedRecords.length - 1];
+    
+    // Energy consumption is the difference between final and initial energy values
+    const delta = lastRecord.energy_kwh - firstRecord.energy_kwh;
+    
+    // Return 0 if delta is negative (data inconsistency) or very small
+    return delta > 0 ? delta : 0;
   };
 
   const formatKWh = (value: number | string) => `${Number(value).toFixed(1)} kWh`;
@@ -150,6 +255,7 @@ const PowerLogs: React.FC = () => {
         fill: '#FFFFFF',
         opacity: 0.6,
       },
+      formatter: (v: number | string) => `${Number(v).toFixed(1)} kWh`,
     },
     xAxis: {
       label: {
@@ -159,7 +265,7 @@ const PowerLogs: React.FC = () => {
     },
     yAxis: {
       label: {
-        formatter: (v: string) => `${v} kWh`,
+        formatter: (v: string) => `${Number(v).toFixed(1)} kWh`,
       },
     },
     meta: {
@@ -186,26 +292,26 @@ const PowerLogs: React.FC = () => {
   return (
     <div>
       <Title level={2}>PowerLog Analytics</Title>
+      <Title level={3} style={{ marginTop: 24, marginBottom: 16 }}>Current Year ({new Date().getFullYear()})</Title>
       
       {/* Current Year Summary */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={6}>
           <Card>
             <Statistic
-              title="Total Records (Current Year)"
-              value={analytics.current_year_summary.total_records}
+              title="Total Hours Charged"
+              value={analytics.current_year_summary.total_hours}
               prefix={<ClockCircleOutlined />}
-              suffix="hours"
+              formatter={(value: number | string) => `${Number(value).toFixed(1)}h`}
             />
           </Card>
         </Col>
         <Col span={6}>
           <Card>
             <Statistic
-              title="Total Energy (Current Year)"
+              title="Total Energy"
               value={analytics.current_year_summary.total_kwh}
               prefix={<ThunderboltOutlined />}
-              suffix="kWh"
               formatter={formatKWh}
             />
           </Card>
@@ -213,10 +319,9 @@ const PowerLogs: React.FC = () => {
         <Col span={6}>
           <Card>
             <Statistic
-              title="Max Power (Current Year)"
+              title="Max Power"
               value={analytics.current_year_summary.max_power_kw}
               prefix={<FireOutlined />}
-              suffix="kW"
               formatter={formatKW}
             />
           </Card>
@@ -224,10 +329,9 @@ const PowerLogs: React.FC = () => {
         <Col span={6}>
           <Card>
             <Statistic
-              title="Average Power (Current Year)"
+              title="Average Power"
               value={analytics.current_year_summary.avg_power_kw}
               prefix={<FireOutlined />}
-              suffix="kW"
               formatter={formatKW}
             />
           </Card>
@@ -235,7 +339,7 @@ const PowerLogs: React.FC = () => {
       </Row>
 
       {/* Hourly Distribution Chart */}
-      <Card title="Hourly Energy Distribution (Current Year)" style={{ marginBottom: 24 }}>
+      <Card title="Hourly Energy Distribution" style={{ marginBottom: 24 }}>
         <div style={{ height: 300 }}>
           <Column {...chartConfig} />
         </div>
@@ -252,17 +356,16 @@ const PowerLogs: React.FC = () => {
               hoverable
             >
               <Statistic
-                title="Hours"
-                value={monthData.total_records}
+                title="Hours Charged"
+                value={monthData.total_hours}
                 prefix={<ClockCircleOutlined />}
-                suffix="h"
+                formatter={(value: number | string) => `${Number(value).toFixed(1)}h`}
                 style={{ marginBottom: 8 }}
               />
               <Statistic
                 title="Energy"
                 value={monthData.total_kwh}
                 prefix={<ThunderboltOutlined />}
-                suffix="kWh"
                 formatter={formatKWh}
                 style={{ marginBottom: 8 }}
               />
@@ -270,7 +373,6 @@ const PowerLogs: React.FC = () => {
                 title="Max Power"
                 value={monthData.max_power_kw}
                 prefix={<FireOutlined />}
-                suffix="kW"
                 formatter={formatKW}
               />
             </Card>
