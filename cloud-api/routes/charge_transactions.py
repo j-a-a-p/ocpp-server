@@ -6,6 +6,7 @@ from models import ChargeTransaction, Card, Resident, ResidentStatus
 from dependencies import get_db_dependency
 from security import verify_api_key
 from invite import verify_auth_token
+from crud import calculate_power_log_costs
 
 router = APIRouter(prefix="/charge-transactions", tags=["charge-transactions"])
 
@@ -65,6 +66,11 @@ def get_transactions_by_resident(
         .all()
     )
     
+    # Calculate costs for power logs
+    for transaction in transactions:
+        if transaction.power_logs:
+            calculate_power_log_costs(db, transaction.power_logs)
+    
     return transactions
 
 @router.get("/my-transactions", response_model=List[ChargeTransactionResponse])
@@ -112,8 +118,11 @@ def get_my_transactions(
         .all()
     )
     
-    # Add card names to the response
+    # Calculate costs for power logs and add card names
     for transaction in transactions:
+        if transaction.power_logs:
+            calculate_power_log_costs(db, transaction.power_logs)
+        
         card = db.query(Card).filter(Card.rfid == transaction.rfid).first()
         if card:
             transaction.card_name = card.name

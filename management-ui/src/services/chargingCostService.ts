@@ -38,6 +38,9 @@ export const chargingCostService = {
   },
 
   async createChargingCost(cost: ChargingCostCreate): Promise<ChargingCost> {
+    console.log('Service sending data:', cost);
+    console.log('JSON stringified:', JSON.stringify(cost));
+    
     const response = await fetch(`${API_BASE_URL}/charging-costs/`, {
       method: 'POST',
       headers: {

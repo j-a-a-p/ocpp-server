@@ -6,6 +6,8 @@ export interface PowerLog {
   power_kw: number;
   energy_kwh: number;
   created: string;
+  delta_power_cost?: number;
+  kwh_rate?: number;
 }
 
 export interface ChargeTransaction {

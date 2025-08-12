@@ -122,7 +122,14 @@ const Settings: React.FC = () => {
             label="kWh Price (€)" 
             rules={[
               { required: true, message: "Please enter kWh price" },
-              { type: 'number', min: 0.0001, message: "Price must be positive" }
+              {
+                validator: (_, value) => {
+                  if (value && value > 0) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error('Price must be positive'));
+                }
+              }
             ]}
           >
             <Input type="number" step="0.0001" placeholder="0.2500" />
@@ -141,7 +148,7 @@ const Settings: React.FC = () => {
             />
           </Form.Item>
           <div style={{ color: '#666', fontSize: '12px', marginTop: '-8px', marginBottom: '16px' }}>
-            Note: Start date cannot be earlier than the previous charging cost record (if any).
+            Note: Start date cannot be earlier than the last known end date (if any).
           </div>
         </Form>
       </Modal>

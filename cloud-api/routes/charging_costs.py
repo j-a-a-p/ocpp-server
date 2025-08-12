@@ -66,22 +66,21 @@ def create_new_charging_cost(
         if charging_cost.kwh_price <= 0:
             raise HTTPException(status_code=400, detail="kWh price must be positive")
         
-        # Get the most recent charging cost to validate start_date
         from datetime import date
-        existing_costs = get_charging_costs(db, limit=1)
+        existing_costs = get_charging_costs(db, limit=100)  # Get more costs to find the last end_date
         if existing_costs:
-            most_recent_cost = existing_costs[0]
-            # If the most recent cost has an end_date, use that as the minimum start_date
-            # If it doesn't have an end_date (is active), use its created date
-            if most_recent_cost.end_date:
-                min_start_date = most_recent_cost.end_date
-            else:
-                min_start_date = most_recent_cost.created.date()
+            # Find the last known end_date (not the most recent record)
+            last_known_end_date = None
+            for cost in existing_costs:
+                if cost.end_date:
+                    if last_known_end_date is None or cost.end_date > last_known_end_date:
+                        last_known_end_date = cost.end_date
             
-            if charging_cost.start_date < min_start_date:
+            # Only validate if we found a last known end_date
+            if last_known_end_date and charging_cost.start_date < last_known_end_date:
                 raise HTTPException(
                     status_code=400, 
-                    detail=f"Start date cannot be earlier than {min_start_date.strftime('%Y-%m-%d')}"
+                    detail=f"Start date cannot be earlier than the last known end date ({last_known_end_date.strftime('%Y-%m-%d')})"
                 )
         
         new_cost = create_charging_cost(db, charging_cost.kwh_price, charging_cost.start_date)

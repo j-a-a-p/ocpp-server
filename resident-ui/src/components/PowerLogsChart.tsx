@@ -33,6 +33,8 @@ const PowerLogsChart: React.FC<PowerLogsChartProps> = ({ powerLogs, transactionI
     }),
     energy: log.energy_kwh,
     power: log.power_kw,
+    cost: log.delta_power_cost || 0,
+    rate: log.kwh_rate || 0,
     timestamp: new Date(log.created).getTime(),
   }));
 
@@ -75,11 +77,21 @@ const PowerLogsChart: React.FC<PowerLogsChartProps> = ({ powerLogs, transactionI
     tooltip: {
       showCrosshairs: true,
       shared: true,
-      formatter: (datum: { energy: number }) => {
-        return {
-          name: 'Energy',
-          value: `${datum.energy.toFixed(2)} kWh`,
-        };
+      formatter: (datum: { energy: number; cost: number; rate: number }) => {
+        return [
+          {
+            name: 'Energy',
+            value: `${datum.energy.toFixed(2)} kWh`,
+          },
+          {
+            name: 'Cost',
+            value: `€${datum.cost.toFixed(2)}`,
+          },
+          {
+            name: 'Rate',
+            value: `€${datum.rate.toFixed(4)}/kWh`,
+          },
+        ];
       },
       title: (datum: { time: string }) => `Time: ${datum.time}`,
     },
@@ -104,7 +116,8 @@ const PowerLogsChart: React.FC<PowerLogsChartProps> = ({ powerLogs, transactionI
         <Text type="secondary">
           Total Energy: {sortedPowerLogs[sortedPowerLogs.length - 1]?.energy_kwh.toFixed(2)} kWh | 
           Max Power: {Math.max(...sortedPowerLogs.map(log => log.power_kw)).toFixed(2)} kW | 
-          Duration: {sortedPowerLogs.length > 1 ? Math.round((new Date(sortedPowerLogs[sortedPowerLogs.length - 1]?.created).getTime() - new Date(sortedPowerLogs[0]?.created).getTime()) / (1000 * 60)) : 0} min
+          Duration: {sortedPowerLogs.length > 1 ? Math.round((new Date(sortedPowerLogs[sortedPowerLogs.length - 1]?.created).getTime() - new Date(sortedPowerLogs[0]?.created).getTime()) / (1000 * 60)) : 0} min | 
+          Total Cost: €{sortedPowerLogs.reduce((sum, log) => sum + (log.delta_power_cost || 0), 0).toFixed(2)}
         </Text>
       </div>
     </Card>

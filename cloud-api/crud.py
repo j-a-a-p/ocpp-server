@@ -100,3 +100,38 @@ def create_charging_cost(db: Session, kwh_price: float, start_date: date) -> Cha
 def get_charging_cost_by_id(db: Session, cost_id: int) -> ChargingCost:
     """Get a specific charging cost by ID"""
     return db.query(ChargingCost).filter(ChargingCost.id == cost_id).first()
+
+def get_active_charging_cost_at_date(db: Session, target_date: datetime) -> ChargingCost:
+    """Get the active charging cost at a specific date"""
+    from models import ChargingCost
+    return db.query(ChargingCost).filter(
+        (ChargingCost.end_date.is_(None)) | (ChargingCost.end_date > target_date.date())
+    ).filter(ChargingCost.created <= target_date).order_by(ChargingCost.created.desc()).first()
+
+def calculate_power_log_costs(db: Session, power_logs: list) -> list:
+    """Calculate costs for power logs based on active charging cost at the time"""
+    from models import PowerLog
+    
+    if not power_logs:
+        return power_logs
+    
+    # Get all unique dates from power logs to batch fetch charging costs
+    dates = set()
+    for log in power_logs:
+        dates.add(log.created.date())
+    
+    # Get charging costs for all relevant dates
+    charging_costs = {}
+    for date in dates:
+        cost = get_active_charging_cost_at_date(db, datetime.combine(date, datetime.min.time()))
+        if cost:
+            charging_costs[date] = cost.kwh_price
+    
+    # Calculate costs for each power log
+    for log in power_logs:
+        log_date = log.created.date()
+        kwh_rate = charging_costs.get(log_date, 0.0)
+        log.kwh_rate = float(kwh_rate)
+        log.delta_power_cost = float(log.energy_kwh * kwh_rate) if log.energy_kwh and kwh_rate else 0.0
+    
+    return power_logs

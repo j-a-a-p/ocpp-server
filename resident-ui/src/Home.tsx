@@ -240,6 +240,25 @@ const Home: React.FC = () => {
       ),
     },
     {
+      title: 'Cost (€)',
+      key: 'total_cost',
+      render: (_: unknown, record: ChargeTransaction) => {
+        if (!record.power_logs || record.power_logs.length === 0) {
+          return <Text type="secondary">N/A</Text>;
+        }
+        
+        const totalCost = record.power_logs.reduce((sum, log) => {
+          return sum + (log.delta_power_cost || 0);
+        }, 0);
+        
+        return (
+          <Text type={totalCost > 0 ? 'success' : 'secondary'}>
+            {totalCost > 0 ? `€${totalCost.toFixed(2)}` : 'N/A'}
+          </Text>
+        );
+      },
+    },
+    {
       title: 'Card Name',
       dataIndex: 'card_name',
       key: 'card_name',
@@ -539,6 +558,49 @@ const Home: React.FC = () => {
             </Card>
             </div>
 
+            {/* Charges Summary Card */}
+            <Card
+              style={{ marginBottom: "16px" }}
+              bodyStyle={{ padding: "12px 16px" }}
+            >
+              <div style={{ 
+                display: "flex", 
+                justifyContent: "space-between", 
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "16px"
+              }}>
+                <div>
+                  <Text type="secondary">Total Transactions</Text>
+                  <br />
+                  <Text strong style={{ fontSize: "18px" }}>
+                    {chargeTransactions.length}
+                  </Text>
+                </div>
+                <div>
+                  <Text type="secondary">Total Energy</Text>
+                  <br />
+                  <Text strong style={{ fontSize: "18px" }}>
+                    {chargeTransactions.reduce((sum, t) => sum + (t.final_energy_kwh || 0), 0).toFixed(1)} kWh
+                  </Text>
+                </div>
+                <div>
+                  <Text type="secondary">Total Cost</Text>
+                  <br />
+                  <Text strong style={{ fontSize: "18px", color: "#52c41a" }}>
+                    €{chargeTransactions.reduce((sum, transaction) => {
+                      if (transaction.power_logs) {
+                        return sum + transaction.power_logs.reduce((logSum, log) => {
+                          return logSum + (log.delta_power_cost || 0);
+                        }, 0);
+                      }
+                      return sum;
+                    }, 0).toFixed(2)}
+                  </Text>
+                </div>
+              </div>
+            </Card>
+
             {/* Charges Card - Full Width */}
             <Card
               title={
@@ -548,6 +610,20 @@ const Home: React.FC = () => {
                 </Space>
               }
               style={{ marginBottom: "24px" }}
+              extra={
+                <div style={{ textAlign: 'right' }}>
+                  <Text strong>Total Cost: €{
+                    chargeTransactions.reduce((sum, transaction) => {
+                      if (transaction.power_logs) {
+                        return sum + transaction.power_logs.reduce((logSum, log) => {
+                          return logSum + (log.delta_power_cost || 0);
+                        }, 0);
+                      }
+                      return sum;
+                    }, 0).toFixed(2)
+                  }</Text>
+                </div>
+              }
             >
               <Table
                 dataSource={chargeTransactions}

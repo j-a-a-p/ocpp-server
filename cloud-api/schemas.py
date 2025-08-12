@@ -46,6 +46,8 @@ class PowerLogResponse(PowerLogBase):
     id: int
     charge_transaction_id: int
     created: datetime
+    delta_power_cost: Optional[float] = None
+    kwh_rate: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -78,5 +80,5 @@ class ChargingCostResponse(BaseModel):
         from_attributes = True
 
 class ChargingCostCreate(BaseModel):
-    kwh_price: float = Field(..., gt=0, description="kWh price must be positive")
+    kwh_price: float
     start_date: date
