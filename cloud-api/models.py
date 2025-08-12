@@ -28,6 +28,7 @@ class Card(Base):
 
     #TODO at some point you want to add a tenant id to this key
     rfid = Column(String, primary_key=True, index=True)  # Using RFID as primary key
+    name = Column(String, nullable=False)  # Card name for display
     resident_id = Column(Integer, ForeignKey("residents.id", ondelete="RESTRICT"))
     
     resident = relationship("Resident", back_populates="cards")

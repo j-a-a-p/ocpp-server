@@ -1,17 +1,15 @@
 import { useState, useEffect } from "react";
-import { Layout, Menu, message, List, Button, Table, Card, Space, Typography } from "antd";
-import { HomeOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, LineChartOutlined } from "@ant-design/icons";
+import { Layout, Menu, message, List, Button, Table, Card, Space, Typography, Input } from "antd";
+import { HomeOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, LineChartOutlined, EditOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
 import { getCurrentResidentTransactions, getAllCurrentResidentTransactions, calculateMonthlyEnergyStats, ChargeTransaction, MonthlyEnergyStats } from "./services/chargeTransactionService";
+import { getMyCards, addCard, updateCardName, Card as CardType } from "./services/cardService";
 import PowerLogsChart from "./components/PowerLogsChart";
 
 const { Content } = Layout;
 const { Text } = Typography;
 
-interface Card {
-  rfid: string;
-  resident_id: number;
-}
+// Remove the old Card interface as we're now using CardType from the service
 
 interface MeterValues {
   timestamp: string;
@@ -33,7 +31,7 @@ interface MeterValues {
 
 const Home: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>("home");
-  const [myCards, setMyCards] = useState<Card[]>([]);
+  const [myCards, setMyCards] = useState<CardType[]>([]);
   const [refusedCards, setRefusedCards] = useState<Array<{station_id: string; timestamp: string}>>([]);
   const [chargeTransactions, setChargeTransactions] = useState<ChargeTransaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] = useState(false);
@@ -52,22 +50,17 @@ const Home: React.FC = () => {
   const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
   const [isResidentCharging, setIsResidentCharging] = useState(false);
   const [myCardsLoaded, setMyCardsLoaded] = useState(false);
+  const [editingCard, setEditingCard] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState<string>("");
 
-  const fetchMyCards = () => {
-    fetch(`${API_BASE_URL}/cards/my_cards`, {
-      credentials: 'include', // Include cookies for authentication
-    })
-      .then(response => {
-        if (response.ok) {
-          return response.json();
-        }
-        throw new Error('Failed to fetch cards');
-      })
-      .then(data => {
-        setMyCards(data.cards);
-        setMyCardsLoaded(true);
-      })
-      .catch(error => console.error("Error fetching my cards:", error));
+  const fetchMyCards = async () => {
+    try {
+      const cards = await getMyCards();
+      setMyCards(cards);
+      setMyCardsLoaded(true);
+    } catch (error) {
+      console.error("Error fetching my cards:", error);
+    }
   };
 
   const fetchRefusedCards = () => {
@@ -172,33 +165,44 @@ const Home: React.FC = () => {
     return () => clearInterval(interval);
   }, []); // No dependencies needed since we fetch transactions inside fetchMeterValues
 
-  const handleAddCard = (stationId: string) => {
-    fetch(`${API_BASE_URL}/cards/add_card/${stationId}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    })
-      .then(response => {
-        if (!response.ok) {
-          throw new Error("Failed to add card");
-        }
-        return response.json();
-      })
-      .then(() => {
-        message.success("Card added successfully");
-        // Refresh both lists after successful addition
-        fetchMyCards();
-        fetchRefusedCards();
-      })
-      .catch(error => {
-        console.error("Error adding card:", error);
-        message.error("Failed to add card");
-      });
+  const handleAddCard = async (stationId: string) => {
+    try {
+      await addCard(stationId);
+      message.success("Card added successfully");
+      // Refresh both lists after successful addition
+      fetchMyCards();
+      fetchRefusedCards();
+    } catch (error) {
+      console.error("Error adding card:", error);
+      message.error("Failed to add card");
+    }
   };
 
   const handleTableChange = (pagination: { current?: number; pageSize?: number }) => {
     fetchChargeTransactions(pagination.current || 1, pagination.pageSize || 10);
+  };
+
+  const handleEditCardName = (card: CardType) => {
+    setEditingCard(card.rfid);
+    setEditingName(card.name);
+  };
+
+  const handleSaveCardName = async (rfid: string) => {
+    try {
+      await updateCardName(rfid, editingName);
+      message.success("Card name updated successfully");
+      setEditingCard(null);
+      setEditingName("");
+      fetchMyCards(); // Refresh the cards list
+    } catch (error) {
+      console.error("Error updating card name:", error);
+      message.error("Failed to update card name");
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCard(null);
+    setEditingName("");
   };
 
   const transactionColumns = [
@@ -249,11 +253,11 @@ const Home: React.FC = () => {
       render: (stationId: string) => <Text strong>{stationId}</Text>,
     },
     {
-      title: 'RFID',
-      dataIndex: 'rfid',
-      key: 'rfid',
-      render: (rfid: string) => (
-        <Text code style={{ fontSize: '12px' }}>{rfid}</Text>
+      title: 'Card Name',
+      dataIndex: 'card_name',
+      key: 'card_name',
+      render: (cardName: string, record: ChargeTransaction) => (
+        <Text strong>{cardName || record.rfid}</Text>
       ),
     },
     {
@@ -613,17 +617,57 @@ const Home: React.FC = () => {
                   dataSource={myCards}
                   columns={[
                     {
+                      title: 'Card Name',
+                      dataIndex: 'name',
+                      key: 'name',
+                      render: (name: string, record: CardType) => {
+                        if (editingCard === record.rfid) {
+                          return (
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              <Input
+                                value={editingName}
+                                onChange={(e) => setEditingName(e.target.value)}
+                                size="small"
+                                style={{ flex: 1 }}
+                                onPressEnter={() => handleSaveCardName(record.rfid)}
+                              />
+                              <Button
+                                type="primary"
+                                size="small"
+                                onClick={() => handleSaveCardName(record.rfid)}
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                size="small"
+                                onClick={handleCancelEdit}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                            <span>{name}</span>
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<EditOutlined />}
+                              onClick={() => handleEditCardName(record)}
+                              style={{ padding: '4px' }}
+                            />
+                          </div>
+                        );
+                      },
+                    },
+                    {
                       title: 'RFID',
                       dataIndex: 'rfid',
                       key: 'rfid',
                       render: (rfid: string) => (
-                        <span style={{ fontFamily: 'monospace' }}>{rfid}</span>
+                        <Text code style={{ fontSize: '12px' }}>{rfid}</Text>
                       ),
-                    },
-                    {
-                      title: 'Resident ID',
-                      dataIndex: 'resident_id',
-                      key: 'resident_id',
                     },
                   ]}
                   pagination={false}

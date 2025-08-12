@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Cookie, HTTPException, Security
 from sqlalchemy.orm import Session
-from schemas import CardResponse, CardBase
+from schemas import CardResponse, CardBase, CardUpdate
 from models import Card, RefusedCard
-from crud import get_cards, create_card, log_refused_card
+from crud import get_cards, create_card, log_refused_card, update_card_name
 from dependencies import get_db_dependency
 from security import verify_api_key
 from invite import verify_auth_token
@@ -80,7 +80,7 @@ def add_card(station_id: str, db: Session = get_db_dependency(), auth_token: str
     if not latest_refused_card_by_station:
         raise HTTPException(status_code=404, detail="No recent refused card found")
 
-    new_card = Card(rfid=latest_refused_card_by_station.rfid, resident_id=resident_id)
+    new_card = Card(rfid=latest_refused_card_by_station.rfid, name=latest_refused_card_by_station.rfid, resident_id=resident_id)
     db.add(new_card)
     
     # Delete the refused card after successfully adding it to the cards table
@@ -135,3 +135,29 @@ def list_refused_cards(
         raise HTTPException(status_code=404, detail="No refused cards found")
     
     return {"refused_cards": refused_cards}
+
+@router.put("/{rfid}/name", response_model=CardResponse)
+def update_card_name_endpoint(
+    rfid: str,
+    card_update: CardUpdate,
+    db: Session = get_db_dependency(),
+    auth_token: str = Cookie(None)
+):
+    """Update the name of a card. Only the card owner can update it."""
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Unauthorized: Missing auth token")
+    
+    resident_id = verify_auth_token(auth_token)
+    if not resident_id:
+        raise HTTPException(status_code=401, detail="Unauthorized: wrong credentials")
+    
+    # Check if the card exists and belongs to the authenticated resident
+    card = db.query(Card).filter(Card.rfid == rfid, Card.resident_id == resident_id).first()
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found or access denied")
+    
+    updated_card = update_card_name(db, rfid, card_update.name)
+    if not updated_card:
+        raise HTTPException(status_code=404, detail="Card not found")
+    
+    return updated_card

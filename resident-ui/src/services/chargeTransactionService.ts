@@ -12,6 +12,7 @@ export interface ChargeTransaction {
   id: number;
   station_id: string;
   rfid: string;
+  card_name?: string;
   created: string;
   final_energy_kwh: number | null;
   power_logs: PowerLog[];

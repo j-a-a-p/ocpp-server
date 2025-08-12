@@ -45,7 +45,7 @@ def get_cards(db: Session, skip: int = 0, limit: int = 100):
     return db.query(Card).offset(skip).limit(limit).all()
 
 def create_card(db: Session, card: CardBase):
-    db_card = Card(rfid=card.rfid, resident_id=card.resident_id)
+    db_card = Card(rfid=card.rfid, name=card.name, resident_id=card.resident_id)
     db.add(db_card)
     db.commit()
     db.refresh(db_card)
@@ -55,3 +55,13 @@ def log_refused_card(db: Session, rfid: str, station_id: str):
     refused_card = RefusedCard(rfid=rfid, station_id=station_id)
     db.add(refused_card)
     db.commit()
+
+def update_card_name(db: Session, rfid: str, name: str):
+    card = db.query(Card).filter(Card.rfid == rfid).first()
+    if not card:
+        return None
+    
+    card.name = name
+    db.commit()
+    db.refresh(card)
+    return card

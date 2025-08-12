@@ -112,6 +112,12 @@ def get_my_transactions(
         .all()
     )
     
+    # Add card names to the response
+    for transaction in transactions:
+        card = db.query(Card).filter(Card.rfid == transaction.rfid).first()
+        if card:
+            transaction.card_name = card.name
+    
     return transactions 
 
 

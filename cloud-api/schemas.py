@@ -17,11 +17,15 @@ class ResidentResponse(ResidentBase):
 
 class CardBase(BaseModel):
     rfid: str
+    name: str
     resident_id: int
 
 class CardResponse(CardBase):
     class Config:
         from_attributes = True
+
+class CardUpdate(BaseModel):
+    name: str
 
 class RefusedCardBase(BaseModel):
     rfid: str
@@ -55,6 +59,7 @@ class ChargeTransactionResponse(ChargeTransactionBase):
     created: datetime
     final_energy_kwh: Optional[float] = None
     power_logs: List[PowerLogResponse] = []
+    card_name: Optional[str] = None
 
     class Config:
         from_attributes = True
