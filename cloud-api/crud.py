@@ -132,13 +132,13 @@ def calculate_power_log_costs(db: Session, power_logs: list) -> list:
     for date in dates:
         cost = get_active_charging_cost_at_date(db, datetime.combine(date, datetime.min.time()))
         if cost:
-            charging_costs[date] = cost.kwh_price
+            charging_costs[date] = float(cost.kwh_price)
     
     # Calculate costs for each power log
     for log in power_logs:
         log_date = log.created.date()
         kwh_rate = charging_costs.get(log_date, 0.0)
         log.kwh_rate = float(kwh_rate)
-        log.delta_power_cost = float(log.energy_kwh * kwh_rate) if log.energy_kwh and kwh_rate else 0.0
+        log.delta_power_cost = float(log.energy_kwh * float(kwh_rate)) if log.energy_kwh and kwh_rate else 0.0
     
     return power_logs
