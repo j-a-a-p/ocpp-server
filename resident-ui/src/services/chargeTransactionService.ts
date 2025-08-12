@@ -32,6 +32,7 @@ export interface MonthlyEnergyStats {
   year: number;
   totalEnergy: number;
   transactionCount: number;
+  totalCost: number;
 }
 
 export const getCurrentResidentTransactions = async (
@@ -105,13 +106,22 @@ export const calculateMonthlyEnergyStats = (transactions: ChargeTransaction[]): 
           month: monthNames[date.getMonth()],
           year: date.getFullYear(),
           totalEnergy: 0,
-          transactionCount: 0
+          transactionCount: 0,
+          totalCost: 0
         });
       }
       
       const stats = monthlyStats.get(monthKey)!;
       stats.totalEnergy += transaction.final_energy_kwh;
       stats.transactionCount += 1;
+      
+      // Calculate total cost for this transaction
+      if (transaction.power_logs) {
+        const transactionCost = transaction.power_logs.reduce((sum, log) => {
+          return sum + (log.delta_power_cost || 0);
+        }, 0);
+        stats.totalCost += transactionCost;
+      }
     }
   });
 

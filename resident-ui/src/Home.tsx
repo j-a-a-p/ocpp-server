@@ -347,8 +347,8 @@ const Home: React.FC = () => {
                     </Space>
                   }
                   style={{ 
-                    flex: "1 1 0",
-                    minWidth: "300px"
+                    flex: "0 0 auto",
+                    width: "280px"
                   }}
                 >
                   {stationStatus === 'available' && (
@@ -513,7 +513,7 @@ const Home: React.FC = () => {
                 }
                 style={{ 
                   flex: "1 1 0",
-                  minWidth: "300px"
+                  minWidth: "400px"
                 }}
               >
               <Table
@@ -543,6 +543,16 @@ const Home: React.FC = () => {
                     key: 'transactionCount',
                     render: (count: number) => (
                       <Text>{count}</Text>
+                    ),
+                  },
+                  {
+                    title: 'Cost (€)',
+                    dataIndex: 'totalCost',
+                    key: 'totalCost',
+                    render: (cost: number) => (
+                      <Text type="success" strong>
+                        €{cost.toFixed(2)}
+                      </Text>
                     ),
                   },
                 ]}
