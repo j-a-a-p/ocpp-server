@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime, date
 from typing import Optional, List
 
@@ -78,5 +78,5 @@ class ChargingCostResponse(BaseModel):
         from_attributes = True
 
 class ChargingCostCreate(BaseModel):
-    kwh_price: float
+    kwh_price: float = Field(..., gt=0, description="kWh price must be positive")
     start_date: date

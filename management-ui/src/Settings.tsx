@@ -37,11 +37,16 @@ const Settings: React.FC = () => {
     try {
       const values = await form.validateFields();
       
+      console.log("Form values:", values);
+      console.log("kwh_price type:", typeof values.kwh_price);
+      console.log("kwh_price value:", values.kwh_price);
+      
       const newCost: ChargingCostCreate = {
         kwh_price: parseFloat(values.kwh_price),
         start_date: values.start_date.format('YYYY-MM-DD'),
       };
 
+      console.log("Sending to API:", newCost);
       await chargingCostService.createChargingCost(newCost);
       message.success("Charging cost added successfully!");
       setIsModalOpen(false);

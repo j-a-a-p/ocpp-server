@@ -61,7 +61,8 @@ def create_new_charging_cost(
         raise HTTPException(status_code=401, detail="Invalid auth token")
     
     try:
-        # Validate kwh_price is positive
+        logger.info(f"Received charging cost data: kwh_price={charging_cost.kwh_price} (type: {type(charging_cost.kwh_price)}), start_date={charging_cost.start_date}")
+        
         if charging_cost.kwh_price <= 0:
             raise HTTPException(status_code=400, detail="kWh price must be positive")
         

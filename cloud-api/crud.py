@@ -77,11 +77,15 @@ def get_active_charging_cost(db: Session) -> ChargingCost:
 
 def create_charging_cost(db: Session, kwh_price: float, start_date: date) -> ChargingCost:
     """Create a new charging cost and deactivate the current one"""
-    # Calculate end_date for current active cost (start_date - 1 day)
-    end_date_for_current = start_date - date.resolution
+    # Check if there's an active cost to deactivate
+    active_cost = ChargingCost.get_active_cost(db)
     
-    # Deactivate current active cost
-    ChargingCost.deactivate_current_cost(db, end_date_for_current)
+    if active_cost:
+        # Calculate end_date for current active cost (start_date - 1 day)
+        end_date_for_current = start_date - date.resolution
+        
+        # Deactivate current active cost
+        ChargingCost.deactivate_current_cost(db, end_date_for_current)
     
     # Create new charging cost
     new_cost = ChargingCost(
