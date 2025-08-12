@@ -72,20 +72,24 @@ class MeterValuesManager:
                     power_kw = power_kw if power_kw is not None else 0.0
                     energy_kwh = energy_kwh if energy_kwh is not None else 0.0
                     
-                    PowerLogService.create_power_log(
-                        charge_transaction_id=transaction_id,
-                        power_kw=power_kw,
-                        energy_kwh=energy_kwh
-                    )
-                    
-                    # Update the transaction's final_energy_kwh with the latest energy value
-                    if energy_kwh is not None and energy_kwh > 0:
-                        PowerLogService.update_transaction_final_energy(
-                            transaction_id=transaction_id,
-                            final_energy_kwh=energy_kwh
+                    # Skip creating power log if energy drops to zero (end of charging)
+                    if energy_kwh == 0.0:
+                        logging.debug(f"Skipping PowerLog creation for transaction {transaction_id}: energy dropped to zero (end of charging)")
+                    else:
+                        PowerLogService.create_power_log(
+                            charge_transaction_id=transaction_id,
+                            power_kw=power_kw,
+                            energy_kwh=energy_kwh
                         )
-                    
-                    logging.info(f"Created PowerLog record for transaction {transaction_id}: power_kw={power_kw}, energy_kwh={energy_kwh}")
+                        
+                        # Update the transaction's final_energy_kwh with the latest energy value
+                        if energy_kwh is not None and energy_kwh > 0:
+                            PowerLogService.update_transaction_final_energy(
+                                transaction_id=transaction_id,
+                                final_energy_kwh=energy_kwh
+                            )
+                        
+                        logging.info(f"Created PowerLog record for transaction {transaction_id}: power_kw={power_kw}, energy_kwh={energy_kwh}")
                 except Exception as e:
                     logging.error(f"Failed to create PowerLog record for transaction {transaction_id}: {e}")
 
