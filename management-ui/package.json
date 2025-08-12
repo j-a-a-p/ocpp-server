@@ -22,6 +22,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",
+    "@types/d3": "^7.4.3",
+    "@types/eslint": "^9.6.1",
+    "@types/estree": "^1.0.8",
+    "@types/geojson": "^7946.0.16",
+    "@types/history": "^4.7.11",
+    "@types/node": "^24.2.1",
+    "@types/stylis": "^4.2.7",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.19.0",
     "eslint-plugin-react-hooks": "^5.0.0",
