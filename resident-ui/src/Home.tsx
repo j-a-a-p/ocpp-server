@@ -214,6 +214,46 @@ const Home: React.FC = () => {
       render: (id: number) => <Text code>{id}</Text>,
     },
     {
+      title: 'Date',
+      dataIndex: 'created',
+      key: 'created',
+      render: (created: string) => (
+        <Text>{new Date(created).toLocaleDateString()}</Text>
+      ),
+    },
+    {
+      title: 'Time',
+      dataIndex: 'created',
+      key: 'created_time',
+      render: (created: string) => (
+        <Text>{new Date(created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+      ),
+    },
+    {
+      title: 'Energy (kWh)',
+      dataIndex: 'final_energy_kwh',
+      key: 'final_energy_kwh',
+      render: (energy: number | null) => (
+        <Text type={energy ? 'success' : 'secondary'}>
+          {energy ? `${energy.toFixed(1)} kWh` : 'N/A'}
+        </Text>
+      ),
+    },
+    {
+      title: 'Card Name',
+      dataIndex: 'card_name',
+      key: 'card_name',
+      render: (cardName: string, record: ChargeTransaction) => (
+        <Text strong>{cardName || record.rfid}</Text>
+      ),
+    },
+    {
+      title: 'Station',
+      dataIndex: 'station_id',
+      key: 'station_id',
+      render: (stationId: string) => <Text strong>{stationId}</Text>,
+    },
+    {
       title: 'Power Logs',
       key: 'chart',
       width: 80,
@@ -245,46 +285,6 @@ const Home: React.FC = () => {
           />
         );
       },
-    },
-    {
-      title: 'Station',
-      dataIndex: 'station_id',
-      key: 'station_id',
-      render: (stationId: string) => <Text strong>{stationId}</Text>,
-    },
-    {
-      title: 'Card Name',
-      dataIndex: 'card_name',
-      key: 'card_name',
-      render: (cardName: string, record: ChargeTransaction) => (
-        <Text strong>{cardName || record.rfid}</Text>
-      ),
-    },
-    {
-      title: 'Date',
-      dataIndex: 'created',
-      key: 'created',
-      render: (created: string) => (
-        <Text>{new Date(created).toLocaleDateString()}</Text>
-      ),
-    },
-    {
-      title: 'Time',
-      dataIndex: 'created',
-      key: 'created_time',
-      render: (created: string) => (
-        <Text>{new Date(created).toLocaleTimeString()}</Text>
-      ),
-    },
-    {
-      title: 'Energy (kWh)',
-      dataIndex: 'final_energy_kwh',
-      key: 'final_energy_kwh',
-      render: (energy: number | null) => (
-        <Text type={energy ? 'success' : 'secondary'}>
-          {energy ? `${energy.toFixed(1)} kWh` : 'N/A'}
-        </Text>
-      ),
     },
   ];
 
