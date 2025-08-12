@@ -213,7 +213,7 @@ const Home: React.FC = () => {
       title: 'Power Logs',
       key: 'chart',
       width: 80,
-      render: (_: any, record: ChargeTransaction) => {
+      render: (_: unknown, record: ChargeTransaction) => {
         const hasPowerLogs = record.power_logs && record.power_logs.length > 1;
         const isExpanded = expandedRowKeys.includes(record.id);
         

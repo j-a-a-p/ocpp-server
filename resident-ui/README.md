@@ -5,7 +5,7 @@ A React-based web application for residents to manage their EV charging sessions
 ## Features
 
 - **Real-time Station Status**: View current charging station availability and status
-- **Charging History**: View all your charging transactions with detailed information
+- **Charging History**: View all your charging transactions with detailed information including ID, date/time, energy consumption, station, and RFID
 - **Power Logs Visualization**: Expandable line charts showing energy consumption over time for each charging session
 - **Monthly Energy Statistics**: Track your monthly energy consumption patterns
 - **RFID Card Management**: View and manage your registered RFID cards
