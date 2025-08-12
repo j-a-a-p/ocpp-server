@@ -1,6 +1,29 @@
-# React + TypeScript + Vite
+# Resident UI - EV Charger Management
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A React-based web application for residents to manage their EV charging sessions and view their charging history.
+
+## Features
+
+- **Real-time Station Status**: View current charging station availability and status
+- **Charging History**: View all your charging transactions with detailed information
+- **Power Logs Visualization**: Expandable line charts showing energy consumption over time for each charging session
+- **Monthly Energy Statistics**: Track your monthly energy consumption patterns
+- **RFID Card Management**: View and manage your registered RFID cards
+
+## Power Logs Charts
+
+The Charges table now includes expandable rows that show detailed power logs for each charging session. When a transaction has sufficient power logs data (at least 2 data points), you can:
+
+- Click the chart icon or the expand arrow to expand/collapse the power logs visualization
+- View a line chart showing energy accumulation over time
+- See key metrics including total energy, maximum power, and charging duration
+- Hover over the chart for detailed tooltips
+
+**Note**: Only transactions with 2 or more power log entries will show expand functionality. Transactions with insufficient data will not display any expand options.
+
+## Development
+
+This project uses React + TypeScript + Vite with Ant Design for the UI components and @ant-design/charts for data visualization.
 
 Currently, two official plugins are available:
 

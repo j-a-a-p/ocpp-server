@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { Layout, Menu, message, List, Button, Table, Card, Space, Typography } from "antd";
-import { HomeOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined } from "@ant-design/icons";
+import { HomeOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, LineChartOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
 import { getCurrentResidentTransactions, getAllCurrentResidentTransactions, calculateMonthlyEnergyStats, ChargeTransaction, MonthlyEnergyStats } from "./services/chargeTransactionService";
+import PowerLogsChart from "./components/PowerLogsChart";
 
 const { Content } = Layout;
 const { Text } = Typography;
@@ -41,6 +42,9 @@ const Home: React.FC = () => {
   const [totalTransactions, setTotalTransactions] = useState(0);
   const [monthlyStats, setMonthlyStats] = useState<MonthlyEnergyStats[]>([]);
   const [monthlyStatsLoading, setMonthlyStatsLoading] = useState(false);
+  
+  // State for expanded rows in the charges table
+  const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
   
   // New state for station status
   const [meterValues, setMeterValues] = useState<MeterValues | null>(null);
@@ -204,6 +208,39 @@ const Home: React.FC = () => {
       key: 'id',
       width: 80,
       render: (id: number) => <Text code>{id}</Text>,
+    },
+    {
+      title: 'Power Logs',
+      key: 'chart',
+      width: 80,
+      render: (_: any, record: ChargeTransaction) => {
+        const hasPowerLogs = record.power_logs && record.power_logs.length > 1;
+        const isExpanded = expandedRowKeys.includes(record.id);
+        
+        if (!hasPowerLogs) {
+          return null; // Don't show anything if less than 2 power logs
+        }
+        
+        return (
+          <Button
+            type="text"
+            size="small"
+            icon={<LineChartOutlined />}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isExpanded) {
+                setExpandedRowKeys(expandedRowKeys.filter(key => key !== record.id));
+              } else {
+                setExpandedRowKeys([...expandedRowKeys, record.id]);
+              }
+            }}
+            style={{ 
+              color: isExpanded ? '#1890ff' : '#666',
+              padding: '4px 8px'
+            }}
+          />
+        );
+      },
     },
     {
       title: 'Station',
@@ -513,6 +550,25 @@ const Home: React.FC = () => {
                 columns={transactionColumns}
                 rowKey="id"
                 loading={transactionsLoading}
+                expandable={{
+                  expandedRowKeys: expandedRowKeys,
+                  onExpand: (expanded, record) => {
+                    if (expanded) {
+                      setExpandedRowKeys([...expandedRowKeys, record.id]);
+                    } else {
+                      setExpandedRowKeys(expandedRowKeys.filter(key => key !== record.id));
+                    }
+                  },
+                  expandedRowRender: (record: ChargeTransaction) => {
+                    if (!record.power_logs || record.power_logs.length < 2) {
+                      return null;
+                    }
+                    return <PowerLogsChart powerLogs={record.power_logs} transactionId={record.id} />;
+                  },
+                  rowExpandable: (record: ChargeTransaction) => {
+                    return record.power_logs && record.power_logs.length > 1;
+                  },
+                }}
                 pagination={{
                   current: currentPage,
                   pageSize: pageSize,
@@ -529,7 +585,7 @@ const Home: React.FC = () => {
                 locale={{ 
                   emptyText: 'No charge transactions found'
                 }}
-scroll={{ x: 'max-content' }}
+                scroll={{ x: 'max-content' }}
               />
             </Card>
 
