@@ -1,8 +1,14 @@
--- Add name column to cards table
-ALTER TABLE cards ADD COLUMN name TEXT;
+-- Create new cards table with name column
+CREATE TABLE cards_new (
+    rfid TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    resident_id INTEGER,
+    FOREIGN KEY (resident_id) REFERENCES residents (id) ON DELETE RESTRICT
+);
 
--- Update existing records to use RFID as name
-UPDATE cards SET name = rfid WHERE name IS NULL;
+-- Copy existing data, using rfid as name for existing records
+INSERT INTO cards_new (rfid, name, resident_id)
+SELECT rfid, rfid, resident_id FROM cards;
 
--- Make name column not null
-ALTER TABLE cards ALTER COLUMN name SET NOT NULL;
+DROP TABLE cards;
+ALTER TABLE cards_new RENAME TO cards;
