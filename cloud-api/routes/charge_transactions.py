@@ -183,6 +183,7 @@ def get_all_charge_transactions(
             "power_logs": [
                 {
                     "id": log.id,
+                    "energy_kwh": float(log.energy_kwh) if log.energy_kwh is not None else 0,
                     "delta_power_cost": float(log.delta_power_cost) if hasattr(log, 'delta_power_cost') and log.delta_power_cost is not None else 0,
                     "kwh_rate": float(log.kwh_rate) if hasattr(log, 'kwh_rate') and log.kwh_rate is not None else 0
                 }

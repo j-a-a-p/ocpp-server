@@ -3,6 +3,7 @@ from models import Resident, ResidentStatus, Card, RefusedCard, ChargingCost
 from schemas import ResidentBase, CardBase
 from datetime import datetime, date
 from typing import List
+import logging
 
 def get_residents(db: Session, skip: int = 0, limit: int = 100):
     # Only return non-deleted residents
@@ -151,7 +152,13 @@ def calculate_power_log_costs(db: Session, power_logs: list) -> list:
             # Subsequent logs: delta energy is the difference from previous log
             delta_energy = log.energy_kwh - sorted_logs[i-1].energy_kwh
         
-        # Calculate the delta cost for this specific power log entry
-        log.delta_power_cost = float(delta_energy * float(kwh_rate)) if delta_energy and kwh_rate else 0.0
+        # Check for negative energy increase (data anomaly)
+        if delta_energy < 0:
+            # Set delta_power_cost to 0 for negative energy increases
+            log.delta_power_cost = 0.0
+            logger.warning(f"Negative energy increase detected in power log {log.id}: delta_energy={delta_energy:.4f} kWh, current_energy={log.energy_kwh:.4f} kWh, previous_energy={sorted_logs[i-1].energy_kwh:.4f} kWh")
+        else:
+            # Calculate the delta cost for this specific power log entry
+            log.delta_power_cost = float(delta_energy * float(kwh_rate)) if delta_energy and kwh_rate else 0.0
     
     return power_logs
