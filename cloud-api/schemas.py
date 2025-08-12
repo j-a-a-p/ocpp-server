@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List
 
 class ResidentBase(BaseModel):
@@ -63,3 +63,20 @@ class ChargeTransactionResponse(ChargeTransactionBase):
 
     class Config:
         from_attributes = True
+
+class ChargingCostBase(BaseModel):
+    kwh_price: float
+    start_date: date
+
+class ChargingCostResponse(BaseModel):
+    id: int
+    kwh_price: float
+    end_date: Optional[date] = None
+    created: datetime
+
+    class Config:
+        from_attributes = True
+
+class ChargingCostCreate(BaseModel):
+    kwh_price: float
+    start_date: date

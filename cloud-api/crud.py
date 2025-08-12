@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
-from models import Resident, ResidentStatus, Card, RefusedCard
+from models import Resident, ResidentStatus, Card, RefusedCard, ChargingCost
 from schemas import ResidentBase, CardBase
-from datetime import datetime
+from datetime import datetime, date
+from typing import List
 
 def get_residents(db: Session, skip: int = 0, limit: int = 100):
     # Only return non-deleted residents
@@ -65,3 +66,33 @@ def update_card_name(db: Session, rfid: str, name: str):
     db.commit()
     db.refresh(card)
     return card
+
+def get_charging_costs(db: Session, skip: int = 0, limit: int = 100) -> List[ChargingCost]:
+    """Get all charging costs ordered by creation date (newest first)"""
+    return db.query(ChargingCost).order_by(ChargingCost.created.desc()).offset(skip).limit(limit).all()
+
+def get_active_charging_cost(db: Session) -> ChargingCost:
+    """Get the currently active charging cost"""
+    return ChargingCost.get_active_cost(db)
+
+def create_charging_cost(db: Session, kwh_price: float, start_date: date) -> ChargingCost:
+    """Create a new charging cost and deactivate the current one"""
+    # Calculate end_date for current active cost (start_date - 1 day)
+    end_date_for_current = start_date - date.resolution
+    
+    # Deactivate current active cost
+    ChargingCost.deactivate_current_cost(db, end_date_for_current)
+    
+    # Create new charging cost
+    new_cost = ChargingCost(
+        kwh_price=kwh_price,
+        end_date=None  # This will be the new active cost
+    )
+    db.add(new_cost)
+    db.commit()
+    db.refresh(new_cost)
+    return new_cost
+
+def get_charging_cost_by_id(db: Session, cost_id: int) -> ChargingCost:
+    """Get a specific charging cost by ID"""
+    return db.query(ChargingCost).filter(ChargingCost.id == cost_id).first()

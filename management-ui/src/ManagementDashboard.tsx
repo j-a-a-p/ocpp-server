@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Layout, Menu, Table, Button, Modal, Form, Input, message } from "antd";
-import { UserOutlined, HomeOutlined, ThunderboltOutlined, BarChartOutlined } from "@ant-design/icons";
+import { UserOutlined, HomeOutlined, ThunderboltOutlined, BarChartOutlined, SettingOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
 import Charges from "./Charges";
 import PowerLogs from "./PowerLogs";
+import Settings from "./Settings";
 
 const { Header, Content, Sider } = Layout;
 
@@ -108,7 +109,8 @@ const ManagementDashboard: React.FC = () => {
             { key: "home", icon: <HomeOutlined />, label: "Home" }, 
             { key: "residents", icon: <UserOutlined />, label: "Residents" },
             { key: "charges", icon: <ThunderboltOutlined />, label: "Charges" },
-            { key: "powerlogs", icon: <BarChartOutlined />, label: "PowerLogs" }
+            { key: "powerlogs", icon: <BarChartOutlined />, label: "PowerLogs" },
+            { key: "settings", icon: <SettingOutlined />, label: "Settings" }
           ]}
         />
       </Sider>
@@ -134,6 +136,7 @@ const ManagementDashboard: React.FC = () => {
           )}
           {selectedMenu === "charges" && <Charges />}
           {selectedMenu === "powerlogs" && <PowerLogs />}
+          {selectedMenu === "settings" && <Settings />}
         </Content>
       </Layout>
     </Layout>

@@ -1,8 +1,8 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Float, Date, Numeric
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
-from datetime import datetime
+from datetime import datetime, date
 import enum
 
 class ResidentStatus(enum.Enum):
@@ -64,3 +64,29 @@ class RefusedCard(Base):
     rfid = Column(String, nullable=False)
     station_id = Column(String, nullable=False)
     created = Column(DateTime(timezone=True), server_default=func.now())
+
+class ChargingCost(Base):
+    __tablename__ = "charging_costs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    kwh_price = Column(Numeric(10, 4), nullable=False)
+    end_date = Column(Date, nullable=True)
+    created = Column(DateTime(timezone=True), server_default=func.now())
+
+    @classmethod
+    def get_active_cost(cls, db_session):
+        """Get the currently active charging cost (no end_date or future end_date)"""
+        today = date.today()
+        return db_session.query(cls).filter(
+            (cls.end_date.is_(None)) | (cls.end_date > today)
+        ).first()
+
+    @classmethod
+    def deactivate_current_cost(cls, db_session, end_date):
+        """Deactivate the current active cost by setting its end_date"""
+        active_cost = cls.get_active_cost(db_session)
+        if active_cost:
+            active_cost.end_date = end_date
+            db_session.commit()
+            return active_cost
+        return None
