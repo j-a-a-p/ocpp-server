@@ -104,13 +104,20 @@ def get_charging_cost_by_id(db: Session, cost_id: int) -> ChargingCost:
 def get_active_charging_cost_at_date(db: Session, target_date: datetime) -> ChargingCost:
     """Get the active charging cost at a specific date"""
     from models import ChargingCost
+    target_date_only = target_date.date()
+    
+    # Find the charging cost that was active at the target date
+    # This means either it has no end_date (still active) or its end_date is after the target date
     return db.query(ChargingCost).filter(
-        (ChargingCost.end_date.is_(None)) | (ChargingCost.end_date > target_date.date())
-    ).filter(ChargingCost.created <= target_date).order_by(ChargingCost.created.desc()).first()
+        (ChargingCost.end_date.is_(None)) | (ChargingCost.end_date > target_date_only)
+    ).order_by(ChargingCost.created.desc()).first()
 
 def calculate_power_log_costs(db: Session, power_logs: list) -> list:
     """Calculate costs for power logs based on active charging cost at the time"""
     from models import PowerLog
+    import logging
+    
+    logger = logging.getLogger(__name__)
     
     if not power_logs:
         return power_logs
