@@ -4,6 +4,7 @@ import { HomeOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutl
 import { API_BASE_URL } from "./config";
 import { getCurrentResidentTransactions, getAllCurrentResidentTransactions, calculateMonthlyEnergyStats, ChargeTransaction, MonthlyEnergyStats } from "./services/chargeTransactionService";
 import { getMyCards, addCard, updateCardName, Card as CardType } from "./services/cardService";
+import { chargingCostService, ChargingCost } from "./services/chargingCostService";
 import PowerLogsChart from "./components/PowerLogsChart";
 
 const { Content } = Layout;
@@ -52,6 +53,7 @@ const Home: React.FC = () => {
   const [myCardsLoaded, setMyCardsLoaded] = useState(false);
   const [editingCard, setEditingCard] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>("");
+  const [activeChargingCost, setActiveChargingCost] = useState<ChargingCost | null>(null);
 
   const fetchMyCards = async () => {
     try {
@@ -60,6 +62,15 @@ const Home: React.FC = () => {
       setMyCardsLoaded(true);
     } catch (error) {
       console.error("Error fetching my cards:", error);
+    }
+  };
+
+  const fetchActiveChargingCost = async () => {
+    try {
+      const cost = await chargingCostService.getActiveChargingCost();
+      setActiveChargingCost(cost);
+    } catch (error) {
+      console.error("Error fetching active charging cost:", error);
     }
   };
 
@@ -154,6 +165,7 @@ const Home: React.FC = () => {
     fetchChargeTransactions();
     fetchMonthlyStats();
     fetchMeterValues(); // Fetch meter values on mount
+    fetchActiveChargingCost();
   }, []);
 
   // Set up interval to fetch meter values every 10 seconds
@@ -374,6 +386,13 @@ const Home: React.FC = () => {
                         }}>
                           Available
                         </h1>
+                        {activeChargingCost && (
+                          <div style={{ marginBottom: '8px' }}>
+                            <Text strong style={{ fontSize: '16px', color: '#1890ff' }}>
+                              Current Rate: €{activeChargingCost.kwh_price.toFixed(2)}/kWh
+                            </Text>
+                          </div>
+                        )}
                         {lastUpdateTime && (
                           <Text type="secondary" style={{ fontSize: '12px', display: 'block' }}>
                             Last updated: {lastUpdateTime.toLocaleTimeString()}
@@ -409,6 +428,13 @@ const Home: React.FC = () => {
                         <Text type="success" strong style={{ display: 'block', marginBottom: '8px' }}>
                           You are charging now.
                         </Text>
+                        {activeChargingCost && (
+                          <div style={{ marginBottom: '8px' }}>
+                            <Text strong style={{ fontSize: '14px', color: '#1890ff' }}>
+                              Current Rate: €{activeChargingCost.kwh_price.toFixed(2)}/kWh
+                            </Text>
+                          </div>
+                        )}
                         {lastUpdateTime && (
                           <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
                             Last updated: {lastUpdateTime.toLocaleTimeString()}
@@ -503,6 +529,8 @@ const Home: React.FC = () => {
                   )}
                 </Card>
               )}
+              
+
               
               {/* Monthly Energy Statistics Card */}
               <Card
