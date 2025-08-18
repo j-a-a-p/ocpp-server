@@ -117,22 +117,8 @@ def login_resident(token: str, response: Response, db: Session = get_db_dependen
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.get("/validate")
-def validate_token(auth_token: str = Cookie(None), db: Session = get_db_dependency()):
+def validate_token(resident: Resident = Depends(get_authenticated_active_resident)):
     """Validate the auth token and return resident info."""
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
-    
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    
-    resident = db.query(Resident).filter(Resident.id == resident_id).first()
-    if not resident:
-        raise HTTPException(status_code=404, detail="Resident not found")
-    
-    if resident.status != ResidentStatus.ACTIVE:
-        raise HTTPException(status_code=401, detail="Account is not active")
-    
     return {
         "resident_id": resident.id,
         "email": resident.email,

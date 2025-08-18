@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException, Response, Cookie
+from fastapi import APIRouter, HTTPException, Response, Cookie, Depends
 from sqlalchemy.orm import Session
 from schemas import ResidentResponse, ResidentBase
 from crud import get_residents, get_resident, update_resident, create_invited_resident
-from dependencies import get_db_dependency
+from dependencies import get_db_dependency, get_authenticated_active_resident
 from invite import generate_invitation_token, send_invitation_email, generate_auth_token, verify_auth_token
 from datetime import datetime
 from models import Resident, ResidentStatus
@@ -19,32 +19,17 @@ def read_residents(
     skip: int = 0, 
     limit: int = 100, 
     db: Session = get_db_dependency(),
-    auth_token: str = Cookie(None)
+    _: Resident = Depends(get_authenticated_active_resident)
 ):
     """Get all residents. Requires cookie-based authentication for management access."""
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
-    
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    
     return get_residents(db, skip=skip, limit=limit)
 
 @router.get("/{resident_id}", response_model=ResidentResponse)
 def read_resident(
     resident_id: int, 
     db: Session = get_db_dependency(),
-    auth_token: str = Cookie(None)
+    _: Resident = Depends(get_authenticated_active_resident)
 ):
-    """Get a specific resident. Requires cookie-based authentication for management access."""
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
-    
-    resident_id_from_token = verify_auth_token(auth_token)
-    if not resident_id_from_token:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    
     resident = get_resident(db, resident_id)
     if not resident:
         raise HTTPException(status_code=404, detail="Resident not found")
@@ -54,91 +39,68 @@ def read_resident(
 def create_new_resident(
     resident: ResidentBase, 
     db: Session = get_db_dependency(),
-    auth_token: str = Cookie(None)
+    _: Resident = Depends(get_authenticated_active_resident)
 ):
     """Create a new resident. Requires cookie-based authentication for management access."""
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
+    # Check if resident with this email already exists
+    existing_resident = db.query(Resident).filter(Resident.email == resident.email).first()
+    if existing_resident:
+        raise HTTPException(status_code=400, detail="Resident with this email already exists")
     
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
+    # Generate invitation token
+    invite_token, expires_at = generate_invitation_token()
     
+    # Create invited resident
+    new_resident = create_invited_resident(db, resident, invite_token, expires_at)
+    
+    # Send invitation email
     try:
-        invite_token, expires_at = generate_invitation_token()
-        new_resident = create_invited_resident(db, resident, invite_token, expires_at)
-
-        if not new_resident:
-            raise HTTPException(status_code=400, detail="Failed to create resident")
-        
-        # Try to send invitation email
-        try:
-            send_invitation_email(new_resident.email, invite_token)
-            logger.info(f"Resident created and invitation sent to {new_resident.email}")
-        except Exception as e:
-            logger.error(f"Failed to send invitation email to {new_resident.email}: {str(e)}")
-            # Still return the resident but with a warning
-            raise HTTPException(
-                status_code=201, 
-                detail=f"Resident created but invitation email failed to send: {str(e)}"
-            )
-        
-        return new_resident
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
+        send_invitation_email(resident.email, invite_token)
+        logger.info(f"Invitation email sent to {resident.email}")
     except Exception as e:
-        logger.error(f"Error creating resident: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        logger.error(f"Failed to send invitation email to {resident.email}: {str(e)}")
+        # Don't fail the request if email fails, just log it
+        # In production, you might want to handle this differently
+    
+    return new_resident
 
 @router.post("/{resident_id}/send-invitation", response_model=ResidentResponse)
 def send_invitation(
     resident_id: int, 
     db: Session = get_db_dependency(),
-    auth_token: str = Cookie(None)
+    _: Resident = Depends(get_authenticated_active_resident)
 ):
-    """Send invitation to a resident. Requires cookie-based authentication for management access."""
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
+    """Send invitation email to a resident. Requires cookie-based authentication for management access."""
+    # Get the resident
+    resident = get_resident(db, resident_id)
+    if not resident:
+        raise HTTPException(status_code=404, detail="Resident not found")
     
-    resident_id_from_token = verify_auth_token(auth_token)
-    if not resident_id_from_token:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
+    # Check if resident already has an active invitation
+    if resident.invite_token and resident.invite_expires_at and resident.invite_expires_at > datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Resident already has an active invitation")
     
+    # Generate new invitation token
+    invite_token, expires_at = generate_invitation_token()
+    
+    # Update resident with new invitation token
+    resident = update_resident(db, resident_id, {
+        "invite_token": invite_token,
+        "invite_expires_at": expires_at
+    })
+    
+    # Send invitation email
     try:
-        resident = get_resident(db, resident_id)
-        if not resident:
-            raise HTTPException(status_code=404, detail="Resident not found")
-        
-        if resident.status == "active":
-            raise HTTPException(status_code=400, detail="Resident is already active")
-        
-        invite_token, expires_at = generate_invitation_token()
-        resident = update_resident(db, resident_id, {
-            "invite_token": invite_token,
-            "invite_expires_at": expires_at
-        })
-
-        # Try to send invitation email
-        try:
-            send_invitation_email(resident.email, invite_token)
-            logger.info(f"Invitation resent to {resident.email}")
-        except Exception as e:
-            logger.error(f"Failed to send invitation email to {resident.email}: {str(e)}")
-            raise HTTPException(
-                status_code=500, 
-                detail=f"Failed to send invitation email: {str(e)}"
-            )
-        
-        return resident
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
+        send_invitation_email(resident.email, invite_token)
+        logger.info(f"Invitation email sent to {resident.email}")
     except Exception as e:
-        logger.error(f"Error sending invitation: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        logger.error(f"Failed to send invitation email to {resident.email}: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to send invitation email. Please try again."
+        )
+    
+    return resident
 
 @router.post("/activate/{token}")
 def activate_resident(token: str, response: Response, db: Session = get_db_dependency()):

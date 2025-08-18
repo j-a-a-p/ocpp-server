@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Cookie, HTTPException, Security
+from fastapi import APIRouter, Cookie, HTTPException, Security, Depends
 from sqlalchemy.orm import Session
 from schemas import CardResponse, CardBase, CardUpdate
-from models import Card, RefusedCard
+from models import Card, RefusedCard, Resident
 from crud import get_cards, create_card, log_refused_card, update_card_name
-from dependencies import get_db_dependency
+from dependencies import get_db_dependency, get_authenticated_active_resident
 from security import verify_api_key
 from invite import verify_auth_token
 
@@ -15,32 +15,18 @@ def read_cards(
     skip: int = 0, 
     limit: int = 100, 
     db: Session = get_db_dependency(),
-    auth_token: str = Cookie(None)
+    _: Resident = Depends(get_authenticated_active_resident)
 ):
     """Get all cards. Requires cookie-based authentication for management access."""
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
-    
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    
     return get_cards(db, skip=skip, limit=limit)
 
 @router.post("/", response_model=CardResponse)
 def create_new_card(
     card: CardBase, 
     db: Session = get_db_dependency(),
-    auth_token: str = Cookie(None)
+    _: Resident = Depends(get_authenticated_active_resident)
 ):
     """Create a new card. Requires cookie-based authentication for management access."""
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
-    
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    
     return create_card(db, card)
 
 @router.get("/authenticate/{rfid}")
@@ -60,16 +46,8 @@ def authenticate_card(
     return {"resident_id": card.resident_id}
 
 @router.post("/add_card/{station_id}", response_model=CardResponse)
-def add_card(station_id: str, db: Session = get_db_dependency(), auth_token: str = Cookie(None)):
+def add_card(station_id: str, db: Session = get_db_dependency(), _: Resident = Depends(get_authenticated_active_resident)):
     """ Finds the latest RefusedCard within 5 minutes and registers a new card for the given resident_id. """
-
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Unauthorized: Missing auth token")
-    
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Unauthorized: wrong credentials")
-
 
     latest_refused_card_by_station = (
         db.query(RefusedCard)
@@ -80,7 +58,7 @@ def add_card(station_id: str, db: Session = get_db_dependency(), auth_token: str
     if not latest_refused_card_by_station:
         raise HTTPException(status_code=404, detail="No recent refused card found")
 
-    new_card = Card(rfid=latest_refused_card_by_station.rfid, name=latest_refused_card_by_station.rfid, resident_id=resident_id)
+    new_card = Card(rfid=latest_refused_card_by_station.rfid, name=latest_refused_card_by_station.rfid, resident_id=_.id)
     db.add(new_card)
     
     # Delete the refused card after successfully adding it to the cards table
@@ -92,18 +70,11 @@ def add_card(station_id: str, db: Session = get_db_dependency(), auth_token: str
     return new_card
 
 @router.get("/my_cards")
-def get_my_cards(db: Session = get_db_dependency(), auth_token: str = Cookie(None)):
+def get_my_cards(db: Session = get_db_dependency(), _: Resident = Depends(get_authenticated_active_resident)):
     """ Returns all cards for the authenticated resident. """
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Unauthorized: Missing auth token")
-    
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Unauthorized: wrong credentials")
-    
     cards = (
         db.query(Card)
-        .filter(Card.resident_id == resident_id)
+        .filter(Card.resident_id == _.id)
         .all()
     )
     
@@ -112,16 +83,9 @@ def get_my_cards(db: Session = get_db_dependency(), auth_token: str = Cookie(Non
 @router.get("/refused")
 def list_refused_cards(
     db: Session = get_db_dependency(), 
-    auth_token: str = Cookie(None)
+    _: Resident = Depends(get_authenticated_active_resident)
 ):
     """ Returns distinct refused cards from the last 5 minutes, ordered by created descending. Requires cookie-based authentication. """
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
-    
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    
     five_minutes_ago = datetime.utcnow() - timedelta(minutes=5)
     refused_cards = (
         db.query(RefusedCard)
@@ -141,18 +105,11 @@ def update_card_name_endpoint(
     rfid: str,
     card_update: CardUpdate,
     db: Session = get_db_dependency(),
-    auth_token: str = Cookie(None)
+    _: Resident = Depends(get_authenticated_active_resident)
 ):
     """Update the name of a card. Only the card owner can update it."""
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Unauthorized: Missing auth token")
-    
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Unauthorized: wrong credentials")
-    
     # Check if the card exists and belongs to the authenticated resident
-    card = db.query(Card).filter(Card.rfid == rfid, Card.resident_id == resident_id).first()
+    card = db.query(Card).filter(Card.rfid == rfid, Card.resident_id == _.id).first()
     if not card:
         raise HTTPException(status_code=404, detail="Card not found or access denied")
     

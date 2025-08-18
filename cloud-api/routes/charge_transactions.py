@@ -1,9 +1,9 @@
-from fastapi import APIRouter, HTTPException, Security, Cookie
+from fastapi import APIRouter, HTTPException, Security, Cookie, Depends
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 from schemas import ChargeTransactionResponse
 from models import ChargeTransaction, Card, Resident, ResidentStatus
-from dependencies import get_db_dependency
+from dependencies import get_db_dependency, get_authenticated_active_resident
 from security import verify_api_key
 from invite import verify_auth_token
 from crud import calculate_power_log_costs
@@ -78,29 +78,14 @@ def get_my_transactions(
     skip: int = 0, 
     limit: int = 100, 
     db: Session = get_db_dependency(),
-    auth_token: str = Cookie(None)
+    _: Resident = Depends(get_authenticated_active_resident)
 ):
     """
     Get charge transactions for the currently authenticated resident.
     Requires cookie-based authentication.
     """
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
-    
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    
-    # Verify the resident exists and is active
-    resident = db.query(Resident).filter(Resident.id == resident_id).first()
-    if not resident:
-        raise HTTPException(status_code=404, detail="Resident not found")
-    
-    if resident.status != ResidentStatus.ACTIVE:
-        raise HTTPException(status_code=401, detail="Account is not active")
-    
     # Get all cards for this resident
-    resident_cards = db.query(Card).filter(Card.resident_id == resident_id).all()
+    resident_cards = db.query(Card).filter(Card.resident_id == _.id).all()
     if not resident_cards:
         return []
     
@@ -129,25 +114,15 @@ def get_my_transactions(
     
     return transactions 
 
-
-
 @router.get("/all")
 def get_all_charge_transactions(
     db: Session = get_db_dependency(),
-    auth_token: str = Cookie(None)
+    _: Resident = Depends(get_authenticated_active_resident)
 ):
     """
     Get all charge transactions with resident information and power logs for cost calculation.
     Requires cookie-based authentication for management access.
     """
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
-    
-    # For management access, we'll accept any valid auth token
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    
     # Get all charge transactions with power logs and resident information
     transactions = (
         db.query(ChargeTransaction)

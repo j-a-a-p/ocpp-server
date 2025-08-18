@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException, Cookie
+from fastapi import APIRouter, HTTPException, Cookie, Depends
 from sqlalchemy.orm import Session
 from schemas import ChargingCostResponse, ChargingCostCreate
 from crud import get_charging_costs, get_active_charging_cost, create_charging_cost
-from dependencies import get_db_dependency
+from dependencies import get_db_dependency, get_authenticated_active_resident
 from invite import verify_auth_token
+from models import Resident
 import logging
 
 # Set up logging
@@ -16,31 +17,17 @@ def read_charging_costs(
     skip: int = 0, 
     limit: int = 100, 
     db: Session = get_db_dependency(),
-    auth_token: str = Cookie(None)
+    _: Resident = Depends(get_authenticated_active_resident)
 ):
     """Get all charging costs. Requires cookie-based authentication for management access."""
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
-    
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    
     return get_charging_costs(db, skip=skip, limit=limit)
 
 @router.get("/active", response_model=ChargingCostResponse)
 def read_active_charging_cost(
     db: Session = get_db_dependency(),
-    auth_token: str = Cookie(None)
+    _: Resident = Depends(get_authenticated_active_resident)
 ):
     """Get the currently active charging cost. Requires cookie-based authentication for management access."""
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
-    
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    
     active_cost = get_active_charging_cost(db)
     if not active_cost:
         raise HTTPException(status_code=404, detail="No active charging cost found")
@@ -50,16 +37,9 @@ def read_active_charging_cost(
 def create_new_charging_cost(
     charging_cost: ChargingCostCreate, 
     db: Session = get_db_dependency(),
-    auth_token: str = Cookie(None)
+    _: Resident = Depends(get_authenticated_active_resident)
 ):
     """Create a new charging cost. Requires cookie-based authentication for management access."""
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
-    
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    
     try:
         logger.info(f"Received charging cost data: kwh_price={charging_cost.kwh_price} (type: {type(charging_cost.kwh_price)}), start_date={charging_cost.start_date}")
         

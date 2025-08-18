@@ -1,4 +1,3 @@
-from sqlalchemy.orm import Session
 from models import ChargeTransaction
 from database import SessionLocal
 

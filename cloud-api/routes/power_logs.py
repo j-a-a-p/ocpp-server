@@ -1,10 +1,10 @@
-from fastapi import APIRouter, HTTPException, Cookie
+from fastapi import APIRouter, HTTPException, Cookie, Depends
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime, timedelta
-from dependencies import get_db_dependency
+from dependencies import get_db_dependency, get_authenticated_active_resident
 from invite import verify_auth_token
-from models import PowerLog
+from models import PowerLog, Resident
 from schemas import PowerLogResponse
 
 router = APIRouter(prefix="/power-logs", tags=["power-logs"])
@@ -14,19 +14,12 @@ def get_power_logs(
     skip: int = 0,
     limit: int = 1000,
     db: Session = get_db_dependency(),
-    auth_token: str = Cookie(None)
+    _: Resident = Depends(get_authenticated_active_resident)
 ):
     """
     Get PowerLog data with pagination.
     Requires cookie-based authentication for management access.
     """
-    if not auth_token:
-        raise HTTPException(status_code=401, detail="Missing auth token")
-    
-    resident_id = verify_auth_token(auth_token)
-    if not resident_id:
-        raise HTTPException(status_code=401, detail="Invalid auth token")
-    
     try:
         power_logs = (
             db.query(PowerLog)

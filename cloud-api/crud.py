@@ -3,7 +3,6 @@ from models import Resident, ResidentStatus, Card, RefusedCard, ChargingCost
 from schemas import ResidentBase, CardBase
 from datetime import datetime, date
 from typing import List
-import logging
 
 def get_residents(db: Session, skip: int = 0, limit: int = 100):
     # Only return non-deleted residents
