@@ -1,13 +1,14 @@
 import logging
 from datetime import datetime
 from ocpp.v16 import ChargePoint as BaseChargePoint
-from ocpp.v16 import call_result
-from ocpp.v16.enums import RegistrationStatus, AuthorizationStatus
+from ocpp.v16 import call_result, call
+from ocpp.v16.enums import RegistrationStatus, AuthorizationStatus, ChargingProfileStatus, ChargingRateUnitType, ChargingProfilePurposeType
 from ocpp.routing import on
 from rfid_manager import RFIDManager
 from meter_values_manager import MeterValuesManager
 from transaction_service import TransactionService
 from refused_card_service import RefusedCardService
+from charging_profile import ChargingProfileManager
 
 class ChargePoint(BaseChargePoint):
     """ Handles communication with the charging station. """
@@ -16,6 +17,7 @@ class ChargePoint(BaseChargePoint):
         super().__init__(id, websocket)
         self.rfid_manager = RFIDManager(rfid_file="rfid_list.csv", auto_reload=False)
         self.meter_values_manager = MeterValuesManager()
+        self.charging_profile_manager = ChargingProfileManager(self)
 
     @on("BootNotification")
     async def on_boot_notification(self, **kwargs):
@@ -74,6 +76,23 @@ class ChargePoint(BaseChargePoint):
         except Exception as e:
             logging.error(f"Failed to store transaction in database: {e}, for card: {id_tag}")
         
+        # Automatically set 16A power limit when charging starts
+        try:
+            logging.info(f"🔌 Setting automatic power limit of 16A for new transaction")
+            power_limit_success = await self.send_power_limit(
+                connector_id, 
+                16.0, 
+                ChargingRateUnitType.amps
+            )
+            
+            if power_limit_success:
+                logging.info(f"✅ Automatic power limit of 16A set successfully for transaction {transaction.id}")
+            else:
+                logging.warning(f"⚠️  Failed to set automatic power limit for transaction {transaction.id}")
+                
+        except Exception as e:
+            logging.error(f"❌ Error setting automatic power limit: {e}")
+        
         return call_result.StartTransaction(
             transaction_id=transaction.id,
             id_tag_info={"status": AuthorizationStatus.accepted}
@@ -106,3 +125,62 @@ class ChargePoint(BaseChargePoint):
         logging.info(f"StatusNotification received: Connector {connector_id}, Status {status}, Error {error_code}, Timestamp {timestamp}")
 
         return call_result.StatusNotification()
+
+    @on("StopTransaction")
+    async def on_stop_transaction(self, transaction_id, id_tag, meter_stop, timestamp, **kwargs):
+        """Handle the StopTransaction event from the charge point."""
+        
+        logging.info(f"StopTransaction received: Transaction {transaction_id}, RFID {id_tag}, Meter stop {meter_stop}")
+
+        return call_result.StopTransaction(
+            id_tag_info={"status": AuthorizationStatus.accepted}
+        )
+
+    async def send_power_limit(self, connector_id: int, power_limit: float, unit: ChargingRateUnitType = ChargingRateUnitType.amps):
+        """
+        Send a power limit to the charging station via OCPP SetChargingProfile.
+        
+        Args:
+            connector_id: The connector ID
+            power_limit: The power limit value
+            unit: The unit (amps or watts)
+        """
+        try:
+            logging.info(f"Sending power limit of {power_limit} {unit.value} to connector {connector_id}")
+            
+            # Create the SetChargingProfile request
+            request = call.SetChargingProfile(
+                connector_id=connector_id,
+                cs_charging_profiles={
+                    "chargingProfile": {
+                        "connectorId": connector_id,
+                        "chargingProfilePurpose": ChargingProfilePurposeType.chargepointmaxprofile,
+                        "stackLevel": 0,
+                        "chargingSchedule": {
+                            "duration": 0,  # No duration limit
+                            "chargingRateUnit": unit,
+                            "chargingSchedulePeriod": [
+                                {
+                                    "startPeriod": 0,
+                                    "limit": power_limit
+                                }
+                            ]
+                        }
+                    }
+                }
+            )
+            
+            # Send the request to the charging station via WebSocket
+            response = await self.call(request)
+            
+            if response.status.value == "Accepted":
+                logging.info(f"✅ Power limit of {power_limit} {unit.value} successfully sent to connector {connector_id}")
+                return True
+            else:
+                logging.error(f"❌ Failed to send power limit: {response.status.value}")
+                return False
+                
+        except Exception as e:
+            logging.error(f"❌ Error sending power limit: {e}")
+            return False
+    
