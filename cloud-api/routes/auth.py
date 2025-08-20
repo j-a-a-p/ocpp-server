@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException, Response, Cookie, Query
+from fastapi import APIRouter, HTTPException, Response, Query, Depends
 from sqlalchemy.orm import Session
-from dependencies import get_db_dependency
+from dependencies import get_db_dependency, get_authenticated_active_resident
 from crud import get_resident_by_email, update_resident
 from invite import generate_invitation_token, send_login_email, generate_auth_token, verify_auth_token
 from datetime import datetime, timedelta
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/request-access")
-def request_access(email: str, flow: str = Query("resident", description="Flow type: resident or management"), db: Session = get_db_dependency()):
+def request_access(email: str, flow: str = Query("resident", description="Flow type: resident or management"), db: Session = Depends(get_db_dependency)):
     """Request access by email - sends login link if resident exists and is active."""
     try:
         # Validate flow parameter
@@ -74,7 +74,7 @@ def request_access(email: str, flow: str = Query("resident", description="Flow t
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/login/{token}")
-def login_resident(token: str, response: Response, db: Session = get_db_dependency()):
+def login_resident(token: str, response: Response, db: Session = Depends(get_db_dependency)):
     """Login resident using login token."""
     try:
         # Find resident by login token

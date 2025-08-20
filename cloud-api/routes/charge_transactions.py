@@ -1,11 +1,11 @@
-from fastapi import APIRouter, HTTPException, Security, Cookie, Depends
+from fastapi import APIRouter, HTTPException, Security, Depends
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 from schemas import ChargeTransactionResponse
-from models import ChargeTransaction, Card, Resident, ResidentStatus
+from models import ChargeTransaction, Card, Resident
 from dependencies import get_db_dependency, get_authenticated_active_resident
 from security import verify_api_key
-from invite import verify_auth_token
+
 from crud import calculate_power_log_costs
 
 router = APIRouter(prefix="/charge-transactions", tags=["charge-transactions"])
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/charge-transactions", tags=["charge-transactions"])
 def get_all_transactions(
     skip: int = 0, 
     limit: int = 100, 
-    db: Session = get_db_dependency(),
+    db: Session = Depends(get_db_dependency),
     _: str = Security(verify_api_key)
 ):
     """
@@ -36,7 +36,7 @@ def get_transactions_by_resident(
     resident_id: int,
     skip: int = 0, 
     limit: int = 100, 
-    db: Session = get_db_dependency(),
+    db: Session = Depends(get_db_dependency),
     _: str = Security(verify_api_key)
 ):
     """
@@ -77,7 +77,7 @@ def get_transactions_by_resident(
 def get_my_transactions(
     skip: int = 0, 
     limit: int = 100, 
-    db: Session = get_db_dependency(),
+    db: Session = Depends(get_db_dependency),
     _: Resident = Depends(get_authenticated_active_resident)
 ):
     """
@@ -116,7 +116,7 @@ def get_my_transactions(
 
 @router.get("/all")
 def get_all_charge_transactions(
-    db: Session = get_db_dependency(),
+    db: Session = Depends(get_db_dependency),
     _: Resident = Depends(get_authenticated_active_resident)
 ):
     """

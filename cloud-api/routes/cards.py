@@ -1,12 +1,11 @@
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Cookie, HTTPException, Security, Depends
+from fastapi import APIRouter, HTTPException, Security, Depends
 from sqlalchemy.orm import Session
 from schemas import CardResponse, CardBase, CardUpdate
 from models import Card, RefusedCard, Resident
 from crud import get_cards, create_card, log_refused_card, update_card_name
 from dependencies import get_db_dependency, get_authenticated_active_resident
 from security import verify_api_key
-from invite import verify_auth_token
 
 router = APIRouter(prefix="/cards", tags=["cards"])
 
@@ -14,7 +13,7 @@ router = APIRouter(prefix="/cards", tags=["cards"])
 def read_cards(
     skip: int = 0, 
     limit: int = 100, 
-    db: Session = get_db_dependency(),
+    db: Session = Depends(get_db_dependency),
     _: Resident = Depends(get_authenticated_active_resident)
 ):
     """Get all cards. Requires cookie-based authentication for management access."""
@@ -23,7 +22,7 @@ def read_cards(
 @router.post("/", response_model=CardResponse)
 def create_new_card(
     card: CardBase, 
-    db: Session = get_db_dependency(),
+    db: Session = Depends(get_db_dependency),
     _: Resident = Depends(get_authenticated_active_resident)
 ):
     """Create a new card. Requires cookie-based authentication for management access."""
@@ -33,7 +32,7 @@ def create_new_card(
 def authenticate_card(
     rfid: str,
     station_id: str,
-    db: Session = get_db_dependency(),
+    db: Session = Depends(get_db_dependency),
     _: str = Security(verify_api_key),
 ):
     """Authenticate a card for station access. Requires API key authentication."""
@@ -46,7 +45,7 @@ def authenticate_card(
     return {"resident_id": card.resident_id}
 
 @router.post("/add_card/{station_id}", response_model=CardResponse)
-def add_card(station_id: str, db: Session = get_db_dependency(), _: Resident = Depends(get_authenticated_active_resident)):
+def add_card(station_id: str, db: Session = Depends(get_db_dependency), _: Resident = Depends(get_authenticated_active_resident)):
     """ Finds the latest RefusedCard within 5 minutes and registers a new card for the given resident_id. """
 
     latest_refused_card_by_station = (
@@ -70,7 +69,7 @@ def add_card(station_id: str, db: Session = get_db_dependency(), _: Resident = D
     return new_card
 
 @router.get("/my_cards")
-def get_my_cards(db: Session = get_db_dependency(), _: Resident = Depends(get_authenticated_active_resident)):
+def get_my_cards(db: Session = Depends(get_db_dependency), _: Resident = Depends(get_authenticated_active_resident)):
     """ Returns all cards for the authenticated resident. """
     cards = (
         db.query(Card)
@@ -82,7 +81,7 @@ def get_my_cards(db: Session = get_db_dependency(), _: Resident = Depends(get_au
 
 @router.get("/refused")
 def list_refused_cards(
-    db: Session = get_db_dependency(), 
+    db: Session = Depends(get_db_dependency), 
     _: Resident = Depends(get_authenticated_active_resident)
 ):
     """ Returns distinct refused cards from the last 5 minutes, ordered by created descending. Requires cookie-based authentication. """
@@ -104,7 +103,7 @@ def list_refused_cards(
 def update_card_name_endpoint(
     rfid: str,
     card_update: CardUpdate,
-    db: Session = get_db_dependency(),
+    db: Session = Depends(get_db_dependency),
     _: Resident = Depends(get_authenticated_active_resident)
 ):
     """Update the name of a card. Only the card owner can update it."""

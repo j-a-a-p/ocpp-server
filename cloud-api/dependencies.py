@@ -4,8 +4,7 @@ from fastapi import Depends, HTTPException, Cookie
 from invite import verify_auth_token
 from models import Resident, ResidentStatus
 
-def get_db_dependency():
-    return get_db()
+get_db_dependency = get_db
 
 def get_authenticated_active_resident(
     db: Session = Depends(get_db_dependency),

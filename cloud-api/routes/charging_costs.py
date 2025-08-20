@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from schemas import ChargingCostResponse, ChargingCostCreate
 from crud import get_charging_costs, get_active_charging_cost, create_charging_cost
 from dependencies import get_db_dependency, get_authenticated_active_resident
-from invite import verify_auth_token
 from models import Resident
 import logging
 
@@ -16,7 +15,7 @@ router = APIRouter(prefix="/charging-costs", tags=["charging-costs"])
 def read_charging_costs(
     skip: int = 0, 
     limit: int = 100, 
-    db: Session = get_db_dependency(),
+    db: Session = Depends(get_db_dependency),
     _: Resident = Depends(get_authenticated_active_resident)
 ):
     """Get all charging costs. Requires cookie-based authentication for management access."""
@@ -24,7 +23,7 @@ def read_charging_costs(
 
 @router.get("/active", response_model=ChargingCostResponse)
 def read_active_charging_cost(
-    db: Session = get_db_dependency(),
+    db: Session = Depends(get_db_dependency),
     _: Resident = Depends(get_authenticated_active_resident)
 ):
     """Get the currently active charging cost. Requires cookie-based authentication for management access."""
@@ -36,7 +35,7 @@ def read_active_charging_cost(
 @router.post("/", response_model=ChargingCostResponse)
 def create_new_charging_cost(
     charging_cost: ChargingCostCreate, 
-    db: Session = get_db_dependency(),
+    db: Session = Depends(get_db_dependency),
     _: Resident = Depends(get_authenticated_active_resident)
 ):
     """Create a new charging cost. Requires cookie-based authentication for management access."""
