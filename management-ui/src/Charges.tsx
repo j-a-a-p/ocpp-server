@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { Table, Card, Row, Col, Statistic, Spin, message } from "antd";
-import { ThunderboltOutlined, TransactionOutlined } from "@ant-design/icons";
+import { Table, Card, Spin, message } from "antd";
 import { getAllChargeTransactions, ChargeTransaction, MonthlyData, YearlySummary } from "./services/chargeTransactionService";
 
 const Charges: React.FC = () => {
@@ -216,66 +215,8 @@ const Charges: React.FC = () => {
     );
   }
 
-  // Calculate totals for summary cards (only valid transactions)
-  const validTransactions = transactions.filter(transaction => transaction.final_energy_kwh > 0);
-  const totalEnergy = validTransactions.reduce((sum, transaction) => sum + transaction.final_energy_kwh, 0);
-  const totalTransactions = validTransactions.length;
-  const totalCost = validTransactions.reduce((sum, transaction) => {
-    const transactionCost = transaction.power_logs?.reduce((logSum, log) => {
-      return logSum + (log.delta_power_cost || 0);
-    }, 0) || 0;
-    return sum + transactionCost;
-  }, 0);
-
   return (
     <div>
-      <h1>Charge Reports</h1>
-      
-      {/* Summary Cards */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="Total Energy"
-              value={totalEnergy}
-              precision={2}
-              suffix="kWh"
-              prefix={<ThunderboltOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="Total Transactions"
-              value={totalTransactions}
-              prefix={<TransactionOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="Total Cost"
-              value={totalCost}
-              precision={2}
-              prefix="€"
-              valueStyle={{ color: '#3f8600' }}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="Average Energy per Transaction"
-              value={totalTransactions > 0 ? totalEnergy / totalTransactions : 0}
-              precision={2}
-              suffix="kWh"
-            />
-          </Card>
-        </Col>
-      </Row>
-
       {/* Yearly Summaries */}
       <Card title="Yearly Summaries" style={{ marginBottom: 24 }}>
         <Table

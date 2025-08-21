@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { Table, Button, Modal, Form, Input, message, DatePicker, Card, Typography } from "antd";
-import { PlusOutlined, SettingOutlined } from "@ant-design/icons";
+import { Table, Button, Modal, Form, Input, message, DatePicker, Card } from "antd";
+import { PlusOutlined } from "@ant-design/icons";
 import { chargingCostService, ChargingCost, ChargingCostCreate } from "./services/chargingCostService";
 import dayjs from "dayjs";
 
-const { Title } = Typography;
+
 
 const Settings: React.FC = () => {
   const [chargingCosts, setChargingCosts] = useState<ChargingCost[]>([]);
@@ -85,10 +85,6 @@ const Settings: React.FC = () => {
 
   return (
     <div>
-      <Title level={2}>
-        <SettingOutlined /> Settings
-      </Title>
-      
       <Card title="Charging Costs" style={{ marginBottom: 16 }}>
         <Button 
           type="primary" 

@@ -291,7 +291,6 @@ const PowerLogs: React.FC = () => {
 
   return (
     <div>
-      <Title level={2}>PowerLog Analytics</Title>
       <Title level={3} style={{ marginTop: 24, marginBottom: 16 }}>Current Year ({new Date().getFullYear()})</Title>
       
       {/* Current Year Summary */}

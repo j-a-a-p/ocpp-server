@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
-import { Layout, Menu, Table, Button, Modal, Form, Input, message } from "antd";
+import { Layout, Menu, Table, Button, Modal, Form, Input, message, Typography } from "antd";
 import { UserOutlined, HomeOutlined, ThunderboltOutlined, BarChartOutlined, SettingOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
 import Charges from "./Charges";
 import PowerLogs from "./PowerLogs";
 import Settings from "./Settings";
+import ChargeSummaryCards from "./components/ChargeSummaryCards";
+
+const { Title } = Typography;
 
 const { Header, Content, Sider } = Layout;
 
@@ -17,6 +20,7 @@ interface Resident {
 
 const ManagementDashboard: React.FC = () => {
   const [selectedMenu, setSelectedMenu] = useState<string>("home");
+  const [pageTitle, setPageTitle] = useState<string>("Management Portal");
   const [residents, setResidents] = useState<Resident[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -25,6 +29,18 @@ const ManagementDashboard: React.FC = () => {
 
   useEffect(() => {
     if (selectedMenu === "residents") fetchResidents();
+  }, [selectedMenu]);
+
+  // Update page title when menu changes
+  useEffect(() => {
+    const titles: { [key: string]: string } = {
+      home: "Management Portal",
+      residents: "Residents",
+      charges: "Charge Reports",
+      powerlogs: "PowerLog Analytics",
+      settings: "Settings"
+    };
+    setPageTitle(titles[selectedMenu] || "Management Portal");
   }, [selectedMenu]);
 
   const fetchResidents = async () => {
@@ -115,9 +131,11 @@ const ManagementDashboard: React.FC = () => {
         />
       </Sider>
       <Layout>
-        <Header style={{ background: "#fff", padding: 0 }} />
+        <Header style={{ background: "#fff", padding: "0 24px", display: "flex", alignItems: "center" }}>
+          <Title level={2} style={{ margin: 0, color: "#1890ff" }}>{pageTitle}</Title>
+        </Header>
         <Content style={{ margin: "16px" }}>
-          {selectedMenu === "home" && <h1>Management Portal</h1>}
+          {selectedMenu === "home" && <ChargeSummaryCards />}
           {selectedMenu === "residents" && (
             <>
               <Button type="primary" onClick={() => showModal()}>Add Resident</Button>
