@@ -6,6 +6,18 @@ import { getAllChargeTransactions, ChargeTransaction } from "../services/chargeT
 const ChargeSummaryCards: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [transactions, setTransactions] = useState<ChargeTransaction[]>([]);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     fetchChargeTransactions();
@@ -54,7 +66,7 @@ const ChargeSummaryCards: React.FC = () => {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '20px' }}>
+      <div style={{ textAlign: 'center', padding: isMobile ? '10px' : '20px' }}>
         <Spin size="large" />
         <p>Loading charge summary...</p>
       </div>
@@ -62,11 +74,11 @@ const ChargeSummaryCards: React.FC = () => {
   }
 
   return (
-    <Row gutter={16} style={{ marginBottom: 24 }}>
-      <Col span={6}>
-        <Card>
+    <Row gutter={isMobile ? 8 : 16} style={{ marginBottom: 24 }}>
+      <Col xs={12} sm={6}>
+        <Card size={isMobile ? "small" : "default"}>
           <Statistic
-            title="Total Energy"
+            title={isMobile ? "Energy" : "Total Energy"}
             value={summaryData.totalEnergy}
             precision={2}
             suffix="kWh"
@@ -74,19 +86,19 @@ const ChargeSummaryCards: React.FC = () => {
           />
         </Card>
       </Col>
-      <Col span={6}>
-        <Card>
+      <Col xs={12} sm={6}>
+        <Card size={isMobile ? "small" : "default"}>
           <Statistic
-            title="Total Transactions"
+            title={isMobile ? "Transactions" : "Total Transactions"}
             value={summaryData.totalTransactions}
             prefix={<TransactionOutlined />}
           />
         </Card>
       </Col>
-      <Col span={6}>
-        <Card>
+      <Col xs={12} sm={6}>
+        <Card size={isMobile ? "small" : "default"}>
           <Statistic
-            title="Total Cost"
+            title={isMobile ? "Cost" : "Total Cost"}
             value={summaryData.totalCost}
             precision={2}
             prefix="€"
@@ -94,10 +106,10 @@ const ChargeSummaryCards: React.FC = () => {
           />
         </Card>
       </Col>
-      <Col span={6}>
-        <Card>
+      <Col xs={12} sm={6}>
+        <Card size={isMobile ? "small" : "default"}>
           <Statistic
-            title="Average Energy per Transaction"
+            title={isMobile ? "Avg Energy" : "Average Energy per Transaction"}
             value={summaryData.averageEnergy}
             precision={2}
             suffix="kWh"

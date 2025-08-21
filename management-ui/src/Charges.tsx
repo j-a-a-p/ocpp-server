@@ -5,6 +5,18 @@ import { getAllChargeTransactions, ChargeTransaction, MonthlyData, YearlySummary
 const Charges: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [transactions, setTransactions] = useState<ChargeTransaction[]>([]);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     fetchChargeTransactions();
@@ -103,9 +115,10 @@ const Charges: React.FC = () => {
       });
 
     const yearly_summaries: YearlySummary[] = Array.from(yearlyGroups.entries())
-      .map(([yearKey, group]) => {
-        const [yearStr, resident_name] = yearKey.split('-', 2);
+      .map(([key, group]) => {
+        const [yearStr, resident_name] = key.split('-', 2);
         const year = parseInt(yearStr);
+        
         return {
           year,
           resident_name,
@@ -129,32 +142,32 @@ const Charges: React.FC = () => {
       dataIndex: "month_display",
       key: "month_display",
       sorter: (a: MonthlyData, b: MonthlyData) => {
-        // Sort by year desc, then month desc, then by resident name
         if (a.year !== b.year) return b.year - a.year;
-        if (a.month !== b.month) return b.month - a.month;
-        return a.resident_name.localeCompare(b.resident_name);
+        return b.month - a.month;
       },
+      defaultSortOrder: 'descend' as const,
     },
     {
       title: "Resident",
       dataIndex: "resident_name",
       key: "resident_name",
+      sorter: (a: MonthlyData, b: MonthlyData) => a.resident_name.localeCompare(b.resident_name),
     },
     {
-      title: "Total Energy (kWh)",
+      title: "Energy (kWh)",
       dataIndex: "total_energy",
       key: "total_energy",
       render: (value: number) => value.toFixed(2),
       sorter: (a: MonthlyData, b: MonthlyData) => a.total_energy - b.total_energy,
     },
     {
-      title: "Transaction Count",
+      title: "Transactions",
       dataIndex: "transaction_count",
       key: "transaction_count",
       sorter: (a: MonthlyData, b: MonthlyData) => a.transaction_count - b.transaction_count,
     },
     {
-      title: "Total Cost (€)",
+      title: "Cost (€)",
       dataIndex: "total_cost",
       key: "total_cost",
       render: (value: number) => `€${value.toFixed(2)}`,
@@ -177,20 +190,20 @@ const Charges: React.FC = () => {
       sorter: (a: YearlySummary, b: YearlySummary) => a.resident_name.localeCompare(b.resident_name),
     },
     {
-      title: "Total Energy (kWh)",
+      title: "Energy (kWh)",
       dataIndex: "total_energy",
       key: "total_energy",
       render: (value: number) => value.toFixed(2),
       sorter: (a: YearlySummary, b: YearlySummary) => a.total_energy - b.total_energy,
     },
     {
-      title: "Transaction Count",
+      title: "Transactions",
       dataIndex: "transaction_count",
       key: "transaction_count",
       sorter: (a: YearlySummary, b: YearlySummary) => a.transaction_count - b.transaction_count,
     },
     {
-      title: "Total Cost (€)",
+      title: "Cost (€)",
       dataIndex: "total_cost",
       key: "total_cost",
       render: (value: number) => `€${value.toFixed(2)}`,
@@ -200,7 +213,7 @@ const Charges: React.FC = () => {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '50px' }}>
+      <div style={{ textAlign: 'center', padding: isMobile ? '20px' : '50px' }}>
         <Spin size="large" />
         <p>Loading charge transactions...</p>
       </div>
@@ -209,7 +222,7 @@ const Charges: React.FC = () => {
 
   if (!transactions.length) {
     return (
-      <div style={{ textAlign: 'center', padding: '50px' }}>
+      <div style={{ textAlign: 'center', padding: isMobile ? '20px' : '50px' }}>
         <p>No charge transactions available.</p>
       </div>
     );
@@ -224,7 +237,8 @@ const Charges: React.FC = () => {
           dataSource={reportData.yearly_summaries}
           rowKey={(record) => `${record.year}-${record.resident_name}`}
           pagination={false}
-          size="small"
+          size={isMobile ? "small" : "middle"}
+          scroll={{ x: isMobile ? 600 : undefined }}
         />
       </Card>
 
@@ -235,11 +249,14 @@ const Charges: React.FC = () => {
           dataSource={reportData.monthly_data}
           rowKey={(record) => `${record.year}-${record.month}-${record.resident_name}`}
           pagination={{
-            pageSize: 20,
-            showSizeChanger: true,
-            showQuickJumper: true,
+            pageSize: isMobile ? 10 : 20,
+            showSizeChanger: !isMobile,
+            showQuickJumper: !isMobile,
             showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
+            size: isMobile ? "small" : "default",
           }}
+          size={isMobile ? "small" : "middle"}
+          scroll={{ x: isMobile ? 600 : undefined }}
         />
       </Card>
     </div>

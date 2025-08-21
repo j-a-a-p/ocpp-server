@@ -31,6 +31,18 @@ const PowerLogs: React.FC = () => {
   const [powerLogs, setPowerLogs] = useState<PowerLog[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     fetchPowerLogs();
@@ -104,158 +116,102 @@ const PowerLogs: React.FC = () => {
       monthlyMap.get(key)!.records.push(log);
     });
 
-    const monthlyData = Array.from(monthlyMap.values())
-      .map(({ year, month, records }) => ({
-        year,
-        month,
-        month_name: new Date(year, month, 1).toLocaleDateString('en-US', { month: 'long' }),
-        total_records: records.length,
-        total_hours: calculateTotalHoursByTransaction(records),
-        total_kwh: calculateTotalEnergyByTransaction(records),
-        max_power_kw: Math.max(...records.map(log => log.power_kw), 0),
-        avg_power_kw: records.length > 0 
-          ? records.reduce((sum, log) => sum + log.power_kw, 0) / records.length 
-          : 0
-      }))
-      .sort((a, b) => b.year - a.year || b.month - a.month);
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
 
-    // Calculate hourly distribution for current year
-    const hourlyDistribution = new Array(24).fill(0);
-    
-    // Group current year data by hour and then by transaction
-    const hourlyMap = new Map<number, PowerLog[]>();
-    currentYearData.forEach(log => {
+    const monthly_data = Array.from(monthlyMap.values())
+      .map(({ year, month, records }) => {
+        const total_hours = calculateTotalHoursByTransaction(records);
+        const total_kwh = calculateTotalEnergyByTransaction(records);
+        const max_power_kw = Math.max(...records.map(log => log.power_kw), 0);
+        const avg_power_kw = records.length > 0 
+          ? records.reduce((sum, log) => sum + log.power_kw, 0) / records.length 
+          : 0;
+
+        return {
+          year,
+          month,
+          month_name: monthNames[month],
+          total_records: records.length,
+          total_hours,
+          total_kwh,
+          max_power_kw,
+          avg_power_kw
+        };
+      })
+      .sort((a, b) => {
+        if (a.year !== b.year) return b.year - a.year;
+        return b.month - a.month;
+      });
+
+    // Calculate hourly distribution (0-23 hours)
+    const hourly_distribution = new Array(24).fill(0);
+    recentData.forEach(log => {
       const logDate = new Date(log.created);
       const hour = logDate.getHours();
-      
-      if (!hourlyMap.has(hour)) {
-        hourlyMap.set(hour, []);
-      }
-      hourlyMap.get(hour)!.push(log);
-    });
-
-    // Calculate energy consumption for each hour
-    hourlyMap.forEach((records, hour) => {
-      hourlyDistribution[hour] = calculateTotalEnergyByTransaction(records);
+      hourly_distribution[hour] += log.power_kw;
     });
 
     setAnalytics({
       current_year_summary: currentYearSummary,
-      monthly_data: monthlyData,
-      hourly_distribution: hourlyDistribution
+      monthly_data,
+      hourly_distribution
     });
   };
 
-  // Helper function to calculate total hours charged by grouping by ChargeTransaction ID
-  const calculateTotalHoursByTransaction = (records: PowerLog[]): number => {
-    if (records.length === 0) return 0;
-    
-    // Group records by charge_transaction_id
+  const calculateTotalHoursByTransaction = (logs: PowerLog[]): number => {
+    // Group logs by charge_transaction_id and calculate duration for each transaction
     const transactionMap = new Map<number, PowerLog[]>();
-    records.forEach(log => {
+    
+    logs.forEach(log => {
       if (!transactionMap.has(log.charge_transaction_id)) {
         transactionMap.set(log.charge_transaction_id, []);
       }
       transactionMap.get(log.charge_transaction_id)!.push(log);
     });
-    
-    // Calculate hours for each transaction and sum them up
+
     let totalHours = 0;
-    transactionMap.forEach((transactionRecords) => {
-      totalHours += calculateTransactionHours(transactionRecords);
+    transactionMap.forEach(transactionLogs => {
+      if (transactionLogs.length > 1) {
+        // Sort by created time
+        transactionLogs.sort((a, b) => new Date(a.created).getTime() - new Date(b.created).getTime());
+        
+        const startTime = new Date(transactionLogs[0].created);
+        const endTime = new Date(transactionLogs[transactionLogs.length - 1].created);
+        
+        const durationMs = endTime.getTime() - startTime.getTime();
+        const durationHours = durationMs / (1000 * 60 * 60);
+        
+        totalHours += durationHours;
+      }
     });
-    
+
     return totalHours;
   };
 
-  // Helper function to calculate hours for a single transaction
-  const calculateTransactionHours = (records: PowerLog[]): number => {
-    if (records.length === 0) return 0;
-    if (records.length === 1) return 0; // Single record, no duration to calculate
-    
-    // Sort records by creation time
-    const sortedRecords = [...records].sort((a, b) => 
-      new Date(a.created).getTime() - new Date(b.created).getTime()
-    );
-    
-    // Calculate duration between first and last record
-    const firstRecord = sortedRecords[0];
-    const lastRecord = sortedRecords[sortedRecords.length - 1];
-    
-    const startTime = new Date(firstRecord.created).getTime();
-    const endTime = new Date(lastRecord.created).getTime();
-    
-    // Convert milliseconds to hours
-    const durationHours = (endTime - startTime) / (1000 * 60 * 60);
-    
-    // Return 0 if duration is negative (data inconsistency) or very small
-    return durationHours > 0 ? durationHours : 0;
+  const calculateTotalEnergyByTransaction = (logs: PowerLog[]): number => {
+    // Sum up all energy values
+    return logs.reduce((sum, log) => sum + (log.energy_kwh || 0), 0);
   };
 
-  // Helper function to calculate total energy consumption by grouping by ChargeTransaction ID
-  const calculateTotalEnergyByTransaction = (records: PowerLog[]): number => {
-    if (records.length === 0) return 0;
-    
-    // Group records by charge_transaction_id
-    const transactionMap = new Map<number, PowerLog[]>();
-    records.forEach(log => {
-      if (!transactionMap.has(log.charge_transaction_id)) {
-        transactionMap.set(log.charge_transaction_id, []);
-      }
-      transactionMap.get(log.charge_transaction_id)!.push(log);
-    });
-    
-    // Calculate energy for each transaction and sum them up
-    let totalEnergy = 0;
-    transactionMap.forEach((transactionRecords) => {
-      totalEnergy += calculateTotalEnergy(transactionRecords);
-    });
-    
-    return totalEnergy;
-  };
-
-  // Helper function to calculate total energy consumption from time series data
-  const calculateTotalEnergy = (records: PowerLog[]): number => {
-    if (records.length === 0) return 0;
-    if (records.length === 1) return 0; // Single record, no delta to calculate
-    
-    // Sort records by creation time
-    const sortedRecords = [...records].sort((a, b) => 
-      new Date(a.created).getTime() - new Date(b.created).getTime()
-    );
-    
-    // Calculate delta between first and last record
-    const firstRecord = sortedRecords[0];
-    const lastRecord = sortedRecords[sortedRecords.length - 1];
-    
-    // Energy consumption is the difference between final and initial energy values
-    const delta = lastRecord.energy_kwh - firstRecord.energy_kwh;
-    
-    // Return 0 if delta is negative (data inconsistency) or very small
-    return delta > 0 ? delta : 0;
-  };
-
-  const formatKWh = (value: number | string) => `${Number(value).toFixed(1)} kWh`;
-  const formatKW = (value: number | string) => `${Number(value).toFixed(1)} kW`;
-
-  const prepareHourlyChartData = (hourlyDistribution: number[]) => {
-    return hourlyDistribution.map((kwh, hour) => ({
-      hour: `${hour}:00`,
-      kwh: kwh
-    }));
-  };
+  const formatKWh = (value: number | string) => `${Number(value).toFixed(2)} kWh`;
+  const formatKW = (value: number | string) => `${Number(value).toFixed(2)} kW`;
 
   const chartConfig = {
-    data: analytics ? prepareHourlyChartData(analytics.hourly_distribution) : [],
+    data: analytics?.hourly_distribution.map((value, hour) => ({
+      hour: `${hour}:00`,
+      energy: value
+    })) || [],
     xField: 'hour',
-    yField: 'kwh',
+    yField: 'energy',
     label: {
       position: 'middle',
       style: {
         fill: '#FFFFFF',
         opacity: 0.6,
       },
-      formatter: (v: number | string) => `${Number(v).toFixed(1)} kWh`,
     },
     xAxis: {
       label: {
@@ -263,24 +219,18 @@ const PowerLogs: React.FC = () => {
         autoRotate: false,
       },
     },
-    yAxis: {
-      label: {
-        formatter: (v: string) => `${Number(v).toFixed(1)} kWh`,
-      },
-    },
     meta: {
-      kwh: {
+      energy: {
         alias: 'Energy (kWh)',
       },
     },
-    color: '#1890ff',
   };
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: '50px' }}>
+      <div style={{ textAlign: 'center', padding: isMobile ? '20px' : '50px' }}>
         <Spin size="large" />
-        <div style={{ marginTop: '16px' }}>Loading PowerLog data...</div>
+        <p>Loading PowerLog data...</p>
       </div>
     );
   }
@@ -291,44 +241,44 @@ const PowerLogs: React.FC = () => {
 
   return (
     <div>
-      <Title level={3} style={{ marginTop: 24, marginBottom: 16 }}>Current Year ({new Date().getFullYear()})</Title>
+      <Title level={isMobile ? 4 : 3} style={{ marginTop: 24, marginBottom: 16 }}>Current Year ({new Date().getFullYear()})</Title>
       
       {/* Current Year Summary */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
-          <Card>
+      <Row gutter={isMobile ? 8 : 16} style={{ marginBottom: 24 }}>
+        <Col xs={12} sm={6}>
+          <Card size={isMobile ? "small" : "default"}>
             <Statistic
-              title="Total Hours Charged"
+              title={isMobile ? "Hours" : "Total Hours Charged"}
               value={analytics.current_year_summary.total_hours}
               prefix={<ClockCircleOutlined />}
               formatter={(value: number | string) => `${Number(value).toFixed(1)}h`}
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col xs={12} sm={6}>
+          <Card size={isMobile ? "small" : "default"}>
             <Statistic
-              title="Total Energy"
+              title={isMobile ? "Energy" : "Total Energy"}
               value={analytics.current_year_summary.total_kwh}
               prefix={<ThunderboltOutlined />}
               formatter={formatKWh}
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col xs={12} sm={6}>
+          <Card size={isMobile ? "small" : "default"}>
             <Statistic
-              title="Max Power"
+              title={isMobile ? "Max Power" : "Max Power"}
               value={analytics.current_year_summary.max_power_kw}
               prefix={<FireOutlined />}
               formatter={formatKW}
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card>
+        <Col xs={12} sm={6}>
+          <Card size={isMobile ? "small" : "default"}>
             <Statistic
-              title="Average Power"
+              title={isMobile ? "Avg Power" : "Average Power"}
               value={analytics.current_year_summary.avg_power_kw}
               prefix={<FireOutlined />}
               formatter={formatKW}
@@ -339,14 +289,14 @@ const PowerLogs: React.FC = () => {
 
       {/* Hourly Distribution Chart */}
       <Card title="Hourly Energy Distribution" style={{ marginBottom: 24 }}>
-        <div style={{ height: 300 }}>
+        <div style={{ height: isMobile ? 200 : 300 }}>
           <Column {...chartConfig} />
         </div>
       </Card>
 
       {/* Monthly Cards */}
-      <Title level={3}>Last 12 Months</Title>
-      <Row gutter={[16, 16]}>
+      <Title level={isMobile ? 4 : 3}>Last 12 Months</Title>
+      <Row gutter={[isMobile ? 8 : 16, isMobile ? 8 : 16]}>
         {analytics.monthly_data.map((monthData) => (
           <Col xs={24} sm={12} md={8} lg={6} key={`${monthData.year}-${monthData.month}`}>
             <Card 

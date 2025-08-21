@@ -4,13 +4,23 @@ import { PlusOutlined } from "@ant-design/icons";
 import { chargingCostService, ChargingCost, ChargingCostCreate } from "./services/chargingCostService";
 import dayjs from "dayjs";
 
-
-
 const Settings: React.FC = () => {
   const [chargingCosts, setChargingCosts] = useState<ChargingCost[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
   const [form] = Form.useForm();
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     fetchChargingCosts();
@@ -91,8 +101,9 @@ const Settings: React.FC = () => {
           icon={<PlusOutlined />} 
           onClick={showModal}
           style={{ marginBottom: 16 }}
+          size={isMobile ? "small" : "middle"}
         >
-          Add New Price Record
+          {isMobile ? "Add Price" : "Add New Price Record"}
         </Button>
         
         <Table 
@@ -100,7 +111,12 @@ const Settings: React.FC = () => {
           dataSource={chargingCosts} 
           loading={loading} 
           rowKey="id"
-          pagination={{ pageSize: 10 }}
+          pagination={{ 
+            pageSize: isMobile ? 5 : 10,
+            size: isMobile ? "small" : "default"
+          }}
+          size={isMobile ? "small" : "middle"}
+          scroll={{ x: isMobile ? 600 : undefined }}
         />
       </Card>
 
@@ -111,6 +127,7 @@ const Settings: React.FC = () => {
         onCancel={() => setIsModalOpen(false)}
         okText="Add Cost"
         cancelText="Cancel"
+        width={isMobile ? "90%" : 520}
       >
         <Form form={form} layout="vertical">
           <Form.Item 

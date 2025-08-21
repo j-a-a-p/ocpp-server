@@ -6,6 +6,7 @@ import Charges from "./Charges";
 import PowerLogs from "./PowerLogs";
 import Settings from "./Settings";
 import ChargeSummaryCards from "./components/ChargeSummaryCards";
+import MobileMenu from "./components/MobileMenu";
 
 const { Title } = Typography;
 
@@ -25,7 +26,20 @@ const ManagementDashboard: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [editingResident, setEditingResident] = useState<Resident | null>(null);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
   const [form] = Form.useForm();
+
+  // Check if screen is mobile size
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     if (selectedMenu === "residents") fetchResidents();
@@ -115,32 +129,62 @@ const ManagementDashboard: React.FC = () => {
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
-      <Sider collapsible>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[selectedMenu]}
-          onClick={(e) => setSelectedMenu(e.key)}
-          items={[
-            { key: "home", icon: <HomeOutlined />, label: "Home" }, 
-            { key: "residents", icon: <UserOutlined />, label: "Residents" },
-            { key: "charges", icon: <ThunderboltOutlined />, label: "Charges" },
-            { key: "powerlogs", icon: <BarChartOutlined />, label: "PowerLogs" },
-            { key: "settings", icon: <SettingOutlined />, label: "Settings" }
-          ]}
-        />
-      </Sider>
+      {/* Desktop Sidebar - hidden on mobile */}
+      {!isMobile && (
+        <Sider collapsible>
+          <Menu
+            theme="dark"
+            mode="inline"
+            selectedKeys={[selectedMenu]}
+            onClick={(e) => setSelectedMenu(e.key)}
+            items={[
+              { key: "home", icon: <HomeOutlined />, label: "Home" }, 
+              { key: "residents", icon: <UserOutlined />, label: "Residents" },
+              { key: "charges", icon: <ThunderboltOutlined />, label: "Charges" },
+              { key: "powerlogs", icon: <BarChartOutlined />, label: "PowerLogs" },
+              { key: "settings", icon: <SettingOutlined />, label: "Settings" }
+            ]}
+          />
+        </Sider>
+      )}
       <Layout>
-        <Header style={{ background: "#fff", padding: "0 24px", display: "flex", alignItems: "center" }}>
-          <Title level={2} style={{ margin: 0, color: "#1890ff" }}>{pageTitle}</Title>
+        <Header style={{ 
+          background: "#fff", 
+          padding: isMobile ? "0 16px" : "0 24px", 
+          display: "flex", 
+          alignItems: "center",
+          justifyContent: isMobile ? "space-between" : "flex-start"
+        }}>
+          {isMobile && <MobileMenu selectedMenu={selectedMenu} onMenuSelect={setSelectedMenu} />}
+          <Title level={isMobile ? 3 : 2} style={{ margin: 0, color: "#1890ff" }}>{pageTitle}</Title>
         </Header>
-        <Content style={{ margin: "16px" }}>
+        <Content style={{ 
+          margin: isMobile ? "8px" : "16px",
+          padding: isMobile ? "8px" : "16px",
+          background: "#fff",
+          borderRadius: "8px",
+          minHeight: "calc(100vh - 120px)"
+        }}>
           {selectedMenu === "home" && <ChargeSummaryCards />}
           {selectedMenu === "residents" && (
             <>
               <Button type="primary" onClick={() => showModal()}>Add Resident</Button>
-              <Table columns={columns} dataSource={residents} loading={loading} rowKey="id" style={{ marginTop: 16 }} />
-              <Modal title={editingResident ? "Edit Resident" : "Add Resident"} open={isModalOpen} onOk={handleOk} onCancel={() => setIsModalOpen(false)}>
+              <Table 
+                columns={columns} 
+                dataSource={residents} 
+                loading={loading} 
+                rowKey="id" 
+                style={{ marginTop: 16 }}
+                scroll={{ x: isMobile ? 600 : undefined }}
+                size={isMobile ? "small" : "middle"}
+              />
+              <Modal 
+                title={editingResident ? "Edit Resident" : "Add Resident"} 
+                open={isModalOpen} 
+                onOk={handleOk} 
+                onCancel={() => setIsModalOpen(false)}
+                width={isMobile ? "90%" : 520}
+              >
                 <Form form={form} layout="vertical">
                   <Form.Item name="full_name" label="Full Name" rules={[{ required: true, message: "Please enter full name" }]}>
                     <Input />
