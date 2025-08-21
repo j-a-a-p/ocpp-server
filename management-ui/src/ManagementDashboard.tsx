@@ -21,7 +21,7 @@ interface Resident {
 
 const ManagementDashboard: React.FC = () => {
   const [selectedMenu, setSelectedMenu] = useState<string>("home");
-  const [pageTitle, setPageTitle] = useState<string>("Management Portal");
+  const [pageTitle, setPageTitle] = useState<string>("Charger Management");
   const [residents, setResidents] = useState<Resident[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -48,13 +48,13 @@ const ManagementDashboard: React.FC = () => {
   // Update page title when menu changes
   useEffect(() => {
     const titles: { [key: string]: string } = {
-      home: "Management Portal",
+      home: "Charger Management",
       residents: "Residents",
       charges: "Charge Reports",
       powerlogs: "PowerLog Analytics",
       settings: "Settings"
     };
-    setPageTitle(titles[selectedMenu] || "Management Portal");
+    setPageTitle(titles[selectedMenu] || "Charger Management");
   }, [selectedMenu]);
 
   const fetchResidents = async () => {
@@ -139,7 +139,7 @@ const ManagementDashboard: React.FC = () => {
             onClick={(e) => setSelectedMenu(e.key)}
             items={[
               { key: "home", icon: <HomeOutlined />, label: "Home" }, 
-              { key: "residents", icon: <UserOutlined />, label: "Residents" },
+              { key: "residents", icon: <UserOutlined />, label: "Charger Residents" },
               { key: "charges", icon: <ThunderboltOutlined />, label: "Charges" },
               { key: "powerlogs", icon: <BarChartOutlined />, label: "PowerLogs" },
               { key: "settings", icon: <SettingOutlined />, label: "Settings" }
@@ -168,7 +168,7 @@ const ManagementDashboard: React.FC = () => {
           {selectedMenu === "home" && <ChargeSummaryCards />}
           {selectedMenu === "residents" && (
             <>
-              <Button type="primary" onClick={() => showModal()}>Add Resident</Button>
+              <Button type="primary" onClick={() => showModal()}>Add Charger Resident</Button>
               <Table 
                 columns={columns} 
                 dataSource={residents} 
@@ -179,7 +179,7 @@ const ManagementDashboard: React.FC = () => {
                 size={isMobile ? "small" : "middle"}
               />
               <Modal 
-                title={editingResident ? "Edit Resident" : "Add Resident"} 
+                title={editingResident ? "Edit Charger Resident" : "Add Charger Resident"} 
                 open={isModalOpen} 
                 onOk={handleOk} 
                 onCancel={() => setIsModalOpen(false)}

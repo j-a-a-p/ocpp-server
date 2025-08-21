@@ -339,7 +339,7 @@ const Home: React.FC = () => {
               fontSize: "24px",
               marginBottom: "16px"
             }}>
-              EV Charger Resident app
+              Charger Resident
             </h1>
             
             {/* Responsive Layout for Current Station Status and Monthly Usage */}
