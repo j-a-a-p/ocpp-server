@@ -19,6 +19,13 @@ class ChargePoint(BaseChargePoint):
         self.rfid_manager = RFIDManager(rfid_file="rfid_list.csv", auto_reload=False)
         self.meter_values_manager = MeterValuesManager()
         self.charging_profile_manager = ChargingProfileManager(self)
+        
+        # Dynamic load simulation parameters
+        self.current_power_limit = 16.0  # Start at 16A
+        self.min_power_limit = 8.0       # Minimum 8A
+        self.max_power_limit = 32.0      # Maximum 32A
+        self.power_step = 2.0            # Change by 2A each time
+        self.dynamic_load_task = None
 
     @on("BootNotification")
     async def on_boot_notification(self, **kwargs):
@@ -33,6 +40,9 @@ class ChargePoint(BaseChargePoint):
         }
         reason = kwargs.get("reason", "Unknown")
         logging.info(f"BootNotification received from {self.id}: {charging_station}, Reason: {reason}")
+
+        # Start dynamic load simulation when charging station boots
+        await self.start_dynamic_load_simulation()
 
         return call_result.BootNotification(
             current_time=datetime.now().isoformat(),
@@ -53,9 +63,9 @@ class ChargePoint(BaseChargePoint):
         
         if self._heartbeat_count % 10 == 0:  # Every 10th heartbeat
             try:
-                # Set default charging profile with 16A limit
-                await self.set_charging_profile(1, 16.0, ChargingRateUnitType.amps, profile_id=1)
-                logging.info(f"✅ Charging profile sent on heartbeat {self._heartbeat_count} for {self.id}")
+                # Set charging profile with current dynamic power limit
+                await self.set_charging_profile(1, self.current_power_limit, ChargingRateUnitType.amps, profile_id=1)
+                logging.info(f"✅ Charging profile with {self.current_power_limit}A sent on heartbeat {self._heartbeat_count} for {self.id}")
             except Exception as e:
                 logging.warning(f"⚠️  Failed to send charging profile on heartbeat {self._heartbeat_count}: {e}")
         
@@ -200,6 +210,62 @@ class ChargePoint(BaseChargePoint):
         except Exception as e:
             logging.error(f"❌ Error setting charging profile: {e}")
             return False
+
+    async def start_dynamic_load_simulation(self):
+        """Start the dynamic load simulation that changes power limit every 10 seconds."""
+        if self.dynamic_load_task is None:
+            self.dynamic_load_task = asyncio.create_task(self._dynamic_load_loop())
+            logging.info(f"🚀 Started dynamic load simulation for {self.id}")
+
+    async def stop_dynamic_load_simulation(self):
+        """Stop the dynamic load simulation."""
+        if self.dynamic_load_task:
+            self.dynamic_load_task.cancel()
+            self.dynamic_load_task = None
+            logging.info(f"🛑 Stopped dynamic load simulation for {self.id}")
+
+    async def _dynamic_load_loop(self):
+        """Background task that changes power limit every 10 seconds."""
+        import random
+        
+        while True:
+            try:
+                # Randomly decide to increase or decrease power
+                if random.choice([True, False]):
+                    # Increase power
+                    new_limit = min(self.current_power_limit + self.power_step, self.max_power_limit)
+                    direction = "⬆️"
+                else:
+                    # Decrease power
+                    new_limit = max(self.current_power_limit - self.power_step, self.min_power_limit)
+                    direction = "⬇️"
+                
+                # Only update if the limit actually changed
+                if new_limit != self.current_power_limit:
+                    self.current_power_limit = new_limit
+                    
+                    # Apply the new charging profile
+                    success = await self.set_charging_profile(
+                        connector_id=1,
+                        power_limit=new_limit,
+                        unit=ChargingRateUnitType.amps,
+                        profile_id=1
+                    )
+                    
+                    if success:
+                        logging.info(f"🔄 Dynamic load: {direction} Power limit changed to {new_limit}A")
+                    else:
+                        logging.warning(f"⚠️  Dynamic load: Failed to change power limit to {new_limit}A")
+                
+                # Wait 10 seconds before next change
+                await asyncio.sleep(10)
+                
+            except asyncio.CancelledError:
+                logging.info(f"🛑 Dynamic load simulation cancelled for {self.id}")
+                break
+            except Exception as e:
+                logging.error(f"❌ Error in dynamic load simulation: {e}")
+                await asyncio.sleep(10)  # Wait before retrying
 
     async def clear_charging_profile(self, connector_id: int, profile_id: int = 1):
         """
