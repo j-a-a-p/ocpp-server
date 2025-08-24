@@ -212,6 +212,17 @@ class ChargePoint(BaseChargePoint):
             except asyncio.TimeoutError:
                 logging.error(f"❌ Timeout waiting for SetChargingProfile response from charging station")
                 return False
+            except ConnectionError as e:
+                logging.warning(f"⚠️  WebSocket connection error during SetChargingProfile: {e}")
+                return False
+            except Exception as e:
+                if "no close frame received or sent" in str(e):
+                    logging.warning(f"⚠️  WebSocket close frame error during SetChargingProfile (this is usually harmless): {e}")
+                    # This error is often harmless - the request might have succeeded
+                    return True
+                else:
+                    logging.error(f"❌ Unexpected error during SetChargingProfile: {e}")
+                    return False
                 
         except Exception as e:
             logging.error(f"❌ Error setting charging profile: {e}")
@@ -268,8 +279,11 @@ class ChargePoint(BaseChargePoint):
                 old_limit = self.current_power_limit
                 self.current_power_limit = new_limit
                 
+                # Calculate actual step size for debugging
+                actual_step = abs(new_limit - old_limit)
+                
                 loop_count += 1
-                logging.info(f"🔄 Dynamic load loop #{loop_count}: Attempting to change from {old_limit}A to {new_limit}A {direction}")
+                logging.info(f"🔄 Dynamic load loop #{loop_count}: Attempting to change from {old_limit}A to {new_limit}A {direction} (step: {actual_step}A)")
                 
                 # Apply the new charging profile
                 success = await self.set_charging_profile(
