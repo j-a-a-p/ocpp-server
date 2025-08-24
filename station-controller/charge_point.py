@@ -214,19 +214,18 @@ class ChargePoint(BaseChargePoint):
     async def start_dynamic_load_simulation(self):
         """Start the dynamic load simulation that changes power limit every 10 seconds."""
         if self.dynamic_load_task is None:
+            logging.info(f"🚀 Starting dynamic load simulation for {self.id}...")
             self.dynamic_load_task = asyncio.create_task(self._dynamic_load_loop())
-            logging.info(f"🚀 Started dynamic load simulation for {self.id}")
+            logging.info(f"✅ Dynamic load simulation task created for {self.id}")
+        else:
+            logging.info(f"⚠️  Dynamic load simulation already running for {self.id}")
 
-    async def stop_dynamic_load_simulation(self):
-        """Stop the dynamic load simulation."""
-        if self.dynamic_load_task:
-            self.dynamic_load_task.cancel()
-            self.dynamic_load_task = None
-            logging.info(f"🛑 Stopped dynamic load simulation for {self.id}")
 
     async def _dynamic_load_loop(self):
         """Background task that changes power limit every 10 seconds."""
         import random
+        
+        logging.info(f"🔄 Dynamic load loop started for {self.id}")
         
         while True:
             try:
@@ -240,24 +239,29 @@ class ChargePoint(BaseChargePoint):
                     new_limit = max(self.current_power_limit - self.power_step, self.min_power_limit)
                     direction = "⬇️"
                 
-                # Only update if the limit actually changed
-                if new_limit != self.current_power_limit:
-                    self.current_power_limit = new_limit
-                    
-                    # Apply the new charging profile
-                    success = await self.set_charging_profile(
-                        connector_id=1,
-                        power_limit=new_limit,
-                        unit=ChargingRateUnitType.amps,
-                        profile_id=1
-                    )
-                    
-                    if success:
-                        logging.info(f"🔄 Dynamic load: {direction} Power limit changed to {new_limit}A")
-                    else:
-                        logging.warning(f"⚠️  Dynamic load: Failed to change power limit to {new_limit}A")
+                # Always update and apply the new limit (for testing)
+                old_limit = self.current_power_limit
+                self.current_power_limit = new_limit
+                
+                logging.info(f"🔄 Dynamic load: Attempting to change from {old_limit}A to {new_limit}A {direction}")
+                
+                # Apply the new charging profile
+                success = await self.set_charging_profile(
+                    connector_id=1,
+                    power_limit=new_limit,
+                    unit=ChargingRateUnitType.amps,
+                    profile_id=1
+                )
+                
+                if success:
+                    logging.info(f"✅ Dynamic load: {direction} Power limit changed from {old_limit}A to {new_limit}A")
+                else:
+                    logging.warning(f"⚠️  Dynamic load: Failed to change power limit from {old_limit}A to {new_limit}A")
+                    # Revert the current_power_limit if it failed
+                    self.current_power_limit = old_limit
                 
                 # Wait 10 seconds before next change
+                logging.info(f"⏰ Dynamic load: Waiting 10 seconds before next change...")
                 await asyncio.sleep(10)
                 
             except asyncio.CancelledError:
@@ -266,6 +270,53 @@ class ChargePoint(BaseChargePoint):
             except Exception as e:
                 logging.error(f"❌ Error in dynamic load simulation: {e}")
                 await asyncio.sleep(10)  # Wait before retrying
+
+    def get_dynamic_load_status(self):
+        """Get the current status of the dynamic load simulation."""
+        return {
+            "current_power_limit": self.current_power_limit,
+            "min_power_limit": self.min_power_limit,
+            "max_power_limit": self.max_power_limit,
+            "power_step": self.power_step,
+            "task_running": self.dynamic_load_task is not None and not self.dynamic_load_task.done()
+        }
+
+    async def trigger_dynamic_load_change(self):
+        """Manually trigger a dynamic load change for testing."""
+        import random
+        
+        logging.info(f"🔧 Manual dynamic load trigger for {self.id}")
+        
+        # Randomly decide to increase or decrease power
+        if random.choice([True, False]):
+            # Increase power
+            new_limit = min(self.current_power_limit + self.power_step, self.max_power_limit)
+            direction = "⬆️"
+        else:
+            # Decrease power
+            new_limit = max(self.current_power_limit - self.power_step, self.min_power_limit)
+            direction = "⬇️"
+        
+        # Always update and apply the new limit
+        old_limit = self.current_power_limit
+        self.current_power_limit = new_limit
+        
+        logging.info(f"🔧 Manual trigger: Attempting to change from {old_limit}A to {new_limit}A {direction}")
+        
+        # Apply the new charging profile
+        success = await self.set_charging_profile(
+            connector_id=1,
+            power_limit=new_limit,
+            unit=ChargingRateUnitType.amps,
+            profile_id=1
+        )
+        
+        if success:
+            logging.info(f"✅ Manual trigger: {direction} Power limit changed from {old_limit}A to {new_limit}A")
+        else:
+            logging.warning(f"⚠️  Manual trigger: Failed to change power limit from {old_limit}A to {new_limit}A")
+            # Revert the current_power_limit if it failed
+            self.current_power_limit = old_limit
 
     async def clear_charging_profile(self, connector_id: int, profile_id: int = 1):
         """
