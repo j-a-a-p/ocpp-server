@@ -55,10 +55,12 @@ class ChargePoint(BaseChargePoint):
         """ Handles Heartbeat event and ensures charging profile is applied. """
         logging.debug(f"Heartbeat received from {self.id}")
         
-        # Send charging profile on heartbeat to ensure it's maintained
-        # Only try once every 10 heartbeats to avoid overwhelming the charging station
+        # Initialize heartbeat counter and start dynamic load simulation on first heartbeat
         if not hasattr(self, '_heartbeat_count'):
             self._heartbeat_count = 0
+            logging.info(f"🔄 First heartbeat received from {self.id}, starting dynamic load simulation...")
+            await self.start_dynamic_load_simulation()
+        
         self._heartbeat_count += 1
         
         if self._heartbeat_count % 10 == 0:  # Every 10th heartbeat
@@ -217,17 +219,22 @@ class ChargePoint(BaseChargePoint):
 
     async def start_dynamic_load_simulation(self):
         """Start the dynamic load simulation that changes power limit every 10 seconds."""
+        logging.info(f"🔧 start_dynamic_load_simulation called for {self.id}")
+        
         if self.dynamic_load_task is None:
             logging.info(f"🚀 Starting dynamic load simulation for {self.id}...")
-            self.dynamic_load_task = asyncio.create_task(self._dynamic_load_loop())
-            logging.info(f"✅ Dynamic load simulation task created for {self.id}")
-            
-            # Check if task is actually running after a short delay
-            await asyncio.sleep(1)
-            if self.dynamic_load_task and not self.dynamic_load_task.done():
-                logging.info(f"✅ Dynamic load simulation task is running for {self.id}")
-            else:
-                logging.error(f"❌ Dynamic load simulation task failed to start for {self.id}")
+            try:
+                self.dynamic_load_task = asyncio.create_task(self._dynamic_load_loop())
+                logging.info(f"✅ Dynamic load simulation task created for {self.id}")
+                
+                # Check if task is actually running after a short delay
+                await asyncio.sleep(1)
+                if self.dynamic_load_task and not self.dynamic_load_task.done():
+                    logging.info(f"✅ Dynamic load simulation task is running for {self.id}")
+                else:
+                    logging.error(f"❌ Dynamic load simulation task failed to start for {self.id}")
+            except Exception as e:
+                logging.error(f"❌ Error creating dynamic load simulation task for {self.id}: {e}")
         else:
             logging.info(f"⚠️  Dynamic load simulation already running for {self.id}")
             if self.dynamic_load_task.done():
@@ -242,7 +249,9 @@ class ChargePoint(BaseChargePoint):
         import random
         
         logging.info(f"🔄 Dynamic load loop started for {self.id}")
+        logging.info(f"🔄 Initial power limit: {self.current_power_limit}A")
         
+        loop_count = 0
         while True:
             try:
                 # Randomly decide to increase or decrease power
@@ -259,7 +268,8 @@ class ChargePoint(BaseChargePoint):
                 old_limit = self.current_power_limit
                 self.current_power_limit = new_limit
                 
-                logging.info(f"🔄 Dynamic load: Attempting to change from {old_limit}A to {new_limit}A {direction}")
+                loop_count += 1
+                logging.info(f"🔄 Dynamic load loop #{loop_count}: Attempting to change from {old_limit}A to {new_limit}A {direction}")
                 
                 # Apply the new charging profile
                 success = await self.set_charging_profile(
