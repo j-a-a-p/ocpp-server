@@ -25,7 +25,6 @@ class MeterValuesManager:
                 "timestamp": "",
                 "connectorId": connector_id,
                 "transactionId": transaction_id,
-                "context": "",
                 "data": {},
                 "chargingProfile": {
                     "name": "max_power",

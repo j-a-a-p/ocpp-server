@@ -169,7 +169,7 @@ class ChargePoint(BaseChargePoint):
             profile_id: The charging profile ID
         """
         try:
-            logging.info(f"Setting charging profile {profile_id} with {power_limit} {unit.value} limit on connector {connector_id}")
+            logging.info(f"🔧 Setting charging profile {profile_id} with {power_limit} {unit.value} limit on connector {connector_id}")
             
             # Create the SetChargingProfile request
             request = call.SetChargingProfile(
@@ -192,9 +192,13 @@ class ChargePoint(BaseChargePoint):
                 }
             )
             
+            logging.info(f"🔧 Sending SetChargingProfile request: {request}")
+            
             # Send the request to the charging station via WebSocket with timeout
             try:
                 response = await asyncio.wait_for(self.call(request), timeout=10.0)
+                
+                logging.info(f"🔧 Received SetChargingProfile response: {response}")
                 
                 if response.status.value == "Accepted":
                     logging.info(f"✅ Charging profile {profile_id} with {power_limit} {unit.value} limit successfully set on connector {connector_id}")
@@ -217,8 +221,20 @@ class ChargePoint(BaseChargePoint):
             logging.info(f"🚀 Starting dynamic load simulation for {self.id}...")
             self.dynamic_load_task = asyncio.create_task(self._dynamic_load_loop())
             logging.info(f"✅ Dynamic load simulation task created for {self.id}")
+            
+            # Check if task is actually running after a short delay
+            await asyncio.sleep(1)
+            if self.dynamic_load_task and not self.dynamic_load_task.done():
+                logging.info(f"✅ Dynamic load simulation task is running for {self.id}")
+            else:
+                logging.error(f"❌ Dynamic load simulation task failed to start for {self.id}")
         else:
             logging.info(f"⚠️  Dynamic load simulation already running for {self.id}")
+            if self.dynamic_load_task.done():
+                logging.warning(f"⚠️  Dynamic load simulation task is done but not None for {self.id}")
+                # Clean up and restart
+                self.dynamic_load_task = None
+                await self.start_dynamic_load_simulation()
 
 
     async def _dynamic_load_loop(self):
@@ -271,15 +287,62 @@ class ChargePoint(BaseChargePoint):
                 logging.error(f"❌ Error in dynamic load simulation: {e}")
                 await asyncio.sleep(10)  # Wait before retrying
 
+    async def force_power_limit(self, power_limit: float):
+        """Force a specific power limit for testing."""
+        logging.info(f"🔧 Force setting power limit to {power_limit}A for {self.id}")
+        
+        old_limit = self.current_power_limit
+        self.current_power_limit = power_limit
+        
+        success = await self.set_charging_profile(
+            connector_id=1,
+            power_limit=power_limit,
+            unit=ChargingRateUnitType.amps,
+            profile_id=1
+        )
+        
+        if success:
+            logging.info(f"✅ Force power limit changed from {old_limit}A to {power_limit}A")
+        else:
+            logging.warning(f"⚠️  Force power limit failed to change from {old_limit}A to {power_limit}A")
+            self.current_power_limit = old_limit
+
     def get_dynamic_load_status(self):
         """Get the current status of the dynamic load simulation."""
+        task_running = False
+        task_done = False
+        task_cancelled = False
+        
+        if self.dynamic_load_task:
+            task_running = not self.dynamic_load_task.done()
+            task_done = self.dynamic_load_task.done()
+            task_cancelled = self.dynamic_load_task.cancelled()
+        
         return {
             "current_power_limit": self.current_power_limit,
             "min_power_limit": self.min_power_limit,
             "max_power_limit": self.max_power_limit,
             "power_step": self.power_step,
-            "task_running": self.dynamic_load_task is not None and not self.dynamic_load_task.done()
+            "task_running": task_running,
+            "task_done": task_done,
+            "task_cancelled": task_cancelled,
+            "task_exists": self.dynamic_load_task is not None
         }
+
+    async def restart_dynamic_load_simulation(self):
+        """Restart the dynamic load simulation."""
+        logging.info(f"🔄 Restarting dynamic load simulation for {self.id}")
+        
+        # Stop current simulation
+        if self.dynamic_load_task:
+            self.dynamic_load_task.cancel()
+            self.dynamic_load_task = None
+        
+        # Wait a moment
+        await asyncio.sleep(1)
+        
+        # Start new simulation
+        await self.start_dynamic_load_simulation()
 
     async def trigger_dynamic_load_change(self):
         """Manually trigger a dynamic load change for testing."""

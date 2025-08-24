@@ -7,6 +7,7 @@ import PowerLogs from "./PowerLogs";
 import Settings from "./Settings";
 import Profiles from "./Profiles";
 import ChargeSummaryCards from "./components/ChargeSummaryCards";
+import ChargerStatusCard from "./components/ChargerStatusCard";
 import MobileMenu from "./components/MobileMenu";
 
 const { Title } = Typography;
@@ -168,7 +169,12 @@ const ManagementDashboard: React.FC = () => {
           borderRadius: "8px",
           minHeight: "calc(100vh - 120px)"
         }}>
-          {selectedMenu === "home" && <ChargeSummaryCards />}
+          {selectedMenu === "home" && (
+            <>
+              <ChargerStatusCard />
+              <ChargeSummaryCards />
+            </>
+          )}
           {selectedMenu === "residents" && (
             <>
               <Button type="primary" onClick={() => showModal()}>Add Charger Resident</Button>
