@@ -76,9 +76,9 @@ class ChargePoint(BaseChargePoint):
         except Exception as e:
             logging.error(f"Failed to store transaction in database: {e}, for card: {id_tag}")
         
-        # Automatically set 16A power limit when charging starts
+        # Set default power limit when charging starts
         try:
-            logging.info(f"🔌 Setting automatic power limit of 16A for new transaction")
+            logging.info(f"🔌 Setting default power limit of 16A for new transaction")
             power_limit_success = await self.send_power_limit(
                 connector_id, 
                 16.0, 
@@ -86,12 +86,12 @@ class ChargePoint(BaseChargePoint):
             )
             
             if power_limit_success:
-                logging.info(f"✅ Automatic power limit of 16A set successfully for transaction {transaction.id}")
+                logging.info(f"✅ Default power limit of 16A set successfully for transaction {transaction.id}")
             else:
-                logging.warning(f"⚠️  Failed to set automatic power limit for transaction {transaction.id}")
+                logging.warning(f"⚠️  Failed to set default power limit for transaction {transaction.id}")
                 
         except Exception as e:
-            logging.error(f"❌ Error setting automatic power limit: {e}")
+            logging.error(f"❌ Error setting default power limit: {e}")
         
         return call_result.StartTransaction(
             transaction_id=transaction.id,
@@ -135,6 +135,19 @@ class ChargePoint(BaseChargePoint):
         return call_result.StopTransaction(
             id_tag_info={"status": AuthorizationStatus.accepted}
         )
+
+    @on("SetChargingProfile")
+    async def on_set_charging_profile(self, connector_id, cs_charging_profiles, **kwargs):
+        """Handle SetChargingProfile requests from the charging station."""
+        logging.info(f"SetChargingProfile received for connector {connector_id}")
+        
+        try:
+            # Use the existing charging profile manager to handle the profile
+            result = await self.charging_profile_manager.apply_profile(connector_id, cs_charging_profiles)
+            return result
+        except Exception as e:
+            logging.error(f"Error handling SetChargingProfile: {e}")
+            return call_result.SetChargingProfile(status=ChargingProfileStatus.rejected)
 
     async def send_power_limit(self, connector_id: int, power_limit: float, unit: ChargingRateUnitType = ChargingRateUnitType.amps):
         """
@@ -183,4 +196,6 @@ class ChargePoint(BaseChargePoint):
         except Exception as e:
             logging.error(f"❌ Error sending power limit: {e}")
             return False
+
+
     

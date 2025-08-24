@@ -1,8 +1,9 @@
 from sqlalchemy.orm import Session
-from models import Resident, ResidentStatus, Card, RefusedCard, ChargingCost
-from schemas import ResidentBase, CardBase
+from sqlalchemy import and_, or_
+from models import Resident, ResidentStatus, Card, RefusedCard, ChargingCost, ChargingProfile, ProfileType, ProfileStatus
+from schemas import ResidentBase, CardBase, ChargingCostBase, ChargingProfileCreate, ChargingProfileUpdate
 from datetime import datetime, date
-from typing import List
+from typing import List, Optional
 
 def get_residents(db: Session, skip: int = 0, limit: int = 100):
     # Only return non-deleted residents
@@ -161,3 +162,64 @@ def calculate_power_log_costs(db: Session, power_logs: list) -> list:
             log.delta_power_cost = float(delta_energy * float(kwh_rate)) if delta_energy and kwh_rate else 0.0
     
     return power_logs
+
+# Charging Profile CRUD operations
+def create_charging_profile(db: Session, profile: ChargingProfileCreate) -> ChargingProfile:
+    db_profile = ChargingProfile(
+        name=profile.name,
+        profile_type=ProfileType(profile.profile_type),
+        max_current=profile.max_current
+    )
+    db.add(db_profile)
+    db.commit()
+    db.refresh(db_profile)
+    return db_profile
+
+def get_charging_profiles(db: Session, skip: int = 0, limit: int = 100) -> List[ChargingProfile]:
+    return db.query(ChargingProfile).offset(skip).limit(limit).all()
+
+def get_charging_profile(db: Session, profile_id: int) -> Optional[ChargingProfile]:
+    return db.query(ChargingProfile).filter(ChargingProfile.id == profile_id).first()
+
+def update_charging_profile(db: Session, profile_id: int, profile: ChargingProfileUpdate) -> Optional[ChargingProfile]:
+    db_profile = get_charging_profile(db, profile_id)
+    if not db_profile:
+        return None
+    
+    update_data = profile.dict(exclude_unset=True)
+    
+    # Convert string values to enums if provided
+    if "profile_type" in update_data:
+        update_data["profile_type"] = ProfileType(update_data["profile_type"])
+    if "status" in update_data:
+        update_data["status"] = ProfileStatus(update_data["status"])
+    
+    for field, value in update_data.items():
+        setattr(db_profile, field, value)
+    
+    db_profile.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_profile)
+    return db_profile
+
+def inactivate_charging_profile(db: Session, profile_id: int) -> Optional[ChargingProfile]:
+    db_profile = get_charging_profile(db, profile_id)
+    if not db_profile:
+        return None
+    
+    db_profile.status = ProfileStatus.INACTIVE
+    db_profile.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_profile)
+    return db_profile
+
+def reactivate_charging_profile(db: Session, profile_id: int) -> Optional[ChargingProfile]:
+    db_profile = get_charging_profile(db, profile_id)
+    if not db_profile:
+        return None
+    
+    db_profile.status = ProfileStatus.DRAFT
+    db_profile.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(db_profile)
+    return db_profile

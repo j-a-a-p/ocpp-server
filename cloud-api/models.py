@@ -9,6 +9,25 @@ class ResidentStatus(enum.Enum):
     INVITED = "invited"
     ACTIVE = "active"
 
+class ProfileType(enum.Enum):
+    MAX_CURRENT = "max_current"
+
+class ProfileStatus(enum.Enum):
+    DRAFT = "Draft"
+    ACTIVE = "Active"
+    INACTIVE = "Inactive"
+
+class ChargingProfile(Base):
+    __tablename__ = "charging_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    profile_type = Column(Enum(ProfileType), nullable=False)
+    status = Column(Enum(ProfileStatus), default=ProfileStatus.DRAFT)
+    max_current = Column(Float, nullable=True)  # For max_current profile type
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
 class Resident(Base):
     __tablename__ = "residents"
 

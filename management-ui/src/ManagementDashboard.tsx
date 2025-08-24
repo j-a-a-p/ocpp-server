@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Layout, Menu, Table, Button, Modal, Form, Input, message, Typography } from "antd";
-import { UserOutlined, HomeOutlined, ThunderboltOutlined, BarChartOutlined, SettingOutlined } from "@ant-design/icons";
+import { UserOutlined, HomeOutlined, ThunderboltOutlined, BarChartOutlined, SettingOutlined, ProfileOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
 import Charges from "./Charges";
 import PowerLogs from "./PowerLogs";
 import Settings from "./Settings";
+import Profiles from "./Profiles";
 import ChargeSummaryCards from "./components/ChargeSummaryCards";
 import MobileMenu from "./components/MobileMenu";
 
@@ -52,6 +53,7 @@ const ManagementDashboard: React.FC = () => {
       residents: "Residents",
       charges: "Charge Reports",
       powerlogs: "PowerLog Analytics",
+      profiles: "Charging Profiles",
       settings: "Settings"
     };
     setPageTitle(titles[selectedMenu] || "Charger Management");
@@ -142,6 +144,7 @@ const ManagementDashboard: React.FC = () => {
               { key: "residents", icon: <UserOutlined />, label: "Charger Residents" },
               { key: "charges", icon: <ThunderboltOutlined />, label: "Charges" },
               { key: "powerlogs", icon: <BarChartOutlined />, label: "PowerLogs" },
+              { key: "profiles", icon: <ProfileOutlined />, label: "Profiles" },
               { key: "settings", icon: <SettingOutlined />, label: "Settings" }
             ]}
           />
@@ -198,6 +201,7 @@ const ManagementDashboard: React.FC = () => {
           )}
           {selectedMenu === "charges" && <Charges />}
           {selectedMenu === "powerlogs" && <PowerLogs />}
+          {selectedMenu === "profiles" && <Profiles />}
           {selectedMenu === "settings" && <Settings />}
         </Content>
       </Layout>

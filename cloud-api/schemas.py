@@ -82,3 +82,28 @@ class ChargingCostResponse(BaseModel):
 class ChargingCostCreate(BaseModel):
     kwh_price: float
     start_date: date
+
+class ChargingProfileBase(BaseModel):
+    name: str
+    profile_type: str
+    status: str
+    max_current: Optional[float] = None
+
+class ChargingProfileResponse(ChargingProfileBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ChargingProfileCreate(BaseModel):
+    name: str
+    profile_type: str
+    max_current: Optional[float] = None
+
+class ChargingProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    profile_type: Optional[str] = None
+    status: Optional[str] = None
+    max_current: Optional[float] = None

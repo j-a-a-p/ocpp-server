@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Menu, Button, Drawer } from 'antd';
-import { MenuOutlined, HomeOutlined, UserOutlined, ThunderboltOutlined, BarChartOutlined, SettingOutlined } from '@ant-design/icons';
+import { MenuOutlined, HomeOutlined, UserOutlined, ThunderboltOutlined, BarChartOutlined, SettingOutlined, ProfileOutlined } from '@ant-design/icons';
 
 interface MobileMenuProps {
   selectedMenu: string;
@@ -15,6 +15,7 @@ const MobileMenu: React.FC<MobileMenuProps> = ({ selectedMenu, onMenuSelect }) =
     { key: "residents", icon: <UserOutlined />, label: "Residents" },
     { key: "charges", icon: <ThunderboltOutlined />, label: "Charges" },
     { key: "powerlogs", icon: <BarChartOutlined />, label: "PowerLogs" },
+    { key: "profiles", icon: <ProfileOutlined />, label: "Profiles" },
     { key: "settings", icon: <SettingOutlined />, label: "Settings" }
   ];
 
