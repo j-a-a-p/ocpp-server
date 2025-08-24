@@ -165,20 +165,18 @@ class ChargePoint(BaseChargePoint):
             request = call.SetChargingProfile(
                 connector_id=connector_id,
                 cs_charging_profiles={
-                    "chargingProfile": {
-                        "connectorId": connector_id,
-                        "chargingProfilePurpose": ChargingProfilePurposeType.charge_point_max_profile,
-                        "stackLevel": 0,
-                        "chargingSchedule": {
-                            "duration": 0,  # No duration limit
-                            "chargingRateUnit": unit,
-                            "chargingSchedulePeriod": [
-                                {
-                                    "startPeriod": 0,
-                                    "limit": power_limit
-                                }
-                            ]
-                        }
+                    "connectorId": connector_id,
+                    "chargingProfilePurpose": ChargingProfilePurposeType.charge_point_max_profile,
+                    "stackLevel": 0,
+                    "chargingSchedule": {
+                        "duration": 0,  # No duration limit
+                        "chargingRateUnit": unit,
+                        "chargingSchedulePeriod": [
+                            {
+                                "startPeriod": 0,
+                                "limit": power_limit
+                            }
+                        ]
                     }
                 }
             )
