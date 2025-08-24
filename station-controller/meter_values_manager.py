@@ -7,8 +7,9 @@ METER_VALUES_JSON = "/var/www/html/meter_values.json"
 class MeterValuesManager:
     """Manages logging of meter values to a condensed JSON file."""
 
-    def __init__(self, json_path=METER_VALUES_JSON):
+    def __init__(self, json_path=METER_VALUES_JSON, charge_point=None):
         self.json_path = json_path
+        self.charge_point = charge_point
 
     def log_meter_values(self, connector_id, transaction_id, meter_values):
         """Logs meter values to the condensed JSON file."""
@@ -25,7 +26,11 @@ class MeterValuesManager:
                 "connectorId": connector_id,
                 "transactionId": transaction_id,
                 "context": "",
-                "data": {}
+                "data": {},
+                "chargingProfile": {
+                    "name": "max_power",
+                    "currentMaxPower": 0.0
+                }
             }
             
             # Variables to track power and energy values for PowerLog
@@ -63,6 +68,15 @@ class MeterValuesManager:
                     except (ValueError, TypeError):
                         logging.warning(f"Could not convert value '{value}' to float for measurand '{measurand}'")
 
+            # Add charging profile information if available
+            if self.charge_point:
+                try:
+                    profile_status = self.charge_point.get_dynamic_load_status()
+                    condensed_data["chargingProfile"]["currentMaxPower"] = profile_status["current_power_limit"]
+                    logging.debug(f"Added charging profile info: {profile_status['current_power_limit']}A")
+                except Exception as e:
+                    logging.warning(f"Failed to get charging profile status: {e}")
+            
             self._write_condensed_json(condensed_data)
             
             # Create PowerLog record if we have power or energy data

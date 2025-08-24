@@ -17,7 +17,7 @@ class ChargePoint(BaseChargePoint):
     def __init__(self, id, websocket):
         super().__init__(id, websocket)
         self.rfid_manager = RFIDManager(rfid_file="rfid_list.csv", auto_reload=False)
-        self.meter_values_manager = MeterValuesManager()
+        self.meter_values_manager = MeterValuesManager(charge_point=self)
         self.charging_profile_manager = ChargingProfileManager(self)
         
         # Dynamic load simulation parameters
