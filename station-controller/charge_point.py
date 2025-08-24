@@ -58,7 +58,7 @@ class ChargePoint(BaseChargePoint):
         # Initialize heartbeat counter and start dynamic load simulation on first heartbeat
         if not hasattr(self, '_heartbeat_count'):
             self._heartbeat_count = 0
-            logging.info(f"🔄 First heartbeat received from {self.id}, starting dynamic load simulation...")
+            logging.info(f"🔄 First heartbeat from {self.id}, starting dynamic load simulation")
             await self.start_dynamic_load_simulation()
         
         self._heartbeat_count += 1
@@ -67,9 +67,8 @@ class ChargePoint(BaseChargePoint):
             try:
                 # Set charging profile with current dynamic power limit
                 await self.set_charging_profile(1, self.current_power_limit, ChargingRateUnitType.amps, profile_id=1)
-                logging.info(f"✅ Charging profile with {self.current_power_limit}A sent on heartbeat {self._heartbeat_count} for {self.id}")
             except Exception as e:
-                logging.warning(f"⚠️  Failed to send charging profile on heartbeat {self._heartbeat_count}: {e}")
+                logging.warning(f"⚠️  Failed to send charging profile on heartbeat: {e}")
         
         return call_result.Heartbeat(current_time=datetime.now().isoformat())
 
@@ -171,8 +170,6 @@ class ChargePoint(BaseChargePoint):
             profile_id: The charging profile ID
         """
         try:
-            logging.info(f"🔧 Setting charging profile {profile_id} with {power_limit} {unit.value} limit on connector {connector_id}")
-            
             # Create the SetChargingProfile request
             request = call.SetChargingProfile(
                 connector_id=connector_id,
@@ -194,16 +191,11 @@ class ChargePoint(BaseChargePoint):
                 }
             )
             
-            logging.info(f"🔧 Sending SetChargingProfile request: {request}")
-            
             # Send the request to the charging station via WebSocket with timeout
             try:
                 response = await asyncio.wait_for(self.call(request), timeout=10.0)
                 
-                logging.info(f"🔧 Received SetChargingProfile response: {response}")
-                
                 if response.status == "Accepted":
-                    logging.info(f"✅ Charging profile {profile_id} with {power_limit} {unit.value} limit successfully set on connector {connector_id}")
                     return True
                 else:
                     logging.error(f"❌ Failed to set charging profile: {response.status}")
@@ -217,7 +209,6 @@ class ChargePoint(BaseChargePoint):
                 return False
             except Exception as e:
                 if "no close frame received or sent" in str(e):
-                    logging.warning(f"⚠️  WebSocket close frame error during SetChargingProfile (this is usually harmless): {e}")
                     # This error is often harmless - the request might have succeeded
                     return True
                 else:
@@ -230,26 +221,14 @@ class ChargePoint(BaseChargePoint):
 
     async def start_dynamic_load_simulation(self):
         """Start the dynamic load simulation that changes power limit every 10 seconds."""
-        logging.info(f"🔧 start_dynamic_load_simulation called for {self.id}")
-        
         if self.dynamic_load_task is None:
-            logging.info(f"🚀 Starting dynamic load simulation for {self.id}...")
+            logging.info(f"🚀 Starting dynamic load simulation for {self.id}")
             try:
                 self.dynamic_load_task = asyncio.create_task(self._dynamic_load_loop())
-                logging.info(f"✅ Dynamic load simulation task created for {self.id}")
-                
-                # Check if task is actually running after a short delay
-                await asyncio.sleep(1)
-                if self.dynamic_load_task and not self.dynamic_load_task.done():
-                    logging.info(f"✅ Dynamic load simulation task is running for {self.id}")
-                else:
-                    logging.error(f"❌ Dynamic load simulation task failed to start for {self.id}")
             except Exception as e:
                 logging.error(f"❌ Error creating dynamic load simulation task for {self.id}: {e}")
         else:
-            logging.info(f"⚠️  Dynamic load simulation already running for {self.id}")
             if self.dynamic_load_task.done():
-                logging.warning(f"⚠️  Dynamic load simulation task is done but not None for {self.id}")
                 # Clean up and restart
                 self.dynamic_load_task = None
                 await self.start_dynamic_load_simulation()
@@ -259,10 +238,8 @@ class ChargePoint(BaseChargePoint):
         """Background task that changes power limit every 10 seconds."""
         import random
         
-        logging.info(f"🔄 Dynamic load loop started for {self.id}")
-        logging.info(f"🔄 Initial power limit: {self.current_power_limit}A")
+        logging.info(f"🔄 Dynamic load simulation started for {self.id} (initial: {self.current_power_limit}A)")
         
-        loop_count = 0
         while True:
             try:
                 # Randomly decide to increase or decrease power
@@ -279,12 +256,6 @@ class ChargePoint(BaseChargePoint):
                 old_limit = self.current_power_limit
                 self.current_power_limit = new_limit
                 
-                # Calculate actual step size for debugging
-                actual_step = abs(new_limit - old_limit)
-                
-                loop_count += 1
-                logging.info(f"🔄 Dynamic load loop #{loop_count}: Attempting to change from {old_limit}A to {new_limit}A {direction} (step: {actual_step}A)")
-                
                 # Apply the new charging profile
                 success = await self.set_charging_profile(
                     connector_id=1,
@@ -294,14 +265,13 @@ class ChargePoint(BaseChargePoint):
                 )
                 
                 if success:
-                    logging.info(f"✅ Dynamic load: {direction} Power limit changed from {old_limit}A to {new_limit}A")
+                    logging.info(f"✅ Dynamic load: {direction} {old_limit}A → {new_limit}A")
                 else:
-                    logging.warning(f"⚠️  Dynamic load: Failed to change power limit from {old_limit}A to {new_limit}A")
+                    logging.warning(f"⚠️  Dynamic load: Failed to change from {old_limit}A to {new_limit}A")
                     # Revert the current_power_limit if it failed
                     self.current_power_limit = old_limit
                 
                 # Wait 10 seconds before next change
-                logging.info(f"⏰ Dynamic load: Waiting 10 seconds before next change...")
                 await asyncio.sleep(10)
                 
             except asyncio.CancelledError:
@@ -313,8 +283,6 @@ class ChargePoint(BaseChargePoint):
 
     async def force_power_limit(self, power_limit: float):
         """Force a specific power limit for testing."""
-        logging.info(f"🔧 Force setting power limit to {power_limit}A for {self.id}")
-        
         old_limit = self.current_power_limit
         self.current_power_limit = power_limit
         
@@ -326,9 +294,9 @@ class ChargePoint(BaseChargePoint):
         )
         
         if success:
-            logging.info(f"✅ Force power limit changed from {old_limit}A to {power_limit}A")
+            logging.info(f"✅ Force power limit: {old_limit}A → {power_limit}A")
         else:
-            logging.warning(f"⚠️  Force power limit failed to change from {old_limit}A to {power_limit}A")
+            logging.warning(f"⚠️  Force power limit failed: {old_limit}A → {power_limit}A")
             self.current_power_limit = old_limit
 
     def get_dynamic_load_status(self):
