@@ -41,8 +41,17 @@ class ChargePoint(BaseChargePoint):
 
     @on("Heartbeat")
     async def on_heartbeat(self, **kwargs):
-        """ Handles Heartbeat event. """
+        """ Handles Heartbeat event and ensures charging profile is applied. """
         logging.debug(f"Heartbeat received from {self.id}")
+        
+        # Send charging profile on heartbeat to ensure it's maintained
+        try:
+            # Send default 16A power limit
+            await self.send_power_limit(1, 16.0, ChargingRateUnitType.amps)
+            logging.info(f"✅ Charging profile sent on heartbeat for {self.id}")
+        except Exception as e:
+            logging.warning(f"⚠️  Failed to send charging profile on heartbeat: {e}")
+        
         return call_result.Heartbeat(current_time=datetime.now().isoformat())
 
     @on("Authorize")
