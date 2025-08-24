@@ -178,6 +178,7 @@ class ChargePoint(BaseChargePoint):
                 cs_charging_profiles={
                     "chargingProfileId": profile_id,
                     "chargingProfilePurpose": ChargingProfilePurposeType.charge_point_max_profile,
+                    "chargingProfileKind": "Absolute",
                     "stackLevel": 0,
                     "chargingSchedule": {
                         "duration": 0,  # No duration limit
