@@ -93,7 +93,7 @@ class ChargingProfileManager:
             profile = {
                 "chargingProfile": {
                     "connectorId": connector_id,
-                    "chargingProfilePurpose": ChargingProfilePurposeType.chargepointmaxprofile,
+                    "chargingProfilePurpose": ChargingProfilePurposeType.charge_point_max_profile,
                     "stackLevel": 0,
                     "chargingSchedule": {
                         "duration": 0,  # No duration limit
