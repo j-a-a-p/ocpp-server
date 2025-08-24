@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from datetime import datetime
 from ocpp.v16 import ChargePoint as BaseChargePoint
 from ocpp.v16 import call_result, call
@@ -45,12 +46,18 @@ class ChargePoint(BaseChargePoint):
         logging.debug(f"Heartbeat received from {self.id}")
         
         # Send charging profile on heartbeat to ensure it's maintained
-        try:
-            # Set default charging profile with 16A limit
-            await self.set_charging_profile(1, 16.0, ChargingRateUnitType.amps, profile_id=1)
-            logging.info(f"✅ Charging profile sent on heartbeat for {self.id}")
-        except Exception as e:
-            logging.warning(f"⚠️  Failed to send charging profile on heartbeat: {e}")
+        # Only try once every 10 heartbeats to avoid overwhelming the charging station
+        if not hasattr(self, '_heartbeat_count'):
+            self._heartbeat_count = 0
+        self._heartbeat_count += 1
+        
+        if self._heartbeat_count % 10 == 0:  # Every 10th heartbeat
+            try:
+                # Set default charging profile with 16A limit
+                await self.set_charging_profile(1, 16.0, ChargingRateUnitType.amps, profile_id=1)
+                logging.info(f"✅ Charging profile sent on heartbeat {self._heartbeat_count} for {self.id}")
+            except Exception as e:
+                logging.warning(f"⚠️  Failed to send charging profile on heartbeat {self._heartbeat_count}: {e}")
         
         return call_result.Heartbeat(current_time=datetime.now().isoformat())
 
@@ -84,25 +91,7 @@ class ChargePoint(BaseChargePoint):
             logging.info(f"Transaction stored in database with ID: {transaction.id}")
         except Exception as e:
             logging.error(f"Failed to store transaction in database: {e}, for card: {id_tag}")
-        
-        # Set default charging profile when charging starts
-        try:
-            logging.info(f"🔌 Setting default charging profile with 16A limit for new transaction")
-            profile_success = await self.set_charging_profile(
-                connector_id, 
-                16.0, 
-                ChargingRateUnitType.amps,
-                profile_id=1
-            )
-            
-            if profile_success:
-                logging.info(f"✅ Default charging profile with 16A limit set successfully for transaction {transaction.id}")
-            else:
-                logging.warning(f"⚠️  Failed to set default charging profile for transaction {transaction.id}")
                 
-        except Exception as e:
-            logging.error(f"❌ Error setting default charging profile: {e}")
-        
         return call_result.StartTransaction(
             transaction_id=transaction.id,
             id_tag_info={"status": AuthorizationStatus.accepted}
@@ -193,14 +182,19 @@ class ChargePoint(BaseChargePoint):
                 }
             )
             
-            # Send the request to the charging station via WebSocket
-            response = await self.call(request)
-            
-            if response.status.value == "Accepted":
-                logging.info(f"✅ Charging profile {profile_id} with {power_limit} {unit.value} limit successfully set on connector {connector_id}")
-                return True
-            else:
-                logging.error(f"❌ Failed to set charging profile: {response.status.value}")
+            # Send the request to the charging station via WebSocket with timeout
+            try:
+                response = await asyncio.wait_for(self.call(request), timeout=10.0)
+                
+                if response.status.value == "Accepted":
+                    logging.info(f"✅ Charging profile {profile_id} with {power_limit} {unit.value} limit successfully set on connector {connector_id}")
+                    return True
+                else:
+                    logging.error(f"❌ Failed to set charging profile: {response.status.value}")
+                    return False
+                    
+            except asyncio.TimeoutError:
+                logging.error(f"❌ Timeout waiting for SetChargingProfile response from charging station")
                 return False
                 
         except Exception as e:
