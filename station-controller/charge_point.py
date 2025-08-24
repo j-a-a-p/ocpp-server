@@ -46,8 +46,8 @@ class ChargePoint(BaseChargePoint):
         
         # Send charging profile on heartbeat to ensure it's maintained
         try:
-            # Send default 16A power limit
-            await self.send_power_limit(1, 16.0, ChargingRateUnitType.amps)
+            # Set default charging profile with 16A limit
+            await self.set_charging_profile(1, 16.0, ChargingRateUnitType.amps, profile_id=1)
             logging.info(f"✅ Charging profile sent on heartbeat for {self.id}")
         except Exception as e:
             logging.warning(f"⚠️  Failed to send charging profile on heartbeat: {e}")
@@ -85,22 +85,23 @@ class ChargePoint(BaseChargePoint):
         except Exception as e:
             logging.error(f"Failed to store transaction in database: {e}, for card: {id_tag}")
         
-        # Set default power limit when charging starts
+        # Set default charging profile when charging starts
         try:
-            logging.info(f"🔌 Setting default power limit of 16A for new transaction")
-            power_limit_success = await self.send_power_limit(
+            logging.info(f"🔌 Setting default charging profile with 16A limit for new transaction")
+            profile_success = await self.set_charging_profile(
                 connector_id, 
                 16.0, 
-                ChargingRateUnitType.amps
+                ChargingRateUnitType.amps,
+                profile_id=1
             )
             
-            if power_limit_success:
-                logging.info(f"✅ Default power limit of 16A set successfully for transaction {transaction.id}")
+            if profile_success:
+                logging.info(f"✅ Default charging profile with 16A limit set successfully for transaction {transaction.id}")
             else:
-                logging.warning(f"⚠️  Failed to set default power limit for transaction {transaction.id}")
+                logging.warning(f"⚠️  Failed to set default charging profile for transaction {transaction.id}")
                 
         except Exception as e:
-            logging.error(f"❌ Error setting default power limit: {e}")
+            logging.error(f"❌ Error setting default charging profile: {e}")
         
         return call_result.StartTransaction(
             transaction_id=transaction.id,
@@ -158,22 +159,24 @@ class ChargePoint(BaseChargePoint):
             logging.error(f"Error handling SetChargingProfile: {e}")
             return call_result.SetChargingProfile(status=ChargingProfileStatus.rejected)
 
-    async def send_power_limit(self, connector_id: int, power_limit: float, unit: ChargingRateUnitType = ChargingRateUnitType.amps):
+    async def set_charging_profile(self, connector_id: int, power_limit: float, unit: ChargingRateUnitType = ChargingRateUnitType.amps, profile_id: int = 1):
         """
-        Send a power limit to the charging station via OCPP SetChargingProfile.
+        Set a charging profile on the charging station via OCPP SetChargingProfile.
         
         Args:
             connector_id: The connector ID
             power_limit: The power limit value
             unit: The unit (amps or watts)
+            profile_id: The charging profile ID
         """
         try:
-            logging.info(f"Sending power limit of {power_limit} {unit.value} to connector {connector_id}")
+            logging.info(f"Setting charging profile {profile_id} with {power_limit} {unit.value} limit on connector {connector_id}")
             
             # Create the SetChargingProfile request
             request = call.SetChargingProfile(
                 connector_id=connector_id,
                 cs_charging_profiles={
+                    "chargingProfileId": profile_id,
                     "chargingProfilePurpose": ChargingProfilePurposeType.charge_point_max_profile,
                     "stackLevel": 0,
                     "chargingSchedule": {
@@ -193,14 +196,44 @@ class ChargePoint(BaseChargePoint):
             response = await self.call(request)
             
             if response.status.value == "Accepted":
-                logging.info(f"✅ Power limit of {power_limit} {unit.value} successfully sent to connector {connector_id}")
+                logging.info(f"✅ Charging profile {profile_id} with {power_limit} {unit.value} limit successfully set on connector {connector_id}")
                 return True
             else:
-                logging.error(f"❌ Failed to send power limit: {response.status.value}")
+                logging.error(f"❌ Failed to set charging profile: {response.status.value}")
                 return False
                 
         except Exception as e:
-            logging.error(f"❌ Error sending power limit: {e}")
+            logging.error(f"❌ Error setting charging profile: {e}")
+            return False
+
+    async def clear_charging_profile(self, connector_id: int, profile_id: int = 1):
+        """
+        Clear a charging profile from the charging station via OCPP ClearChargingProfile.
+        
+        Args:
+            connector_id: The connector ID
+            profile_id: The charging profile ID to clear
+        """
+        try:
+            logging.info(f"Clearing charging profile {profile_id} from connector {connector_id}")
+            
+            # Create the ClearChargingProfile request
+            request = call.ClearChargingProfile(
+                id=profile_id
+            )
+            
+            # Send the request to the charging station via WebSocket
+            response = await self.call(request)
+            
+            if response.status.value == "Accepted":
+                logging.info(f"✅ Charging profile {profile_id} successfully cleared from connector {connector_id}")
+                return True
+            else:
+                logging.error(f"❌ Failed to clear charging profile: {response.status.value}")
+                return False
+                
+        except Exception as e:
+            logging.error(f"❌ Error clearing charging profile: {e}")
             return False
 
 
