@@ -174,7 +174,6 @@ class ChargePoint(BaseChargePoint):
             request = call.SetChargingProfile(
                 connector_id=connector_id,
                 cs_charging_profiles={
-                    "connectorId": connector_id,
                     "chargingProfilePurpose": ChargingProfilePurposeType.charge_point_max_profile,
                     "stackLevel": 0,
                     "chargingSchedule": {
