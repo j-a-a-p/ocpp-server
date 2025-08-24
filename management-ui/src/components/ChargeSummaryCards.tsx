@@ -22,10 +22,10 @@ const ChargeSummaryCards: React.FC = () => {
   useEffect(() => {
     fetchChargeTransactions();
     
-    // Set up 60-second refresh interval
+    // Set up 10-second refresh interval
     const interval = setInterval(() => {
       fetchChargeTransactions();
-    }, 60000);
+    }, 10000);
 
     // Cleanup interval on component unmount
     return () => clearInterval(interval);

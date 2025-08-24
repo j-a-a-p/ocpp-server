@@ -202,11 +202,11 @@ class ChargePoint(BaseChargePoint):
                 
                 logging.info(f"🔧 Received SetChargingProfile response: {response}")
                 
-                if response.status.value == "Accepted":
+                if response.status == "Accepted":
                     logging.info(f"✅ Charging profile {profile_id} with {power_limit} {unit.value} limit successfully set on connector {connector_id}")
                     return True
                 else:
-                    logging.error(f"❌ Failed to set charging profile: {response.status.value}")
+                    logging.error(f"❌ Failed to set charging profile: {response.status}")
                     return False
                     
             except asyncio.TimeoutError:
