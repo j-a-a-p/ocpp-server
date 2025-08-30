@@ -41,7 +41,7 @@ class MeterValuesLog(FileManager):
 
     def _ensure_header(self):
         """Ensure CSV has a header row."""
-        if os.stat(self.csv_file).st_size == 0:
-            with open(self.csv_file, "w", newline="", encoding="utf-8") as file:
+        if os.stat(self.file_path).st_size == 0:
+            with open(self.file_path, "w", newline="", encoding="utf-8") as file:
                 writer = csv.writer(file)
                 writer.writerow(["timestamp", "charge_point_id", "connectorId", "transactionId", "measurand", "phase", "unit", "value", "context"])

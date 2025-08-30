@@ -16,7 +16,7 @@ class ChargePoint(BaseChargePoint):
 
     def __init__(self, id, websocket):
         super().__init__(id, websocket)
-        self.rfid_manager = RFIDManager(rfid_file="rfid_list.csv", auto_reload=False)
+        self.rfid_manager = RFIDManager()
         self.meter_values_manager = MeterValuesManager(charge_point=self)
         self.charging_profile_manager = ChargingProfileManager(self)
         
@@ -222,7 +222,6 @@ class ChargePoint(BaseChargePoint):
     async def start_dynamic_load_simulation(self):
         """Start the dynamic load simulation that changes power limit every 10 seconds."""
         if self.dynamic_load_task is None:
-            logging.info(f"🚀 Starting dynamic load simulation for {self.id}")
             try:
                 self.dynamic_load_task = asyncio.create_task(self._dynamic_load_loop())
             except Exception as e:
@@ -237,9 +236,6 @@ class ChargePoint(BaseChargePoint):
     async def _dynamic_load_loop(self):
         """Background task that changes power limit every 10 seconds."""
         import random
-        
-        logging.info(f"🔄 Dynamic load simulation started for {self.id} (initial: {self.current_power_limit}A)")
-        
         while True:
             try:
                 # Randomly decide to increase or decrease power
@@ -265,7 +261,8 @@ class ChargePoint(BaseChargePoint):
                 )
                 
                 if success:
-                    logging.info(f"✅ Dynamic load: {direction} {old_limit}A → {new_limit}A")
+                    # Power limit changed successfully
+                    pass
                 else:
                     logging.warning(f"⚠️  Dynamic load: Failed to change from {old_limit}A to {new_limit}A")
                     # Revert the current_power_limit if it failed
@@ -294,7 +291,8 @@ class ChargePoint(BaseChargePoint):
         )
         
         if success:
-            logging.info(f"✅ Force power limit: {old_limit}A → {power_limit}A")
+            # Force power limit applied successfully
+            pass
         else:
             logging.warning(f"⚠️  Force power limit failed: {old_limit}A → {power_limit}A")
             self.current_power_limit = old_limit
@@ -323,8 +321,6 @@ class ChargePoint(BaseChargePoint):
 
     async def restart_dynamic_load_simulation(self):
         """Restart the dynamic load simulation."""
-        logging.info(f"🔄 Restarting dynamic load simulation for {self.id}")
-        
         # Stop current simulation
         if self.dynamic_load_task:
             self.dynamic_load_task.cancel()
@@ -340,8 +336,6 @@ class ChargePoint(BaseChargePoint):
         """Manually trigger a dynamic load change for testing."""
         import random
         
-        logging.info(f"🔧 Manual dynamic load trigger for {self.id}")
-        
         # Randomly decide to increase or decrease power
         if random.choice([True, False]):
             # Increase power
@@ -356,8 +350,6 @@ class ChargePoint(BaseChargePoint):
         old_limit = self.current_power_limit
         self.current_power_limit = new_limit
         
-        logging.info(f"🔧 Manual trigger: Attempting to change from {old_limit}A to {new_limit}A {direction}")
-        
         # Apply the new charging profile
         success = await self.set_charging_profile(
             connector_id=1,
@@ -367,7 +359,8 @@ class ChargePoint(BaseChargePoint):
         )
         
         if success:
-            logging.info(f"✅ Manual trigger: {direction} Power limit changed from {old_limit}A to {new_limit}A")
+            # Manual trigger successful
+            pass
         else:
             logging.warning(f"⚠️  Manual trigger: Failed to change power limit from {old_limit}A to {new_limit}A")
             # Revert the current_power_limit if it failed
@@ -382,8 +375,6 @@ class ChargePoint(BaseChargePoint):
             profile_id: The charging profile ID to clear
         """
         try:
-            logging.info(f"Clearing charging profile {profile_id} from connector {connector_id}")
-            
             # Create the ClearChargingProfile request
             request = call.ClearChargingProfile(
                 id=profile_id
@@ -393,7 +384,6 @@ class ChargePoint(BaseChargePoint):
             response = await self.call(request)
             
             if response.status.value == "Accepted":
-                logging.info(f"✅ Charging profile {profile_id} successfully cleared from connector {connector_id}")
                 return True
             else:
                 logging.error(f"❌ Failed to clear charging profile: {response.status.value}")

@@ -32,4 +32,4 @@ class PowerLogService:
                 db.refresh(transaction)
             return transaction
         finally:
-            db.close() 
+            db.close()

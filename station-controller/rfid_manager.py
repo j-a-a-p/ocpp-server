@@ -6,13 +6,10 @@ from refused_card_service import RefusedCardService
 
 logging.basicConfig(level=logging.INFO)
 
-RFID_CSV_FILE = "rfid_list.csv"
-
 class RFIDManager:
-    """ Manages the RFID whitelist stored in a CSV file. """
+    """ Manages the RFID authentication process. """
 
-    def __init__(self, rfid_file=RFID_CSV_FILE, auto_reload=False):
-        self.rfid_file = rfid_file
+    def __init__(self):
         self.rfid_whitelist = set()
 
     def is_authorized(self, rfid_tag, station_id=None):

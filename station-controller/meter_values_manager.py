@@ -118,4 +118,4 @@ class MeterValuesManager:
                 json.dump(data, f, indent=2)
             logging.info(f"Wrote condensed JSON to {self.json_path}")
         except Exception:
-            logging.exception("Failed to write condensed JSON.")
+            logging.exception("Failed to write condensed JSON.") 
