@@ -1,26 +1,27 @@
+import logging
 from database import engine
 from models import Base
 from sqlalchemy import inspect
 
 def init_database():
-    """Initialize the database by creating all tables if they don't exist."""
+    """Initialize the database by checking if all required tables exist."""
     inspector = inspect(engine)
     existing_tables = inspector.get_table_names()
     
-    tables_to_create = []
+    missing_tables = []
     for table in Base.metadata.sorted_tables:
         if table.name not in existing_tables:
-            tables_to_create.append(table.name)
-            print(f"Creating table: {table.name}")
+            missing_tables.append(table.name)
+            logging.fatal(f"Required table '{table.name}' not found in database")
         else:
-            print(f"Table {table.name} already exists, skipping...")
+            logging.debug(f"Table '{table.name}' exists")
     
-    if tables_to_create:
-        Base.metadata.create_all(bind=engine)
-        print(f"Created {len(tables_to_create)} new tables")
+    if missing_tables:
+        logging.fatal(f"Database initialization failed: {len(missing_tables)} required tables are missing: {', '.join(missing_tables)}")
+        raise RuntimeError(f"Database initialization failed: Required tables are missing")
     else:
-        print("All tables already exist, no changes needed")
+        logging.info("All required database tables exist")
 
 if __name__ == "__main__":
     init_database()
-    print("Database initialized successfully!") 
+    print("Database initialization completed successfully!") 
