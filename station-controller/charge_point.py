@@ -39,6 +39,14 @@ class ChargePoint(BaseChargePoint):
             "serial": kwargs.get("charge_point_serial_number", "Unknown Serial")
         }
         reason = kwargs.get("reason", "Unknown")
+        
+        # Update charge point ID to use the serial number from BootNotification
+        old_id = self.id
+        new_id = charging_station["serial"]
+        if new_id != "Unknown Serial" and new_id != old_id:
+            self.id = new_id
+            logging.info(f"Updated charge point ID from '{old_id}' to '{new_id}'")
+        
         logging.info(f"BootNotification received from {self.id}: {charging_station}, Reason: {reason}")
 
         # Start dynamic load simulation when charging station boots
