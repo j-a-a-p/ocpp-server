@@ -169,55 +169,92 @@ class ChargePoint(BaseChargePoint):
             unit: The unit (amps or watts)
             profile_id: The charging profile ID
         """
-        try:
-            # Create the SetChargingProfile request
-            request = call.SetChargingProfile(
-                connector_id=connector_id,
-                cs_charging_profiles={
-                    "chargingProfileId": profile_id,
-                    "chargingProfilePurpose": ChargingProfilePurposeType.charge_point_max_profile,
-                    "chargingProfileKind": "Absolute",
-                    "stackLevel": 0,
-                    "chargingSchedule": {
-                        "duration": 0,  # No duration limit
-                        "chargingRateUnit": unit,
-                        "chargingSchedulePeriod": [
-                            {
-                                "startPeriod": 0,
-                                "limit": power_limit
-                            }
-                        ]
-                    }
-                }
-            )
-            
-            # Send the request to the charging station via WebSocket with timeout
+        max_retries = 3
+        base_delay = 1.0
+        
+        for attempt in range(max_retries):
             try:
-                response = await asyncio.wait_for(self.call(request), timeout=10.0)
+                # Create the SetChargingProfile request
+                request = call.SetChargingProfile(
+                    connector_id=connector_id,
+                    cs_charging_profiles={
+                        "chargingProfileId": profile_id,
+                        "chargingProfilePurpose": ChargingProfilePurposeType.charge_point_max_profile,
+                        "chargingProfileKind": "Absolute",
+                        "stackLevel": 0,
+                        "chargingSchedule": {
+                            "duration": 0,  # No duration limit
+                            "chargingRateUnit": unit,
+                            "chargingSchedulePeriod": [
+                                {
+                                    "startPeriod": 0,
+                                    "limit": power_limit
+                                }
+                            ]
+                        }
+                    }
+                )
                 
-                if response.status == "Accepted":
-                    return True
-                else:
-                    logging.error(f"❌ Failed to set charging profile: {response.status}")
-                    return False
+                # Send the request to the charging station via WebSocket with timeout
+                try:
+                    response = await asyncio.wait_for(self.call(request), timeout=10.0)
                     
-            except asyncio.TimeoutError:
-                logging.error(f"❌ Timeout waiting for SetChargingProfile response from charging station")
-                return False
-            except ConnectionError as e:
-                logging.warning(f"⚠️  WebSocket connection error during SetChargingProfile: {e}")
-                return False
+                    if response.status == "Accepted":
+                        return True
+                    else:
+                        logging.error(f"❌ Failed to set charging profile: {response.status}")
+                        return False
+                        
+                except asyncio.TimeoutError:
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)
+                        logging.warning(f"⚠️  Timeout on attempt {attempt + 1}/{max_retries}, retrying in {delay}s...")
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        logging.error(f"❌ Timeout waiting for SetChargingProfile response from charging station after {max_retries} attempts")
+                        return False
+                except ConnectionError as e:
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)
+                        logging.warning(f"⚠️  WebSocket connection error on attempt {attempt + 1}/{max_retries}, retrying in {delay}s: {e}")
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        logging.warning(f"⚠️  WebSocket connection error during SetChargingProfile: {e}")
+                        return False
+                except Exception as e:
+                    error_str = str(e).lower()
+                    if any(phrase in error_str for phrase in [
+                        "no close frame received or sent",
+                        "protocol error",
+                        "invalid opcode",
+                        "1002"
+                    ]):
+                        # These WebSocket errors are often harmless - the request might have succeeded
+                        # The charging station may have processed the request before the connection issue
+                        return True
+                    else:
+                        if attempt < max_retries - 1:
+                            delay = base_delay * (2 ** attempt)
+                            logging.warning(f"⚠️  Unexpected error on attempt {attempt + 1}/{max_retries}, retrying in {delay}s: {e}")
+                            await asyncio.sleep(delay)
+                            continue
+                        else:
+                            logging.error(f"❌ Unexpected error during SetChargingProfile: {e}")
+                            return False
+                    
             except Exception as e:
-                if "no close frame received or sent" in str(e):
-                    # This error is often harmless - the request might have succeeded
-                    return True
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2 ** attempt)
+                    logging.warning(f"⚠️  Error on attempt {attempt + 1}/{max_retries}, retrying in {delay}s: {e}")
+                    await asyncio.sleep(delay)
+                    continue
                 else:
-                    logging.error(f"❌ Unexpected error during SetChargingProfile: {e}")
+                    logging.error(f"❌ Error setting charging profile: {e}")
                     return False
-                
-        except Exception as e:
-            logging.error(f"❌ Error setting charging profile: {e}")
-            return False
+        
+        return False
 
     async def start_dynamic_load_simulation(self):
         """Start the dynamic load simulation that changes power limit every 10 seconds."""
@@ -267,6 +304,8 @@ class ChargePoint(BaseChargePoint):
                     logging.warning(f"⚠️  Dynamic load: Failed to change from {old_limit}A to {new_limit}A")
                     # Revert the current_power_limit if it failed
                     self.current_power_limit = old_limit
+                    # Add extra delay on failure to allow connection to stabilize
+                    await asyncio.sleep(2)
                 
                 # Wait 10 seconds before next change
                 await asyncio.sleep(10)

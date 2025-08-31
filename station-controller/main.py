@@ -4,7 +4,11 @@ import websockets
 from charge_point import ChargePoint
 from init_db import init_database
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Configure logging - set OCPP library to DEBUG to reduce noise, keep our app at INFO
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Set OCPP library logging to DEBUG to reduce the SetChargingProfile message noise
+logging.getLogger('ocpp').setLevel(logging.WARNING)
 
 async def on_connect(websocket, path="no_station"):
     """ Handle new charge point connections. """
