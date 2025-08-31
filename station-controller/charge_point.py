@@ -60,29 +60,15 @@ class ChargePoint(BaseChargePoint):
 
     @on("Heartbeat")
     async def on_heartbeat(self, **kwargs):
-        """ Handles Heartbeat event and ensures charging profile is applied. """
+        """ Handles Heartbeat event. """
         logging.debug(f"Heartbeat received from {self.id}")
         
-        # Initialize heartbeat counter and set charger to 32A on first heartbeat
+        # Initialize heartbeat counter
         if not hasattr(self, '_heartbeat_count'):
             self._heartbeat_count = 0
-            logging.info(f"🔄 First heartbeat from {self.id}, setting charger to 32A")
-            try:
-                # Set charging profile to 32A on first heartbeat
-                await self.set_charging_profile(1, 32.0, ChargingRateUnitType.amps, profile_id=1)
-                logging.info(f"✅ Successfully set charger {self.id} to 32A")
-            except Exception as e:
-                logging.warning(f"⚠️  Failed to set charger to 32A on first heartbeat: {e}")
+            logging.info(f"🔄 First heartbeat from {self.id}")
         
         self._heartbeat_count += 1
-        
-        # DISABLED: Power simulation disabled - no longer applying dynamic charging profiles
-        # if self._heartbeat_count % 10 == 0:  # Every 10th heartbeat
-        #     try:
-        #         # Set charging profile with current dynamic power limit
-        #         await self.set_charging_profile(1, self.current_power_limit, ChargingRateUnitType.amps, profile_id=1)
-        #     except Exception as e:
-        #         logging.warning(f"⚠️  Failed to send charging profile on heartbeat: {e}")
         
         return call_result.Heartbeat(current_time=datetime.now().isoformat())
 
