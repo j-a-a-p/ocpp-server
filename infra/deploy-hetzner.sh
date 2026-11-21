@@ -775,6 +775,9 @@ STAGING="$3"
 RESTORE="$4"
 
 sudo a2enmod proxy proxy_http proxy_wstunnel ssl headers rewrite >/dev/null
+# Silences "could not determine the server's fully qualified domain name".
+printf 'ServerName %s\n' "$DOMAIN" | sudo tee /etc/apache2/conf-available/ocpp-servername.conf >/dev/null
+sudo a2enconf ocpp-servername >/dev/null
 
 if [ "$RESTORE" = 1 ]; then
     sudo tar -xzpf /tmp/letsencrypt.tar.gz -C /
@@ -807,7 +810,9 @@ sed "s/apt\.aircokopen\.nu/$DOMAIN/g" /home/ubuntu/ocpp-server/infra/apt.aircoko
 sudo a2ensite "$DOMAIN-le-ssl" >/dev/null
 sudo apache2ctl configtest
 sudo systemctl reload apache2
-VHOSTS="$(sudo apache2ctl -S 2>&1 | grep -c "port 443 namevhost $DOMAIN" || true)"
+# Apache 2.4 lists vhosts as "*:443  <name> (file:line)". Older releases wrote
+# "port 443 namevhost <name>", so both forms are accepted.
+VHOSTS="$(sudo apache2ctl -S 2>&1 | grep -E '(^\*:443|port 443 namevhost)' | grep -cF "$DOMAIN" || true)"
 if [ "$VHOSTS" != 1 ]; then
     echo "ERROR: expected one HTTPS virtual host for $DOMAIN, found $VHOSTS" >&2
     exit 1
