@@ -8,7 +8,7 @@ APP_NAME = "ocpp-server"
 if platform.system() == "Darwin":  # macOS
     CONFIG_FILE = os.path.expanduser(f"~/.config/{APP_NAME}/configuration.ini")
 elif platform.system() == "Linux":
-    CONFIG_FILE = "/etc/{APP_NAME}/configuration.ini"
+    CONFIG_FILE = f"/etc/{APP_NAME}/configuration.ini"
 else:
     raise RuntimeError("Unsupported OS")
 

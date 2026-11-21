@@ -3,3 +3,6 @@ cloud/.DS_Store
 *.pyc
 
 backups/
+
+# Local Hetzner API token
+infra/.hetzner.env

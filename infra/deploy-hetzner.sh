@@ -1,46 +1,88 @@
 #!/bin/bash
 
-# Create a Hetzner Cloud VM for the OCPP server, put a floating IP on it and
-# import the latest database backup (backups/cloud-*.db, see backup-database.sh).
+# Replace the OCPP server VM on Hetzner Cloud and serve it over HTTPS.
 #
-# - The floating IP is created only once; later runs reuse it.
-# - Every run creates a NEW VM and moves the floating IP to it. Old VMs are
-#   never deleted; they are listed at the end so you can remove them yourself.
-# - Create your DNS A record for the floating IP address printed at the end.
+# Usage: bash infra/deploy-hetzner.sh [--yes]
 #
-# This does not deploy the applications yet, only the VM, the IP and the data.
+# What a run does:
+#   1. Makes sure the floating IP exists (created only once, reused afterwards)
+#      and that the DNS A record of the domain points to it. If not, it stops
+#      here and tells you which record to create. Nothing is deleted yet.
+#   2. Backs up the database and the Let's Encrypt state from the VM that holds
+#      the floating IP. Without such a VM the newest local backup in backups/
+#      is used instead.
+#   3. Shuts down and deletes the old VMs (after you confirm, or with --yes).
+#      This only happens after the backup is downloaded and verified.
+#   4. Creates a new VM, imports the database and installs the whole server on
+#      it (infra/install-server.sh): the cloud API and the station controller as
+#      systemd services, both UIs, Flyway, a firewall, and Apache as reverse
+#      proxy. Then it moves the floating IP to the VM and sets up a Let's
+#      Encrypt certificate for the domain.
 #
-# Requirements: bash, curl, jq, ssh, scp, ssh-keygen
+# The code that is deployed is this working tree, not what is on GitHub. The
+# configuration comes from infra/configuration.ini plus the secrets below.
 #
-# Environment:
+# Old VMs are the servers with the label app=ocpp-server, which this script
+# puts on every VM it creates. Other servers are never touched.
+#
+# Requirements: bash, curl, jq, ssh, scp, ssh-keygen, tar, openssl
+#
+# Settings (environment, or infra/.hetzner.env for the secrets):
 #   HCLOUD_TOKEN           required, Hetzner Cloud API token (read + write)
+#   LETSENCRYPT_EMAIL      required, contact address for Let's Encrypt
+#   SES_ACCESS_KEY         required, Amazon SES credentials for invitation emails
+#   SES_SECRET_KEY         required, (no spaces or % characters)
+#   JWT_SECRET             optional, signs the login tokens. Generated on the
+#                          first run and saved in infra/.hetzner.env, so it
+#                          stays the same on later deployments.
+#   OCPP_DOMAIN            default iaap.nl
+#   OCPP_LE_STAGING        set to 1 to use the Let's Encrypt staging server.
+#                          Use it while testing: the production server allows
+#                          only 5 identical certificates per week.
 #   HCLOUD_LOCATION        default fsn1; only used when the floating IP is
 #                          created. An existing floating IP keeps its location
 #                          and the VM is created there.
 #   HCLOUD_SERVER_TYPE     default cx23
-#   HCLOUD_IMAGE           default ubuntu-24.04
+#   HCLOUD_IMAGE           default ubuntu-26.04
 #   OCPP_FLOATING_IP_NAME  default ocpp-server
 #   OCPP_DEPLOY_SSH_KEY    default ~/.ssh/ocpp-hetzner-deploy (generated when
 #                          missing, the private key never enters this repo)
+#   OCPP_PYTHON_VERSION    default 3.12 (as on AWS)
+#   OCPP_NODE_VERSION      default 22.12.0, only used to build the UIs
+#   OCPP_FLYWAY_VERSION    default 11.10.4
 
 set -euo pipefail
+# Backups hold personal data and private keys.
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BACKUP_DIR="$REPO_ROOT/backups"
+ENV_FILE="$SCRIPT_DIR/.hetzner.env"
+CONFIG_TEMPLATE="$SCRIPT_DIR/configuration.ini"
 
 API_URL="${HCLOUD_API_URL:-https://api.hetzner.cloud/v1}"
 LOCATION="${HCLOUD_LOCATION:-fsn1}"
 SERVER_TYPE="${HCLOUD_SERVER_TYPE:-cx23}"
-IMAGE="${HCLOUD_IMAGE:-ubuntu-24.04}"
+IMAGE="${HCLOUD_IMAGE:-ubuntu-26.04}"
 FIP_NAME="${OCPP_FLOATING_IP_NAME:-ocpp-server}"
 SSH_KEY="${OCPP_DEPLOY_SSH_KEY:-$HOME/.ssh/ocpp-hetzner-deploy}"
+DOMAIN="${OCPP_DOMAIN:-iaap.nl}"
+LE_STAGING="${OCPP_LE_STAGING:-0}"
+PYTHON_VERSION="${OCPP_PYTHON_VERSION:-3.12}"
+NODE_VERSION="${OCPP_NODE_VERSION:-22.12.0}"
+FLYWAY_VERSION="${OCPP_FLYWAY_VERSION:-11.10.4}"
 
 SSH_USER="ubuntu"
 APP_LABEL="ocpp-server"
 REMOTE_DATA_DIR="/home/ubuntu/ocpp-data"
 
+ASSUME_YES=0
+LE_EMAIL=""
 KNOWN_HOSTS=""
+WORK_DIR=""
+BUNDLE_FILE=""
+CONFIG_FILE=""
 SERVER_ID=""
 SERVER_NAME=""
 SERVER_IP=""
@@ -50,6 +92,13 @@ FIP_IP=""
 FIP_LOCATION=""
 FIP_SERVER=""
 LATEST_BACKUP=""
+LE_ARCHIVE=""
+OLD_SERVERS_JSON="[]"
+OLD_COUNT=0
+OLD_ACTIVE_ID=""
+OLD_ACTIVE_NAME=""
+OLD_ACTIVE_IP=""
+OLD_RETIRED=0
 
 log() {
     echo "==> $*"
@@ -62,7 +111,22 @@ die() {
 
 cleanup() {
     local code=$?
-    [ -n "$KNOWN_HOSTS" ] && rm -f "$KNOWN_HOSTS"
+    if [ -n "$KNOWN_HOSTS" ]; then
+        rm -f "$KNOWN_HOSTS"
+    fi
+    # Holds the rendered configuration with the secrets in it.
+    if [ -n "$WORK_DIR" ]; then
+        rm -rf "$WORK_DIR"
+    fi
+    if [ "$code" -ne 0 ] && [ "$OLD_RETIRED" = 1 ]; then
+        echo >&2
+        echo "The old VM was already deleted. Your data is safe in:" >&2
+        echo "  $LATEST_BACKUP" >&2
+        if [ -n "$LE_ARCHIVE" ]; then
+            echo "  $LE_ARCHIVE" >&2
+        fi
+        echo "Fix the problem and run the script again, it will use the newest backup." >&2
+    fi
     if [ "$code" -ne 0 ] && [ -n "$SERVER_ID" ]; then
         echo >&2
         echo "The deployment did not finish, but VM '$SERVER_NAME' (id $SERVER_ID) was created." >&2
@@ -72,9 +136,148 @@ cleanup() {
 
 require_tools() {
     local tool
-    for tool in curl jq ssh scp ssh-keygen; do
+    for tool in curl jq ssh scp ssh-keygen awk sed tar tr openssl; do
         command -v "$tool" >/dev/null 2>&1 || die "'$tool' is required but not installed"
     done
+}
+
+# Sets KEY from infra/.hetzner.env when it is not already set in the
+# environment. A value set in the shell always wins.
+load_from_env_file() {
+    local key="$1" value
+    if [ -n "${!key:-}" ] || [ ! -f "$ENV_FILE" ]; then
+        return 0
+    fi
+    value="$(sed -n "s/^${key}=//p" "$ENV_FILE" | tr -d '\r' | tail -n 1)"
+    if [ -n "$value" ]; then
+        export "$key=$value"
+    fi
+}
+
+# Writes KEY=VALUE into infra/.hetzner.env, replacing an existing KEY line.
+persist_env_value() {
+    local key="$1" value="$2" tmp
+    tmp="$(mktemp "$ENV_FILE.XXXXXX")"
+    if [ -f "$ENV_FILE" ]; then
+        grep -v "^${key}=" "$ENV_FILE" > "$tmp" || true
+    fi
+    printf '%s=%s\n' "$key" "$value" >> "$tmp"
+    mv "$tmp" "$ENV_FILE"
+}
+
+# The values end up in an INI file that Python reads with interpolation on, so a
+# % would break the application, and whitespace would be cut or split.
+check_secret() {
+    local name="$1" value="${!1:-}"
+    [ -n "$value" ] || die "$name is not set. Add $name=... to $ENV_FILE or export it"
+    [[ "$value" =~ ^[^[:space:]%]+$ ]] || die "$name must not contain whitespace or % characters"
+}
+
+# Checks the application secrets and generates the JWT secret on the first run.
+# Runs before anything is changed, so a missing secret never costs a VM.
+ensure_secrets() {
+    load_from_env_file SES_ACCESS_KEY
+    load_from_env_file SES_SECRET_KEY
+    load_from_env_file JWT_SECRET
+    check_secret SES_ACCESS_KEY
+    check_secret SES_SECRET_KEY
+
+    if [ -z "${JWT_SECRET:-}" ]; then
+        JWT_SECRET="$(openssl rand -hex 32)"
+        [ -n "$JWT_SECRET" ] || die "could not generate a JWT secret"
+        persist_env_value JWT_SECRET "$JWT_SECRET"
+        log "Generated a new JWT secret and saved it in $ENV_FILE"
+        echo "  Everyone has to log in again after this deployment."
+    fi
+    check_secret JWT_SECRET
+}
+
+# Writes infra/configuration.ini to $1 with the @NAME@ placeholders filled in.
+# awk with plain string replacement, so characters like & / | in a secret are safe.
+render_config() {
+    local out="$1"
+    [ -f "$CONFIG_TEMPLATE" ] || die "$CONFIG_TEMPLATE is missing"
+    # Checked on the template, a secret may contain anything.
+    local unknown
+    unknown="$(grep -o '@[A-Z_]*@' "$CONFIG_TEMPLATE" | sort -u \
+        | grep -vx -e '@DOMAIN@' -e '@SES_ACCESS_KEY@' -e '@SES_SECRET_KEY@' -e '@JWT_SECRET@' || true)"
+    [ -z "$unknown" ] || die "$CONFIG_TEMPLATE has a placeholder this script does not know: ${unknown//$'\n'/ }"
+    DOMAIN="$DOMAIN" SES_ACCESS_KEY="$SES_ACCESS_KEY" SES_SECRET_KEY="$SES_SECRET_KEY" \
+    JWT_SECRET="$JWT_SECRET" awk '
+        # One pass over the line: text that was filled in is never scanned again.
+        function fill(line,    names, count, i, pos, best, found, result) {
+            count = split("DOMAIN SES_ACCESS_KEY SES_SECRET_KEY JWT_SECRET", names, " ")
+            result = ""
+            while (1) {
+                best = 0
+                found = ""
+                for (i = 1; i <= count; i++) {
+                    pos = index(line, "@" names[i] "@")
+                    if (pos > 0 && (best == 0 || pos < best)) {
+                        best = pos
+                        found = names[i]
+                    }
+                }
+                if (best == 0) {
+                    break
+                }
+                result = result substr(line, 1, best - 1) ENVIRON[found]
+                line = substr(line, best + length(found) + 2)
+            }
+            return result line
+        }
+        {
+            line = $0
+            sub(/\r$/, "", line)
+            print fill(line)
+        }' "$CONFIG_TEMPLATE" > "$out"
+}
+
+# Packs the application into $BUNDLE_FILE: the code, the UI sources and only the
+# infra files the VM needs. Never the env file, the backups or built artifacts.
+build_bundle() {
+    local stage="$WORK_DIR/stage" file
+    BUNDLE_FILE="$WORK_DIR/ocpp-server.tar.gz"
+    mkdir -p "$stage/ocpp-server"
+
+    (cd "$REPO_ROOT" && tar \
+        --exclude='__pycache__' --exclude='*.pyc' --exclude='node_modules' \
+        --exclude='dist' --exclude='*.local' --exclude='.gitignore' \
+        -cf - cloud-api station-controller management-ui resident-ui \
+        infra/install-server.sh infra/create-cloud-api-service.sh infra/create-ocpp-service.sh \
+        infra/apt.aircokopen.nu-le-ssl.conf infra/web) \
+        | tar -xf - -C "$stage/ocpp-server" \
+        || die "could not package the application, is a file missing?"
+
+    # A Windows checkout has CRLF line endings, which break shell scripts and
+    # Apache configuration on Linux. Fixed in the copy, the repo stays untouched.
+    while IFS= read -r -d '' file; do
+        tr -d '\r' < "$file" > "$file.tmp"
+        cat "$file.tmp" > "$file"
+        rm -f "$file.tmp"
+    done < <(find "$stage" -type f \( -name '*.sh' -o -name '*.conf' -o -name '*.ini' \
+        -o -name '*.service' -o -name '*.txt' -o -name '*.sql' -o -name '*.py' \
+        -o -name '*.json' -o -name '*.html' -o -name '*.svg' -o -name '*.css' \
+        -o -name '*.js' -o -name '*.ts' -o -name '*.tsx' -o -name '*.md' \
+        -o -name '.htaccess' \) -print0)
+
+    chmod -R u=rwX,go=rX "$stage"
+    tar -czf "$BUNDLE_FILE" -C "$stage" ocpp-server
+
+    if tar -tzf "$BUNDLE_FILE" | grep -Eq 'hetzner\.env|backups/|\.pem$|\.db$'; then
+        die "the bundle contains a secret or data file, refusing to upload it"
+    fi
+}
+
+# Renders the configuration and builds the bundle. Runs before the old VM is
+# touched, so a problem here never happens after something was deleted.
+prepare_application() {
+    log "Preparing the application bundle"
+    WORK_DIR="$(mktemp -d)"
+    CONFIG_FILE="$WORK_DIR/configuration.ini"
+    render_config "$CONFIG_FILE"
+    build_bundle
+    echo "  bundle: $(du -h "$BUNDLE_FILE" | awk '{print $1}')"
 }
 
 # Calls the Hetzner Cloud API. Prints the JSON response; fails on non-2xx.
@@ -109,16 +312,28 @@ sha256_of() {
     fi
 }
 
+# Sets LATEST_BACKUP to the newest local database backup.
 find_latest_backup() {
     local files=()
     shopt -s nullglob
     files=("$BACKUP_DIR"/cloud-*.db)
     shopt -u nullglob
     if [ "${#files[@]}" -eq 0 ]; then
-        die "no backup found in $BACKUP_DIR - run infra/backup-database.sh first"
+        die "no backup found in $BACKUP_DIR and no running VM to back up - run infra/backup-database.sh first"
     fi
     # Names contain a YYYYMMDD-HHMMSS timestamp, so the last one is the newest.
     LATEST_BACKUP="${files[${#files[@]}-1]}"
+}
+
+# Sets LE_ARCHIVE to the newest local Let's Encrypt backup, if there is one.
+find_latest_le_archive() {
+    local files=()
+    shopt -s nullglob
+    files=("$BACKUP_DIR"/letsencrypt-*.tar.gz)
+    shopt -u nullglob
+    if [ "${#files[@]}" -gt 0 ]; then
+        LE_ARCHIVE="${files[${#files[@]}-1]}"
+    fi
 }
 
 # Generates the deploy key pair when missing and registers it in the Hetzner
@@ -189,6 +404,177 @@ ensure_floating_ip() {
     log "Floating IP: $FIP_IP ($FIP_LOCATION)"
 }
 
+# Prints the IPv4 addresses the domain currently resolves to, one per line.
+resolve_domain() {
+    if command -v getent >/dev/null 2>&1; then
+        getent ahostsv4 "$DOMAIN" 2>/dev/null | awk '{print $1}' | sort -u || true
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 -c 'import socket, sys
+try:
+    print("\n".join(sorted({a[4][0] for a in socket.getaddrinfo(sys.argv[1], None, socket.AF_INET)})))
+except OSError:
+    pass' "$DOMAIN"
+    fi
+}
+
+# Let's Encrypt validates over HTTP on the domain, so the A record has to point
+# to the floating IP. Stops before anything is deleted when it does not.
+check_dns() {
+    local resolved
+    resolved="$(resolve_domain)"
+    if [ "$resolved" = "$FIP_IP" ]; then
+        log "DNS ok: $DOMAIN -> $FIP_IP"
+        return
+    fi
+    echo "ERROR: the DNS record of $DOMAIN does not point to the floating IP yet." >&2
+    echo "  Create this record, wait until it has propagated, then run this script again:" >&2
+    echo "    $DOMAIN.   A   $FIP_IP" >&2
+    echo "  Currently resolves to: ${resolved//$'\n'/, }" >&2
+    echo "  Nothing has been changed or deleted." >&2
+    exit 1
+}
+
+# Finds the VMs created by this script. Sets OLD_SERVERS_JSON, OLD_COUNT and,
+# when one of them holds the floating IP, OLD_ACTIVE_ID/NAME/IP.
+find_old_vms() {
+    local response active
+    response="$(hcloud_api GET "/servers?label_selector=app%3D$APP_LABEL&per_page=50")"
+    OLD_SERVERS_JSON="$(jq -c \
+        '[.servers[] | {id: .id, name: .name, status: .status, ip: (.public_net.ipv4.ip // "")}]' \
+        <<<"$response")"
+    OLD_COUNT="$(jq 'length' <<<"$OLD_SERVERS_JSON")"
+
+    if [ -z "$FIP_SERVER" ]; then
+        return
+    fi
+    active="$(jq -c --argjson id "$FIP_SERVER" '.[] | select(.id == $id)' <<<"$OLD_SERVERS_JSON")"
+    [ -n "$active" ] || die "floating IP $FIP_IP is assigned to server $FIP_SERVER, which was not created by this script (no app=$APP_LABEL label). Refusing to touch it."
+    OLD_ACTIVE_ID="$(jq -r '.id' <<<"$active")"
+    OLD_ACTIVE_NAME="$(jq -r '.name' <<<"$active")"
+    OLD_ACTIVE_IP="$(jq -r '.ip' <<<"$active")"
+    if [ "$(jq -r '.status' <<<"$active")" != "running" ] || [ -z "$OLD_ACTIVE_IP" ]; then
+        die "VM $OLD_ACTIVE_NAME holds the floating IP but is not running, so it cannot be backed up. Start it, or delete it in the Hetzner console and use a local backup."
+    fi
+}
+
+confirm_plan() {
+    if [ "$OLD_COUNT" -eq 0 ]; then
+        return 0
+    fi
+    echo
+    echo "About to replace the current deployment:"
+    if [ -n "$OLD_ACTIVE_ID" ]; then
+        echo "  - back up the database and certificates from $OLD_ACTIVE_NAME ($OLD_ACTIVE_IP)"
+    else
+        echo "  - no VM holds the floating IP, so the local backup $(basename "$LATEST_BACKUP") is used"
+    fi
+    echo "  - shut down and DELETE: $(jq -r '[.[].name] | join(", ")' <<<"$OLD_SERVERS_JSON")"
+    echo "  - create a new VM and set up HTTPS for $DOMAIN"
+    echo
+    if [ "$ASSUME_YES" = 1 ]; then
+        return 0
+    fi
+    [ -t 0 ] || die "refusing to delete VMs without confirmation; run it in a terminal or pass --yes"
+    local answer
+    read -r -p "Continue? [y/N] " answer
+    [[ "$answer" =~ ^[Yy]$ ]] || die "aborted, nothing was changed"
+}
+
+ssh_vm() {
+    ssh "${SSH_OPTS[@]}" -T "$SSH_USER@${SSH_TARGET:-$SERVER_IP}" "$@"
+}
+
+# Downloads a verified database snapshot (and the Let's Encrypt state) from the
+# VM that holds the floating IP. Sets LATEST_BACKUP and LE_ARCHIVE. Nothing has
+# been deleted at this point, so any failure here leaves everything as it was.
+backup_old_vm() {
+    local ip="$OLD_ACTIVE_IP" stamp db_file remote_sha
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    db_file="$BACKUP_DIR/cloud-$stamp.db"
+    mkdir -p "$BACKUP_DIR"
+
+    log "Backing up the database from $OLD_ACTIVE_NAME ($ip)"
+    remote_sha="$(SSH_TARGET="$ip" ssh_vm bash -s -- "$REMOTE_DATA_DIR" <<'REMOTE'
+set -euo pipefail
+SRC="$1/cloud.db"
+DST=/tmp/cloud-backup.db
+if [ ! -f "$SRC" ]; then
+    echo "no database found at $SRC" >&2
+    exit 1
+fi
+rm -f "$DST"
+python3 - "$SRC" "$DST" <<'PY'
+import sqlite3
+import sys
+
+src = sqlite3.connect(sys.argv[1])
+dst = sqlite3.connect(sys.argv[2])
+with dst:
+    src.backup(dst)
+src.close()
+dst.close()
+
+check = sqlite3.connect(sys.argv[2])
+status = check.execute("PRAGMA integrity_check").fetchone()[0]
+check.close()
+if status != "ok":
+    sys.exit("integrity check failed: " + status)
+PY
+sha256sum "$DST" | awk '{print $1}'
+REMOTE
+)" || die "could not back up the database from $OLD_ACTIVE_NAME; nothing was deleted"
+    scp "${SSH_OPTS[@]}" "$SSH_USER@$ip:/tmp/cloud-backup.db" "$db_file"
+    [ "$(sha256_of "$db_file")" = "$remote_sha" ] || die "checksum mismatch on the downloaded backup; nothing was deleted"
+    SSH_TARGET="$ip" ssh_vm "rm -f /tmp/cloud-backup.db"
+    LATEST_BACKUP="$db_file"
+    log "Database backup saved to $db_file"
+
+    if SSH_TARGET="$ip" ssh_vm "sudo test -d /etc/letsencrypt/live/$DOMAIN"; then
+        local le_file="$BACKUP_DIR/letsencrypt-$stamp.tar.gz"
+        log "Backing up the Let's Encrypt certificates"
+        SSH_TARGET="$ip" ssh_vm "sudo tar -czf /tmp/letsencrypt.tar.gz -C / etc/letsencrypt && sudo chown $SSH_USER /tmp/letsencrypt.tar.gz"
+        scp "${SSH_OPTS[@]}" "$SSH_USER@$ip:/tmp/letsencrypt.tar.gz" "$le_file"
+        SSH_TARGET="$ip" ssh_vm "rm -f /tmp/letsencrypt.tar.gz"
+        LE_ARCHIVE="$le_file"
+        log "Certificates saved to $le_file"
+    else
+        echo "No certificate for $DOMAIN on the old VM, a new one will be requested."
+    fi
+}
+
+wait_until_off() {
+    local id="$1" deadline=$((SECONDS + 120)) status
+    while true; do
+        status="$(hcloud_api GET "/servers/$id" | jq -r '.server.status')"
+        if [ "$status" = "off" ]; then
+            return 0
+        fi
+        if [ "$SECONDS" -ge "$deadline" ]; then
+            return 1
+        fi
+        sleep 3
+    done
+}
+
+# Shuts down and deletes every old VM. Deleting a VM also frees its floating IP.
+retire_old_vms() {
+    local id name status
+    while IFS=$'\t' read -r id name status; do
+        if [ "$status" = "running" ]; then
+            log "Shutting down $name"
+            hcloud_api POST "/servers/$id/actions/shutdown" "{}" >/dev/null
+            if ! wait_until_off "$id"; then
+                log "Graceful shutdown timed out, powering $name off"
+                hcloud_api POST "/servers/$id/actions/poweroff" "{}" >/dev/null
+                wait_until_off "$id" || die "$name did not power off; it was not deleted"
+            fi
+        fi
+        log "Deleting $name (id $id)"
+        hcloud_api DELETE "/servers/$id" >/dev/null
+        OLD_RETIRED=1
+    done < <(jq -r '.[] | [.id, .name, .status] | @tsv' <<<"$OLD_SERVERS_JSON")
+}
+
 user_data() {
     cat <<EOF
 #cloud-config
@@ -209,7 +595,15 @@ package_update: true
 package_upgrade: true
 packages:
   - python3
+  - python3-venv
   - sqlite3
+  - curl
+  - ca-certificates
+  - xz-utils
+  - ufw
+  - apache2
+  - certbot
+  - python3-certbot-apache
 EOF
 }
 
@@ -252,10 +646,6 @@ wait_for_server() {
     log "VM is running at $SERVER_IP"
 }
 
-ssh_vm() {
-    ssh "${SSH_OPTS[@]}" -T "$SSH_USER@${SSH_TARGET:-$SERVER_IP}" "$@"
-}
-
 wait_for_ssh() {
     log "Waiting for SSH and cloud-init on $SERVER_IP"
     local deadline=$((SECONDS + 600))
@@ -265,7 +655,8 @@ wait_for_ssh() {
     done
     # Exit 2 means "done with recoverable errors"; what we need is checked below.
     ssh_vm "sudo cloud-init status --wait >/dev/null" || true
-    ssh_vm "command -v python3 >/dev/null" || die "python3 missing on the VM, cloud-init did not finish properly"
+    ssh_vm "command -v python3 >/dev/null && command -v certbot >/dev/null && python3 -c 'import ensurepip' && command -v ufw >/dev/null" \
+        || die "a required package is missing on the VM, cloud-init did not finish properly"
 }
 
 import_backup() {
@@ -311,10 +702,19 @@ echo "  imported"
 REMOTE
 }
 
+# Uploads the application and runs infra/install-server.sh on the VM. The
+# services start with the imported database, before the floating IP moves.
+deploy_application() {
+    log "Uploading the application"
+    scp "${SSH_OPTS[@]}" "$BUNDLE_FILE" "$SSH_USER@$SERVER_IP:/tmp/ocpp-server.tar.gz"
+    scp "${SSH_OPTS[@]}" "$CONFIG_FILE" "$SSH_USER@$SERVER_IP:/tmp/configuration.ini"
+    ssh_vm "mkdir -p /home/$SSH_USER && tar -xzf /tmp/ocpp-server.tar.gz -C /home/$SSH_USER && rm -f /tmp/ocpp-server.tar.gz"
+
+    log "Installing the server on the VM (Python environment, Flyway, UIs, services), this takes a few minutes"
+    ssh_vm "FLYWAY_VERSION='$FLYWAY_VERSION' NODE_VERSION='$NODE_VERSION' PYTHON_VERSION='$PYTHON_VERSION' bash /home/$SSH_USER/ocpp-server/infra/install-server.sh"
+}
+
 assign_floating_ip() {
-    if [ -n "$FIP_SERVER" ] && [ "$FIP_SERVER" != "$SERVER_ID" ]; then
-        echo "NOTE: floating IP $FIP_IP currently points to server $FIP_SERVER and will be moved to $SERVER_NAME."
-    fi
     log "Assigning floating IP $FIP_IP to $SERVER_NAME"
     hcloud_api POST "/floating_ips/$FIP_ID/actions/assign" \
         "$(jq -n --argjson server "$SERVER_ID" '{server: $server}')" >/dev/null
@@ -355,6 +755,80 @@ echo "  $FIP active on $IFACE"
 REMOTE
 }
 
+# Apache with a named virtual host, then a Let's Encrypt certificate for it.
+# Runs after the floating IP is on the VM, because validation connects to it.
+# A restored certificate is reused instead of requesting a new one.
+setup_web_and_ssl() {
+    local restore=0
+    if [ -n "$LE_ARCHIVE" ]; then
+        restore=1
+        log "Uploading the saved Let's Encrypt state $(basename "$LE_ARCHIVE")"
+        scp "${SSH_OPTS[@]}" "$LE_ARCHIVE" "$SSH_USER@$SERVER_IP:/tmp/letsencrypt.tar.gz"
+    fi
+
+    log "Setting up Apache and Let's Encrypt for $DOMAIN"
+    ssh_vm bash -s -- "$DOMAIN" "$LE_EMAIL" "$LE_STAGING" "$restore" <<'REMOTE'
+set -euo pipefail
+DOMAIN="$1"
+EMAIL="$2"
+STAGING="$3"
+RESTORE="$4"
+
+sudo a2enmod proxy proxy_http proxy_wstunnel ssl headers rewrite >/dev/null
+
+if [ "$RESTORE" = 1 ]; then
+    sudo tar -xzpf /tmp/letsencrypt.tar.gz -C /
+    sudo rm -f /tmp/letsencrypt.tar.gz
+    echo "  restored /etc/letsencrypt"
+fi
+
+sudo tee "/etc/apache2/sites-available/$DOMAIN.conf" >/dev/null <<EOF
+<VirtualHost *:80>
+    ServerName $DOMAIN
+    DocumentRoot /var/www/html
+</VirtualHost>
+EOF
+sudo a2dissite 000-default >/dev/null || true
+sudo a2ensite "$DOMAIN" >/dev/null
+sudo systemctl restart apache2
+
+CERTBOT_ARGS=(--apache --non-interactive --agree-tos --email "$EMAIL" -d "$DOMAIN" --redirect)
+if [ "$STAGING" = 1 ]; then
+    CERTBOT_ARGS+=(--staging)
+fi
+sudo certbot "${CERTBOT_ARGS[@]}"
+
+# Certbot wrote a plain HTTPS virtual host. Replace it with the one from the
+# repo, the same configuration as on AWS: /ws to the station controller,
+# /api to the cloud API, and the two UIs. It uses the same certificate paths.
+SSL_CONF="/etc/apache2/sites-available/$DOMAIN-le-ssl.conf"
+sed "s/apt\.aircokopen\.nu/$DOMAIN/g" /home/ubuntu/ocpp-server/infra/apt.aircokopen.nu-le-ssl.conf \
+    | sudo tee "$SSL_CONF" >/dev/null
+sudo a2ensite "$DOMAIN-le-ssl" >/dev/null
+sudo apache2ctl configtest
+sudo systemctl reload apache2
+VHOSTS="$(sudo apache2ctl -S 2>&1 | grep -c "port 443 namevhost $DOMAIN" || true)"
+if [ "$VHOSTS" != 1 ]; then
+    echo "ERROR: expected one HTTPS virtual host for $DOMAIN, found $VHOSTS" >&2
+    exit 1
+fi
+echo "  application virtual host active"
+
+if systemctl is-enabled certbot.timer >/dev/null 2>&1; then
+    echo "  automatic renewal is enabled (certbot.timer)"
+else
+    echo "WARNING: certbot.timer is not enabled, the certificate will not renew automatically" >&2
+fi
+if [ "$STAGING" != 1 ]; then
+    if sudo certbot renew --dry-run >/dev/null 2>&1; then
+        echo "  renewal dry run ok"
+    else
+        echo "WARNING: renewal dry run failed" >&2
+    fi
+fi
+REMOTE
+}
+
 verify_floating_ip() {
     log "Checking SSH through the floating IP"
     local _
@@ -367,48 +841,139 @@ verify_floating_ip() {
     echo "WARNING: could not reach the VM through $FIP_IP yet. Check again in a minute." >&2
 }
 
-list_other_vms() {
-    local response others
-    response="$(hcloud_api GET "/servers?label_selector=app%3D$APP_LABEL&per_page=50")"
-    others="$(jq -r --argjson id "$SERVER_ID" \
-        '.servers[] | select(.id != $id) | "  \(.name) (id \(.id), \(.status))"' <<<"$response")"
-    if [ -n "$others" ]; then
-        echo
-        echo "Earlier VMs with label app=$APP_LABEL (not deleted, remove them if unused):"
-        echo "$others"
+verify_https() {
+    log "Checking https://$DOMAIN"
+    local args=(-sS -o /dev/null -w '%{http_code}' --max-time 20 --resolve "$DOMAIN:443:$FIP_IP")
+    if [ "$LE_STAGING" = 1 ]; then
+        args+=(-k)
+    fi
+    local _ code
+    for _ in 1 2 3; do
+        code="$(curl "${args[@]}" "https://$DOMAIN/" 2>/dev/null || true)"
+        if [ "$code" = "200" ]; then
+            echo "  HTTPS works (HTTP $code)"
+            return
+        fi
+        sleep 5
+    done
+    echo "WARNING: https://$DOMAIN did not answer with HTTP 200 (got: ${code:-no response})" >&2
+}
+
+# Checks every part of the application through Apache, the way a browser or a
+# charger reaches it.
+verify_application() {
+    log "Checking the application"
+    local curl_args=(-sS --max-time 20 --resolve "$DOMAIN:443:$FIP_IP")
+    if [ "$LE_STAGING" = 1 ]; then
+        curl_args+=(-k)
+    fi
+
+    local path code
+    for path in /management-ui/ /resident-ui/ /api/openapi.json; do
+        code="$(curl "${curl_args[@]}" -o /dev/null -w '%{http_code}' "https://$DOMAIN$path" 2>/dev/null || true)"
+        if [ "$code" = "200" ]; then
+            echo "  $path ok"
+        else
+            echo "WARNING: https://$DOMAIN$path answered HTTP ${code:-none}" >&2
+        fi
+    done
+
+    # A WebSocket handshake to the station controller. Connecting has no side
+    # effects, the connection is dropped by the timeout.
+    local status
+    status="$(curl "${curl_args[@]}" -i --http1.1 --max-time 5 \
+        -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+        -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
+        -H 'Sec-WebSocket-Protocol: ocpp2.0.1, ocpp1.6' \
+        "https://$DOMAIN/ws/deploy-healthcheck" 2>/dev/null | head -n 1 | tr -d '\r' || true)"
+    if [[ "$status" == HTTP/1.1\ 101* ]]; then
+        echo "  /ws (station controller) ok"
+    else
+        echo "WARNING: the WebSocket handshake on /ws did not succeed (got: ${status:-no response})" >&2
+    fi
+
+    if ! ssh_vm "systemctl is-active --quiet cloud-api ocpp"; then
+        echo "WARNING: cloud-api or ocpp is not active on the VM" >&2
     fi
 }
 
 main() {
+    local arg
+    for arg in "$@"; do
+        case "$arg" in
+            -y|--yes) ASSUME_YES=1 ;;
+            -h|--help) echo "Usage: bash infra/deploy-hetzner.sh [--yes]"; return 0 ;;
+            *) die "unknown argument: $arg (usage: bash infra/deploy-hetzner.sh [--yes])" ;;
+        esac
+    done
+
     require_tools
-    [ -n "${HCLOUD_TOKEN:-}" ] || die "HCLOUD_TOKEN is not set (Hetzner console > Security > API tokens, read + write)"
-    find_latest_backup
+    load_from_env_file HCLOUD_TOKEN
+    load_from_env_file LETSENCRYPT_EMAIL
+    LE_EMAIL="${LETSENCRYPT_EMAIL:-}"
+
+    [ -n "${HCLOUD_TOKEN:-}" ] || die "HCLOUD_TOKEN is not set. Add it to $ENV_FILE or export it (Hetzner console > Security > API tokens, read + write)"
+    [[ "$LE_EMAIL" =~ ^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$ ]] \
+        || die "LETSENCRYPT_EMAIL is not set. Add LETSENCRYPT_EMAIL=you@example.com to $ENV_FILE or export it"
+    [[ "$DOMAIN" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || die "invalid domain: $DOMAIN"
+    [[ "$LE_STAGING" =~ ^[01]$ ]] || die "OCPP_LE_STAGING must be 0 or 1"
+    local version
+    for version in "$PYTHON_VERSION" "$NODE_VERSION" "$FLYWAY_VERSION"; do
+        [[ "$version" =~ ^[0-9]+(\.[0-9]+)*$ ]] || die "invalid version number: $version"
+    done
 
     trap cleanup EXIT
+    ensure_secrets
+    # Everything that can fail without touching Hetzner happens first.
+    prepare_application
+
     KNOWN_HOSTS="$(mktemp)"
     # Every VM has new host keys. Trust the one we just created, but only for this run.
+    # The keepalive stops long silent steps (npm, pip) from dropping the connection.
     SSH_OPTS=(-i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o LogLevel=ERROR
+        -o ServerAliveInterval=30 -o ServerAliveCountMax=20
         -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN_HOSTS")
 
     ensure_ssh_key
     ensure_floating_ip
+    check_dns
+    find_old_vms
+    if [ -z "$OLD_ACTIVE_ID" ]; then
+        find_latest_backup
+        find_latest_le_archive
+    fi
+    confirm_plan
+
+    if [ -n "$OLD_ACTIVE_ID" ]; then
+        backup_old_vm
+    fi
+    if [ "$OLD_COUNT" -gt 0 ]; then
+        retire_old_vms
+    fi
+
     create_server
     wait_for_server
     wait_for_ssh
     import_backup
+    deploy_application
     assign_floating_ip
     configure_floating_ip_on_vm
+    setup_web_and_ssl
     verify_floating_ip
+    verify_https
+    verify_application
 
     echo
     echo "Done."
     echo "  VM:          $SERVER_NAME (id $SERVER_ID, $SERVER_IP)"
     echo "  Floating IP: $FIP_IP ($FIP_LOCATION)"
+    echo "  Website:     https://$DOMAIN"
+    echo "  Management:  https://$DOMAIN/management-ui/"
+    echo "  Residents:   https://$DOMAIN/resident-ui/"
+    echo "  Chargers:    wss://$DOMAIN/ws/<station id>"
     echo "  Database:    $REMOTE_DATA_DIR/cloud.db (from $(basename "$LATEST_BACKUP"))"
     echo
-    echo "Create a DNS A record pointing to $FIP_IP"
     echo "SSH: ssh -i $SSH_KEY $SSH_USER@$FIP_IP"
-    list_other_vms
 }
 
 # Allows sourcing this file in tests without running it.

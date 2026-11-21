@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Meter Dashboard</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-color: #121212;
+      --card-bg: #1e1e1e;
+      --text-color: #f0f0f0;
+      --subtle-text: #888;
+      --accent-color: #4fc3f7;
+    }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 2rem;
+    }
+
+    .container {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1.5rem;
+      max-width: 1000px;
+      margin: auto;
+    }
+
+    .card {
+      background: var(--card-bg);
+      padding: 1rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    tbody tr:nth-child(even) {
+      background-color: #181818;
+    }
+
+    .highlight {
+      font-size: 2.8rem;
+      font-weight: bold;
+      color: var(--accent-color);
+    }
+
+    .unit {
+      font-size: 1rem;
+      color: var(--subtle-text);
+    }
+
+    #timestamp {
+      text-align: center;
+      margin-bottom: 2rem;
+      font-size: 1rem;
+      color: var(--subtle-text);
+    }
+
+    @media (max-width: 500px) {
+      body {
+        padding: 1rem;
+      }
+      .highlight {
+        font-size: 2rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="timestamp">Loading...</div>
+  <div id="availability" style="text-align: center; margin-bottom: 1rem;"></div>
+  <!-- Top 3 metric cards -->
+  <div class="container">
+    <div class="card" id="power-import"></div>
+    <div class="card" id="energy-register"></div>
+    <div class="card" id="current-offered"></div>
+  </div>
+
+  <!-- New table for current/voltage values -->
+  <div class="card" style="max-width: 600px; margin: 2rem auto; overflow-x: auto;">
+    <table style="width: 100%; border-collapse: collapse; color: var(--text-color);">
+      <thead>
+        <tr style="border-bottom: 1px solid #444;">
+          <th style="text-align: left; padding: 0.5rem;">Phase</th>
+          <th style="text-align: right; padding: 0.5rem;">Current (A)</th>
+          <th style="text-align: right; padding: 0.5rem;">Voltage (V)</th>
+        </tr>
+      </thead>
+      <tbody id="phase-data">
+        <!-- JS will populate this -->
+      </tbody>
+    </table>
+  </div>
+  <script>
+    async function loadData() {
+      try {
+        const response = await fetch('/meter_values.json', { cache: "no-store" });
+        if (!response.ok) throw new Error("Failed to load JSON");
+
+        const json = await response.json();
+        const data = json.data || {};
+        const timestamp = json.timestamp || '';
+        document.getElementById('timestamp').textContent = `Last updated: ${new Date(timestamp).toLocaleString()}`;
+
+        // Update document title
+        if (data['Energy.Active.Import.Register'] !== undefined) {
+          document.title = `Charged: ${data['Energy.Active.Import.Register'].toFixed(2)} kWh | Meter Dashboard`;
+        }
+
+        // Show availability if data is old
+        const availabilityDiv = document.getElementById('availability');
+        const ts = new Date(timestamp);
+        const now = new Date();
+        const diffMinutes = (now - ts) / 1000 / 60;
+
+        if (diffMinutes > 5) {
+          availabilityDiv.innerHTML = `<div style="color: #4caf50; font-weight: bold;">Charger probably available!</div>`;
+        } else {
+          availabilityDiv.innerHTML = ''; // Clear if recent
+        }
+
+        const phaseData = [
+          {
+            phase: "L1",
+            current: data["Current.Import.L1"] || 0,
+            voltage: data["Voltage.L1"] || 0
+          },
+          {
+            phase: "L2",
+            current: data["Current.Import.L2"] || 0,
+            voltage: data["Voltage.L2"] || 0
+          },
+          {
+            phase: "L3",
+            current: data["Current.Import.L3"] || 0,
+            voltage: data["Voltage.L3"] || 0
+          }
+        ];
+
+        const tbody = document.getElementById("phase-data");
+        tbody.innerHTML = ""; // Clear previous
+
+        phaseData.forEach(row => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td style="padding: 0.5rem;">${row.phase}</td>
+            <td style="text-align: right; padding: 0.5rem;">${row.current.toFixed(1)}</td>
+            <td style="text-align: right; padding: 0.5rem;">${row.voltage.toFixed(1)}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+
+        // Populate specific cards
+        document.getElementById('power-import').innerHTML = `
+          <div class="highlight">${(data['Power.Active.Import'] || 0).toFixed(1)} <span class="unit">kW</span></div>
+          <div>Current power</div>
+        `;
+
+        document.getElementById('energy-register').innerHTML = `
+          <div class="highlight">${(data['Energy.Active.Import.Register'] || 0).toFixed(1)} <span class="unit">kWh</span></div>
+          <div>Charged</div>
+        `;
+
+        document.getElementById('current-offered').innerHTML = `
+          <div style="font-size: 1.5rem; font-weight: 600;">${(data['Current.Offered'] || 0)} <span class="unit">A</span></div>
+          <div>Max current / phase</div>
+        `;
+
+      } catch (err) {
+        console.error('Error loading JSON:', err);
+        document.getElementById('timestamp').textContent = 'Failed to load data';
+      }
+    }
+
+    loadData();
+    setInterval(loadData, 15000);
+  </script>
+</body>
+</html>
