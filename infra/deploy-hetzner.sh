@@ -142,9 +142,9 @@ bring_back_old_vm() {
             echo "WARNING: could not power it on. Do it in the Hetzner console." >&2
         fi
     elif [ "$OLD_STOPPED" = 1 ]; then
-        echo "Starting the services on the old VM $OLD_ACTIVE_NAME again." >&2
-        if ! SSH_TARGET="$OLD_ACTIVE_IP" ssh_vm "sudo systemctl start cloud-api.service && sudo systemctl start ocpp.service"; then
-            echo "WARNING: could not start them. Run 'sudo systemctl start cloud-api ocpp' on $OLD_ACTIVE_IP." >&2
+        echo "Starting Apache and the services on the old VM $OLD_ACTIVE_NAME again." >&2
+        if ! SSH_TARGET="$OLD_ACTIVE_IP" ssh_vm "sudo systemctl start cloud-api.service && sudo systemctl start ocpp.service && sudo systemctl start apache2.service"; then
+            echo "WARNING: could not start them. Run 'sudo systemctl start cloud-api ocpp apache2' on $OLD_ACTIVE_IP." >&2
         fi
     fi
 }
@@ -533,15 +533,17 @@ ssh_vm() {
     ssh "${SSH_OPTS[@]}" -T "$SSH_USER@${SSH_TARGET:-$SERVER_IP}" "$@"
 }
 
-# Stops the services on the VM that holds the floating IP, so the backup has
-# every charge and nothing is written after it. The station controller goes
-# first, it writes the meter values.
+# Stops the web server and the services on the VM that holds the floating IP,
+# so the backup has every charge and nothing is written after it.
+# Order: Apache first, so no new request or charger connection gets in; then the
+# station controller, which writes the meter values and the transactions; then
+# the cloud API.
 stop_old_services() {
-    log "Stopping the services on $OLD_ACTIVE_NAME, the service is down from now on"
+    log "Stopping Apache and the services on $OLD_ACTIVE_NAME, the service is down from now on"
     DOWNTIME_START=$SECONDS
     OLD_STOPPED=1
-    SSH_TARGET="$OLD_ACTIVE_IP" ssh_vm "sudo systemctl stop ocpp.service && sudo systemctl stop cloud-api.service" \
-        || die "could not stop the services on $OLD_ACTIVE_NAME"
+    SSH_TARGET="$OLD_ACTIVE_IP" ssh_vm "sudo systemctl stop apache2.service && sudo systemctl stop ocpp.service && sudo systemctl stop cloud-api.service" \
+        || die "could not stop Apache and the services on $OLD_ACTIVE_NAME"
 }
 
 # Downloads a verified database snapshot (and the Let's Encrypt state) from the
