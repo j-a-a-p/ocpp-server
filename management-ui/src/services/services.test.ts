@@ -3,7 +3,7 @@ import { json, mockFetch } from "../test/mockFetch";
 import { getAllChargeTransactions } from "./chargeTransactionService";
 import { chargingCostService } from "./chargingCostService";
 import { chargingProfileService } from "./chargingProfileService";
-import { getPowerLogs } from "./powerLogService";
+import { getPowerLogAnalytics } from "./powerLogService";
 
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -27,27 +27,20 @@ describe("getAllChargeTransactions", () => {
   });
 });
 
-describe("getPowerLogs", () => {
-  it("asks for the page it needs", async () => {
-    const fetchMock = mockFetch({ "GET /power-logs/": json([]) });
+describe("getPowerLogAnalytics", () => {
+  it("reads the analytics with the cookie", async () => {
+    const analytics = { current_year_summary: {}, monthly_data: [], hourly_by_year: [] };
+    const fetchMock = mockFetch({ "GET /power-logs/analytics": json(analytics) });
 
-    await getPowerLogs(5, 20);
-
-    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/power-logs\/\?skip=5&limit=20$/);
-  });
-
-  it("asks for everything by default", async () => {
-    const fetchMock = mockFetch({ "GET /power-logs/": json([]) });
-
-    await getPowerLogs();
-
-    expect(String(fetchMock.mock.calls[0][0])).toMatch(/skip=0&limit=100000$/);
+    expect(await getPowerLogAnalytics()).toEqual(analytics);
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/power-logs\/analytics$/);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: "include" });
   });
 
   it("fails on an error", async () => {
-    mockFetch({ "GET /power-logs/": json({}, 500) });
+    mockFetch({ "GET /power-logs/analytics": json({}, 500) });
 
-    await expect(getPowerLogs()).rejects.toThrow("Failed to fetch PowerLog data");
+    await expect(getPowerLogAnalytics()).rejects.toThrow("Failed to fetch PowerLog data");
   });
 });
 

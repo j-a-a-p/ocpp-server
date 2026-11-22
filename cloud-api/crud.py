@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from models import Resident, ResidentStatus, Card, RefusedCard, ChargingCost, ChargingProfile, ProfileType, ProfileStatus
 from schemas import ResidentBase, CardBase, ChargingCostBase, ChargingProfileCreate, ChargingProfileUpdate
-from tariff import to_local
+from tariff import tariff_at, to_local
 from datetime import datetime, date
 from typing import List, Optional
 
@@ -117,51 +117,60 @@ def get_active_charging_cost_at_date(db: Session, target_date: datetime) -> Char
         (ChargingCost.end_date.is_(None)) | (ChargingCost.end_date > target_date_only)
     ).order_by(ChargingCost.created.desc()).first()
 
-def calculate_power_log_costs(db: Session, power_logs: list) -> list:
-    """Calculate costs for power logs based on active charging cost at the time"""
-    from models import PowerLog
+class ChargingCostLookup:
+    """The charging cost that applies on a (local) day, with the same rule as get_active_charging_cost_at_date.
+
+    The price list is read once, so pricing many power logs costs no query per day."""
+
+    def __init__(self, db: Session):
+        self._costs = db.query(ChargingCost).order_by(ChargingCost.created.desc()).all()
+        self._by_day = {}
+
+    def on(self, day: date) -> Optional[ChargingCost]:
+        if day not in self._by_day:
+            self._by_day[day] = next((cost for cost in self._costs if cost.end_date is None or cost.end_date > day), None)
+        return self._by_day[day]
+
+
+def _priced_steps(power_logs, prices: ChargingCostLookup):
+    """(log, kWh rate, cost of the energy since the previous log) for each log, in time order.
+
+    A log only needs .created and .energy_kwh, so plain query rows work too."""
     import logging
-    
+
     logger = logging.getLogger(__name__)
-    
+    previous = None
+    for log in sorted(power_logs, key=lambda x: x.created):
+        local = to_local(log.created)
+        cost = prices.on(local.date())
+        # Which of the two prices applies depends on the time of day, so it is chosen per power log.
+        kwh_rate = float(cost.price_for_tariff(tariff_at(local))) if cost else 0.0
+
+        # The first log counts in full, the others only the increase since the previous one.
+        delta_energy = log.energy_kwh if previous is None else log.energy_kwh - previous
+        if delta_energy < 0:
+            # The charger's counter drops now and then (see migration V11); such a step costs nothing.
+            logger.debug(f"Negative energy increase in power log {getattr(log, 'id', None)}: delta_energy={delta_energy:.4f} kWh, current_energy={log.energy_kwh:.4f} kWh, previous_energy={previous:.4f} kWh")
+            delta_cost = 0.0
+        else:
+            delta_cost = float(delta_energy * kwh_rate) if delta_energy and kwh_rate else 0.0
+        previous = log.energy_kwh
+        yield log, kwh_rate, delta_cost
+
+
+def calculate_power_log_costs(db: Session, power_logs: list, prices: Optional[ChargingCostLookup] = None) -> list:
+    """Sets kwh_rate and delta_power_cost on each power log, from the charging cost active at the time."""
     if not power_logs:
         return power_logs
-    
-    # Sort power logs by timestamp to calculate deltas correctly
-    sorted_logs = sorted(power_logs, key=lambda x: x.created)
-    
-    # The price list is looked up once per (local) day. Which of the two prices applies
-    # depends on the time of day, so it is chosen per power log.
-    charging_costs = {}
-    for log in sorted_logs:
-        local_date = to_local(log.created).date()
-        if local_date not in charging_costs:
-            charging_costs[local_date] = get_active_charging_cost_at_date(db, datetime.combine(local_date, datetime.min.time()))
-    
-    # Calculate costs for each power log
-    for i, log in enumerate(sorted_logs):
-        cost = charging_costs[to_local(log.created).date()]
-        kwh_rate = float(cost.price_at(log.created)) if cost else 0.0
-        log.kwh_rate = float(kwh_rate)
-        
-        # Calculate delta energy (difference from previous log)
-        if i == 0:
-            # First log: delta energy is the total energy
-            delta_energy = log.energy_kwh
-        else:
-            # Subsequent logs: delta energy is the difference from previous log
-            delta_energy = log.energy_kwh - sorted_logs[i-1].energy_kwh
-        
-        # Check for negative energy increase (data anomaly)
-        if delta_energy < 0:
-            # Set delta_power_cost to 0 for negative energy increases
-            log.delta_power_cost = 0.0
-            logger.warning(f"Negative energy increase detected in power log {log.id}: delta_energy={delta_energy:.4f} kWh, current_energy={log.energy_kwh:.4f} kWh, previous_energy={sorted_logs[i-1].energy_kwh:.4f} kWh")
-        else:
-            # Calculate the delta cost for this specific power log entry
-            log.delta_power_cost = float(delta_energy * float(kwh_rate)) if delta_energy and kwh_rate else 0.0
-    
+    for log, kwh_rate, delta_cost in _priced_steps(power_logs, prices or ChargingCostLookup(db)):
+        log.kwh_rate = kwh_rate
+        log.delta_power_cost = delta_cost
     return power_logs
+
+
+def total_power_log_cost(power_logs, prices: ChargingCostLookup) -> float:
+    """What the energy of a charge costs: the sum of the delta_power_cost of its logs."""
+    return sum(delta_cost for _, _, delta_cost in _priced_steps(power_logs, prices))
 
 # Charging Profile CRUD operations
 def create_charging_profile(db: Session, profile: ChargingProfileCreate) -> ChargingProfile:

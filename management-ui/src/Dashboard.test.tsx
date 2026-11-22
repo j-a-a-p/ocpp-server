@@ -4,12 +4,10 @@ import Dashboard from "./Dashboard";
 import { json, mockFetch } from "./test/mockFetch";
 import { renderWithProviders } from "./test/render";
 
-const log = (delta_power_cost: number) => ({ id: 1, delta_power_cost, kwh_rate: 0.3 });
-
 const charges = [
-  { id: 3, station_id: "CP1", rfid: "A", created: "2026-11-20T09:00:00", final_energy_kwh: 4, resident_name: "Anna", power_logs: [log(1.2)] },
-  { id: 2, station_id: "CP1", rfid: "A", created: "2026-11-15T10:30:00", final_energy_kwh: 12, resident_name: "Bob", power_logs: [log(1.5), log(2.1)] },
-  { id: 1, station_id: "CP1", rfid: "B", created: "2026-10-02T09:00:00", final_energy_kwh: 0, resident_name: "Bob", power_logs: [] }, // failed start
+  { id: 3, station_id: "CP1", rfid: "A", created: "2026-11-20T09:00:00", final_energy_kwh: 4, resident_name: "Anna", total_cost: 1.2 },
+  { id: 2, station_id: "CP1", rfid: "A", created: "2026-11-15T10:30:00", final_energy_kwh: 12, resident_name: "Bob", total_cost: 1.5 + 2.1 },
+  { id: 1, station_id: "CP1", rfid: "B", created: "2026-10-02T09:00:00", final_energy_kwh: 0, resident_name: "Bob", total_cost: 0 }, // failed start
 ];
 
 const meter = (timestamp: string, extra: object = {}) =>

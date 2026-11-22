@@ -6,15 +6,29 @@ import { renderWithProviders } from "./test/render";
 
 // The chart needs a canvas, which jsdom does not have. The page passes it the hourly data, so show that.
 vi.mock("@ant-design/charts", () => ({
-  Column: ({ data }: { data: { hour: string; energy: number }[] }) => (
-    <div data-testid="hourly-chart">{data.filter((point) => point.energy > 0).map((point) => `${point.hour}=${point.energy}`).join(",")}</div>
+  Column: ({ data }: { data: { hour: string; year: string; energy: number }[] }) => (
+    <div data-testid="hourly-chart">
+      {data.filter((point) => point.energy > 0).map((point) => `${point.year} ${point.hour}=${point.energy}`).join(",")}
+    </div>
   ),
 }));
 
-const at = (month: number, day: number, hour: number, minute = 0) => new Date(2026, month - 1, day, hour, minute).toISOString();
-const log = (id: number, transaction: number, created: string, power_kw: number, energy_kwh: number) => ({
-  id, charge_transaction_id: transaction, created, power_kw, energy_kwh,
+const summary = (total_kwh: number, extra = {}) => ({
+  total_records: 3, total_hours: 1, total_kwh, max_power_kw: 9, avg_power_kw: 6.6667, ...extra,
 });
+const hours = (values: Record<number, number>) => Array.from({ length: 24 }, (_, hour) => values[hour] ?? 0);
+
+const analytics = {
+  current_year_summary: summary(7),
+  monthly_data: [
+    { year: 2026, month: 11, month_name: "November", ...summary(6) },
+    { year: 2026, month: 10, month_name: "October", ...summary(1) },
+  ],
+  hourly_by_year: [
+    { year: 2025, hourly_kwh: hours({ 22: 4.5 }) },
+    { year: 2026, hourly_kwh: hours({ 10: 2, 11: 4, 22: 1 }) },
+  ],
+};
 
 // The month cards repeat some titles; the summary tiles come first on the page.
 const tile = async (title: string) => (await screen.findAllByText(title, { selector: ".ant-statistic-title" }))[0].closest("div.ant-statistic") as HTMLElement;
@@ -28,14 +42,8 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("PowerLogs", () => {
-  it("summarizes the current year and each of the last twelve months", async () => {
-    mockFetch({
-      "GET /power-logs/": json([
-        log(1, 1, at(11, 20, 10, 0), 7, 2),
-        log(2, 1, at(11, 20, 11, 0), 9, 6),
-        log(3, 2, at(10, 5, 9, 0), 4, 1),
-      ]),
-    });
+  it("shows the summary of the current year and each of the last twelve months", async () => {
+    mockFetch({ "GET /power-logs/analytics": json(analytics) });
 
     renderWithProviders(<PowerLogs />);
 
@@ -48,18 +56,21 @@ describe("PowerLogs", () => {
     expect(screen.getByText("October 2026")).toBeInTheDocument();
   });
 
-  it("passes the power per hour of the day to the chart", async () => {
-    mockFetch({
-      "GET /power-logs/": json([log(1, 1, at(11, 20, 10, 0), 7, 2), log(2, 1, at(11, 20, 10, 30), 3, 3), log(3, 1, at(11, 20, 14, 0), 5, 4)]),
-    });
+  it("passes the kWh per hour of the day of every year to the chart", async () => {
+    mockFetch({ "GET /power-logs/analytics": json(analytics) });
 
     renderWithProviders(<PowerLogs />);
 
-    expect(await screen.findByTestId("hourly-chart")).toHaveTextContent("10:00=10,14:00=5");
+    expect(await screen.findByText("Hourly energy distribution (last 3 years)")).toBeInTheDocument();
+    expect(await screen.findByTestId("hourly-chart")).toHaveTextContent(
+      "2025 22:00=4.5,2026 10:00=2,2026 11:00=4,2026 22:00=1"
+    );
   });
 
   it("explains that there is no data yet", async () => {
-    mockFetch({ "GET /power-logs/": json([]) });
+    mockFetch({
+      "GET /power-logs/analytics": json({ current_year_summary: summary(0, { total_records: 0 }), monthly_data: [], hourly_by_year: [] }),
+    });
 
     renderWithProviders(<PowerLogs />);
 
@@ -67,7 +78,7 @@ describe("PowerLogs", () => {
   });
 
   it("tells the user when the logs cannot be loaded", async () => {
-    mockFetch({ "GET /power-logs/": json({}, 500) });
+    mockFetch({ "GET /power-logs/analytics": json({}, 500) });
 
     renderWithProviders(<PowerLogs />);
 

@@ -5,19 +5,27 @@
 # Usage: bash infra/deploy-hetzner.sh [--yes]
 #
 # What a run does:
-#   1. Makes sure the floating IP exists (created only once, reused afterwards)
-#      and that the DNS A record of the domain points to it. If not, it stops
-#      here and tells you which record to create. Nothing is deleted yet.
-#   2. Backs up the database and the Let's Encrypt state from the VM that holds
-#      the floating IP. Without such a VM the newest local backup in backups/
-#      is used instead.
-#   3. Shuts down and deletes the old VMs (after you confirm, or with --yes).
-#      This only happens after the backup is downloaded and verified.
-#   4. Creates a new VM, imports the database and installs the whole server on
-#      it (infra/install-server.sh): the cloud API and the station controller as
-#      systemd services, both UIs, Flyway, a firewall, and Apache as reverse
-#      proxy. Then it moves the floating IP to the VM and sets up a Let's
-#      Encrypt certificate for the domain.
+#   1. Checks. Makes sure the floating IP exists (created only once, reused
+#      afterwards) and that the DNS A record of the domain points to it. If not,
+#      it stops here and tells you which record to create. Asks to confirm the
+#      plan (or --yes). Nothing has been changed yet.
+#   2. New VM. Creates it and installs the whole server on it while the old VM
+#      keeps serving (infra/install-server.sh install): the cloud API and the
+#      station controller as systemd services, both UIs, Flyway, a firewall and
+#      Apache. The services do not start yet, there is no database.
+#   3. Take over. Stops the services on the VM that holds the floating IP, so
+#      nothing is written anymore, downloads and verifies a backup of the
+#      database and the Let's Encrypt state, and shuts the old VMs down. Without
+#      such a VM the newest local backup in backups/ is used instead.
+#      The service is down from here until step 4 has moved the floating IP.
+#   4. Finalize. Imports the backup on the new VM, starts the services, moves
+#      the floating IP to it, sets up HTTPS for the domain and checks the whole
+#      application. Only when every check passes are the old VMs deleted;
+#      otherwise they stay, powered off, so you can go back.
+#
+# When something fails before the floating IP has moved, the old VM is brought
+# back (its services started again, or the VM powered on), so the service keeps
+# running on it. The new VM is left for inspection; the next run deletes it.
 #
 # The code that is deployed is this working tree, not what is on GitHub. The
 # configuration comes from infra/configuration.ini plus the secrets below.
@@ -101,7 +109,12 @@ OLD_COUNT=0
 OLD_ACTIVE_ID=""
 OLD_ACTIVE_NAME=""
 OLD_ACTIVE_IP=""
-OLD_RETIRED=0
+# Progress of the take-over, so a failure can bring the old VM back.
+OLD_STOPPED=0
+OLD_SHUT_DOWN=0
+FIP_MOVED=0
+DOWNTIME_START=""
+VERIFY_FAILED=0
 
 log() {
     echo "==> $*"
@@ -112,28 +125,50 @@ die() {
     exit 1
 }
 
+# After a failure: while the floating IP still points to the old VM, it can
+# simply take over again. Every step may fail itself, so none of them stops
+# the cleanup.
+bring_back_old_vm() {
+    [ -n "$OLD_ACTIVE_ID" ] || return 0
+    echo >&2
+    if [ "$FIP_MOVED" = 1 ]; then
+        echo "The floating IP already points to the new VM $SERVER_NAME. The old VM $OLD_ACTIVE_NAME is" >&2
+        echo "powered off but kept. To go back: power it on and assign the floating IP to it in the Hetzner console." >&2
+    elif [ "$OLD_SHUT_DOWN" = 1 ]; then
+        echo "Powering the old VM $OLD_ACTIVE_NAME on again, it still holds the floating IP." >&2
+        if hcloud_api POST "/servers/$OLD_ACTIVE_ID/actions/poweron" "{}" >/dev/null; then
+            echo "  Its services start on boot, the old deployment is back in a minute." >&2
+        else
+            echo "WARNING: could not power it on. Do it in the Hetzner console." >&2
+        fi
+    elif [ "$OLD_STOPPED" = 1 ]; then
+        echo "Starting the services on the old VM $OLD_ACTIVE_NAME again." >&2
+        if ! SSH_TARGET="$OLD_ACTIVE_IP" ssh_vm "sudo systemctl start cloud-api.service && sudo systemctl start ocpp.service"; then
+            echo "WARNING: could not start them. Run 'sudo systemctl start cloud-api ocpp' on $OLD_ACTIVE_IP." >&2
+        fi
+    fi
+}
+
 cleanup() {
     local code=$?
+    set +e
+    if [ "$code" -ne 0 ]; then
+        bring_back_old_vm
+        if [ -n "$LATEST_BACKUP" ] && [ "$OLD_STOPPED" = 1 ]; then
+            echo "The newest backup is $LATEST_BACKUP" >&2
+        fi
+        if [ -n "$SERVER_ID" ]; then
+            echo >&2
+            echo "The deployment did not finish. VM '$SERVER_NAME' (id $SERVER_ID) was created and is left for inspection." >&2
+            echo "Fix the problem and run the script again: it deletes that VM, or delete it in the Hetzner console." >&2
+        fi
+    fi
     if [ -n "$KNOWN_HOSTS" ]; then
         rm -f "$KNOWN_HOSTS"
     fi
     # Holds the rendered configuration with the secrets in it.
     if [ -n "$WORK_DIR" ]; then
         rm -rf "$WORK_DIR"
-    fi
-    if [ "$code" -ne 0 ] && [ "$OLD_RETIRED" = 1 ]; then
-        echo >&2
-        echo "The old VM was already deleted. Your data is safe in:" >&2
-        echo "  $LATEST_BACKUP" >&2
-        if [ -n "$LE_ARCHIVE" ]; then
-            echo "  $LE_ARCHIVE" >&2
-        fi
-        echo "Fix the problem and run the script again, it will use the newest backup." >&2
-    fi
-    if [ "$code" -ne 0 ] && [ -n "$SERVER_ID" ]; then
-        echo >&2
-        echo "The deployment did not finish, but VM '$SERVER_NAME' (id $SERVER_ID) was created." >&2
-        echo "Inspect it, or delete it in the Hetzner console. The floating IP may already point to it." >&2
     fi
 }
 
@@ -475,13 +510,15 @@ confirm_plan() {
     fi
     echo
     echo "About to replace the current deployment:"
+    echo "  - create a new VM and install the server on it, while the old one keeps running"
     if [ -n "$OLD_ACTIVE_ID" ]; then
-        echo "  - back up the database and certificates from $OLD_ACTIVE_NAME ($OLD_ACTIVE_IP)"
+        echo "  - stop the services on $OLD_ACTIVE_NAME ($OLD_ACTIVE_IP) and back up its database and certificates"
     else
         echo "  - no VM holds the floating IP, so the local backup $(basename "$LATEST_BACKUP") is used"
     fi
-    echo "  - shut down and DELETE: $(jq -r '[.[].name] | join(", ")' <<<"$OLD_SERVERS_JSON")"
-    echo "  - create a new VM and set up HTTPS for $DOMAIN"
+    echo "  - shut down: $(jq -r '[.[].name] | join(", ")' <<<"$OLD_SERVERS_JSON")"
+    echo "  - import the backup, move the floating IP and set up HTTPS for $DOMAIN"
+    echo "  - when every check passes, DELETE the old VMs"
     echo
     if [ "$ASSUME_YES" = 1 ]; then
         return 0
@@ -496,9 +533,20 @@ ssh_vm() {
     ssh "${SSH_OPTS[@]}" -T "$SSH_USER@${SSH_TARGET:-$SERVER_IP}" "$@"
 }
 
+# Stops the services on the VM that holds the floating IP, so the backup has
+# every charge and nothing is written after it. The station controller goes
+# first, it writes the meter values.
+stop_old_services() {
+    log "Stopping the services on $OLD_ACTIVE_NAME, the service is down from now on"
+    DOWNTIME_START=$SECONDS
+    OLD_STOPPED=1
+    SSH_TARGET="$OLD_ACTIVE_IP" ssh_vm "sudo systemctl stop ocpp.service && sudo systemctl stop cloud-api.service" \
+        || die "could not stop the services on $OLD_ACTIVE_NAME"
+}
+
 # Downloads a verified database snapshot (and the Let's Encrypt state) from the
-# VM that holds the floating IP. Sets LATEST_BACKUP and LE_ARCHIVE. Nothing has
-# been deleted at this point, so any failure here leaves everything as it was.
+# VM that holds the floating IP. Sets LATEST_BACKUP and LE_ARCHIVE. A failure
+# here starts the services on the old VM again (see cleanup).
 backup_old_vm() {
     local ip="$OLD_ACTIVE_IP" stamp db_file remote_sha
     stamp="$(date +%Y%m%d-%H%M%S)"
@@ -534,9 +582,9 @@ if status != "ok":
 PY
 sha256sum "$DST" | awk '{print $1}'
 REMOTE
-)" || die "could not back up the database from $OLD_ACTIVE_NAME; nothing was deleted"
+)" || die "could not back up the database from $OLD_ACTIVE_NAME"
     scp "${SSH_OPTS[@]}" "$SSH_USER@$ip:/tmp/cloud-backup.db" "$db_file"
-    [ "$(sha256_of "$db_file")" = "$remote_sha" ] || die "checksum mismatch on the downloaded backup; nothing was deleted"
+    [ "$(sha256_of "$db_file")" = "$remote_sha" ] || die "checksum mismatch on the downloaded backup"
     SSH_TARGET="$ip" ssh_vm "rm -f /tmp/cloud-backup.db"
     LATEST_BACKUP="$db_file"
     log "Database backup saved to $db_file"
@@ -568,23 +616,30 @@ wait_until_off() {
     done
 }
 
-# Shuts down and deletes every old VM. Deleting a VM also frees its floating IP.
-retire_old_vms() {
+# Shuts every old VM down. They are kept until the new VM has passed its checks.
+shutdown_old_vms() {
     local id name status
     while IFS=$'\t' read -r id name status; do
-        if [ "$status" = "running" ]; then
-            log "Shutting down $name"
-            hcloud_api POST "/servers/$id/actions/shutdown" "{}" >/dev/null
-            if ! wait_until_off "$id"; then
-                log "Graceful shutdown timed out, powering $name off"
-                hcloud_api POST "/servers/$id/actions/poweroff" "{}" >/dev/null
-                wait_until_off "$id" || die "$name did not power off; it was not deleted"
-            fi
+        [ "$status" = "running" ] || continue
+        log "Shutting down $name"
+        if [ "$id" = "$OLD_ACTIVE_ID" ]; then
+            OLD_SHUT_DOWN=1
         fi
+        hcloud_api POST "/servers/$id/actions/shutdown" "{}" >/dev/null
+        if ! wait_until_off "$id"; then
+            log "Graceful shutdown timed out, powering $name off"
+            hcloud_api POST "/servers/$id/actions/poweroff" "{}" >/dev/null
+            wait_until_off "$id" || die "$name did not power off"
+        fi
+    done < <(jq -r '.[] | [.id, .name, .status] | @tsv' <<<"$OLD_SERVERS_JSON")
+}
+
+delete_old_vms() {
+    local id name
+    while IFS=$'\t' read -r id name; do
         log "Deleting $name (id $id)"
         hcloud_api DELETE "/servers/$id" >/dev/null
-        OLD_RETIRED=1
-    done < <(jq -r '.[] | [.id, .name, .status] | @tsv' <<<"$OLD_SERVERS_JSON")
+    done < <(jq -r '.[] | [.id, .name] | @tsv' <<<"$OLD_SERVERS_JSON")
 }
 
 user_data() {
@@ -714,22 +769,29 @@ echo "  imported"
 REMOTE
 }
 
-# Uploads the application and runs infra/install-server.sh on the VM. The
-# services start with the imported database, before the floating IP moves.
-deploy_application() {
+# Uploads the application and installs everything that does not need the
+# database (infra/install-server.sh install). The old VM is still serving.
+install_application() {
     log "Uploading the application"
     scp "${SSH_OPTS[@]}" "$BUNDLE_FILE" "$SSH_USER@$SERVER_IP:/tmp/ocpp-server.tar.gz"
     scp "${SSH_OPTS[@]}" "$CONFIG_FILE" "$SSH_USER@$SERVER_IP:/tmp/configuration.ini"
     ssh_vm "mkdir -p /home/$SSH_USER && tar -xzf /tmp/ocpp-server.tar.gz -C /home/$SSH_USER && rm -f /tmp/ocpp-server.tar.gz"
 
     log "Installing the server on the VM (Python environment, Flyway, UIs, services), this takes a few minutes"
-    ssh_vm "FLYWAY_VERSION='$FLYWAY_VERSION' NODE_VERSION='$NODE_VERSION' PYTHON_VERSION='$PYTHON_VERSION' bash /home/$SSH_USER/ocpp-server/infra/install-server.sh"
+    ssh_vm "FLYWAY_VERSION='$FLYWAY_VERSION' NODE_VERSION='$NODE_VERSION' PYTHON_VERSION='$PYTHON_VERSION' bash /home/$SSH_USER/ocpp-server/infra/install-server.sh install"
+}
+
+# Starts the services on the imported database, before the floating IP moves.
+start_application() {
+    log "Starting the services on the VM"
+    ssh_vm "bash /home/$SSH_USER/ocpp-server/infra/install-server.sh start"
 }
 
 assign_floating_ip() {
     log "Assigning floating IP $FIP_IP to $SERVER_NAME"
     hcloud_api POST "/floating_ips/$FIP_ID/actions/assign" \
         "$(jq -n --argjson server "$SERVER_ID" '{server: $server}')" >/dev/null
+    FIP_MOVED=1
 
     local deadline=$((SECONDS + 120)) response assigned
     while true; do
@@ -767,35 +829,18 @@ echo "  $FIP active on $IFACE"
 REMOTE
 }
 
-# Apache with a named virtual host, then a Let's Encrypt certificate for it.
-# Runs after the floating IP is on the VM, because validation connects to it.
-# A restored certificate is reused instead of requesting a new one.
-setup_web_and_ssl() {
-    local restore=0
-    if [ -n "$LE_ARCHIVE" ]; then
-        restore=1
-        log "Uploading the saved Let's Encrypt state $(basename "$LE_ARCHIVE")"
-        scp "${SSH_OPTS[@]}" "$LE_ARCHIVE" "$SSH_USER@$SERVER_IP:/tmp/letsencrypt.tar.gz"
-    fi
-
-    log "Setting up Apache and Let's Encrypt for $DOMAIN"
-    ssh_vm bash -s -- "$DOMAIN" "$LE_EMAIL" "$LE_STAGING" "$restore" <<'REMOTE'
+# Apache with the modules and a named virtual host on port 80. Needs neither
+# the database nor the domain, so it is done while the old VM still serves.
+prepare_web() {
+    log "Setting up Apache for $DOMAIN (HTTP only, HTTPS follows after the switch)"
+    ssh_vm bash -s -- "$DOMAIN" <<'REMOTE'
 set -euo pipefail
 DOMAIN="$1"
-EMAIL="$2"
-STAGING="$3"
-RESTORE="$4"
 
 sudo a2enmod proxy proxy_http proxy_wstunnel ssl headers rewrite >/dev/null
 # Silences "could not determine the server's fully qualified domain name".
 printf 'ServerName %s\n' "$DOMAIN" | sudo tee /etc/apache2/conf-available/ocpp-servername.conf >/dev/null
 sudo a2enconf ocpp-servername >/dev/null
-
-if [ "$RESTORE" = 1 ]; then
-    sudo tar -xzpf /tmp/letsencrypt.tar.gz -C /
-    sudo rm -f /tmp/letsencrypt.tar.gz
-    echo "  restored /etc/letsencrypt"
-fi
 
 sudo tee "/etc/apache2/sites-available/$DOMAIN.conf" >/dev/null <<EOF
 <VirtualHost *:80>
@@ -806,6 +851,34 @@ EOF
 sudo a2dissite 000-default >/dev/null || true
 sudo a2ensite "$DOMAIN" >/dev/null
 sudo systemctl restart apache2
+echo "  Apache ready"
+REMOTE
+}
+
+# The Let's Encrypt certificate and the HTTPS virtual host of the application.
+# Runs after the floating IP is on the VM, because validation connects to it.
+# A restored certificate is reused instead of requesting a new one.
+setup_ssl() {
+    local restore=0
+    if [ -n "$LE_ARCHIVE" ]; then
+        restore=1
+        log "Uploading the saved Let's Encrypt state $(basename "$LE_ARCHIVE")"
+        scp "${SSH_OPTS[@]}" "$LE_ARCHIVE" "$SSH_USER@$SERVER_IP:/tmp/letsencrypt.tar.gz"
+    fi
+
+    log "Setting up Let's Encrypt and HTTPS for $DOMAIN"
+    ssh_vm bash -s -- "$DOMAIN" "$LE_EMAIL" "$LE_STAGING" "$restore" <<'REMOTE'
+set -euo pipefail
+DOMAIN="$1"
+EMAIL="$2"
+STAGING="$3"
+RESTORE="$4"
+
+if [ "$RESTORE" = 1 ]; then
+    sudo tar -xzpf /tmp/letsencrypt.tar.gz -C /
+    sudo rm -f /tmp/letsencrypt.tar.gz
+    echo "  restored /etc/letsencrypt"
+fi
 
 CERTBOT_ARGS=(--apache --non-interactive --agree-tos --email "$EMAIL" -d "$DOMAIN" --redirect)
 if [ "$STAGING" = 1 ]; then
@@ -846,6 +919,12 @@ fi
 REMOTE
 }
 
+# A failed check keeps the old VMs (powered off) instead of deleting them.
+check_failed() {
+    echo "WARNING: $*" >&2
+    VERIFY_FAILED=1
+}
+
 verify_floating_ip() {
     log "Checking SSH through the floating IP"
     local _
@@ -855,7 +934,7 @@ verify_floating_ip() {
         fi
         sleep 10
     done
-    echo "WARNING: could not reach the VM through $FIP_IP yet. Check again in a minute." >&2
+    check_failed "could not reach the VM through $FIP_IP yet. Check again in a minute."
 }
 
 verify_https() {
@@ -873,7 +952,7 @@ verify_https() {
         fi
         sleep 5
     done
-    echo "WARNING: https://$DOMAIN did not answer with HTTP 200 (got: ${code:-no response})" >&2
+    check_failed "https://$DOMAIN did not answer with HTTP 200 (got: ${code:-no response})"
 }
 
 # Checks every part of the application through Apache, the way a browser or a
@@ -891,7 +970,7 @@ verify_application() {
         if [ "$code" = "200" ]; then
             echo "  $path ok"
         else
-            echo "WARNING: https://$DOMAIN$path answered HTTP ${code:-none}" >&2
+            check_failed "https://$DOMAIN$path answered HTTP ${code:-none}"
         fi
     done
 
@@ -906,12 +985,30 @@ verify_application() {
     if [[ "$status" == HTTP/1.1\ 101* ]]; then
         echo "  /ws (station controller) ok"
     else
-        echo "WARNING: the WebSocket handshake on /ws did not succeed (got: ${status:-no response})" >&2
+        check_failed "the WebSocket handshake on /ws did not succeed (got: ${status:-no response})"
     fi
 
     if ! ssh_vm "systemctl is-active --quiet cloud-api ocpp"; then
-        echo "WARNING: cloud-api or ocpp is not active on the VM" >&2
+        check_failed "cloud-api or ocpp is not active on the VM"
     fi
+}
+
+# Deletes the old VMs, but only when the new one passed every check.
+finish_old_vms() {
+    if [ "$OLD_COUNT" -eq 0 ]; then
+        return
+    fi
+    if [ "$VERIFY_FAILED" = 0 ]; then
+        delete_old_vms
+        return
+    fi
+    echo >&2
+    echo "Not every check passed, so the old VMs are kept, powered off:" >&2
+    echo "  $(jq -r '[.[].name] | join(", ")' <<<"$OLD_SERVERS_JSON")" >&2
+    if [ -n "$OLD_ACTIVE_ID" ]; then
+        echo "To go back: power on $OLD_ACTIVE_NAME and assign the floating IP to it in the Hetzner console." >&2
+    fi
+    echo "When the new VM works, delete them in the Hetzner console." >&2
 }
 
 main() {
@@ -951,6 +1048,7 @@ main() {
         -o ServerAliveInterval=30 -o ServerAliveCountMax=20
         -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$KNOWN_HOSTS")
 
+    # 1. Checks, nothing is changed yet.
     ensure_ssh_key
     ensure_floating_ip
     check_dns
@@ -961,27 +1059,42 @@ main() {
     fi
     confirm_plan
 
-    if [ -n "$OLD_ACTIVE_ID" ]; then
-        backup_old_vm
-    fi
-    if [ "$OLD_COUNT" -gt 0 ]; then
-        retire_old_vms
-    fi
-
+    # 2. The new VM with the software, while the old one keeps serving.
     create_server
     wait_for_server
     wait_for_ssh
+    install_application
+    prepare_web
+
+    # 3. Take over: the newest data from the old VM, then shut it down.
+    if [ -n "$OLD_ACTIVE_ID" ]; then
+        stop_old_services
+        backup_old_vm
+    fi
+    if [ "$OLD_COUNT" -gt 0 ]; then
+        shutdown_old_vms
+    fi
+
+    # 4. Finalize the new VM, then delete the old ones.
     import_backup
-    deploy_application
+    start_application
     assign_floating_ip
     configure_floating_ip_on_vm
-    setup_web_and_ssl
+    setup_ssl
     verify_floating_ip
     verify_https
     verify_application
+    finish_old_vms
 
     echo
-    echo "Done."
+    if [ "$VERIFY_FAILED" = 0 ]; then
+        echo "Done."
+    else
+        echo "Done, but not every check passed (see the warnings above)."
+    fi
+    if [ -n "$DOWNTIME_START" ]; then
+        echo "  Downtime:    about $((SECONDS - DOWNTIME_START)) seconds (from stopping the old services to the end of the checks)"
+    fi
     echo "  VM:          $SERVER_NAME (id $SERVER_ID, $SERVER_IP)"
     echo "  Floating IP: $FIP_IP ($FIP_LOCATION)"
     echo "  Website:     https://$DOMAIN"

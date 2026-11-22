@@ -10,11 +10,8 @@ export interface ChargeTransaction {
   final_energy_kwh: number;
   resident_name: string;
   card_name?: string | null;
-  power_logs?: Array<{
-    id: number;
-    delta_power_cost?: number;
-    kwh_rate?: number;
-  }>;
+  /** What the energy of the charge costs, at the price of the moment of each power log. */
+  total_cost: number;
 }
 
 export interface MonthlyData {

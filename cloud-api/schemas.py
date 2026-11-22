@@ -52,6 +52,27 @@ class PowerLogResponse(PowerLogBase):
     class Config:
         from_attributes = True
 
+class PowerLogPeriodSummary(BaseModel):
+    total_records: int
+    total_hours: float
+    total_kwh: float
+    max_power_kw: float
+    avg_power_kw: float
+
+class PowerLogMonthSummary(PowerLogPeriodSummary):
+    year: int
+    month: int  # 1 is January
+    month_name: str
+
+class PowerLogHourlyYear(BaseModel):
+    year: int
+    hourly_kwh: List[float]  # 24 values: the energy charged in each hour of the day (local time)
+
+class PowerLogAnalyticsResponse(BaseModel):
+    current_year_summary: PowerLogPeriodSummary
+    monthly_data: List[PowerLogMonthSummary]  # the last twelve months, newest first
+    hourly_by_year: List[PowerLogHourlyYear]  # the last three years with logs, oldest first
+
 class ChargeTransactionBase(BaseModel):
     station_id: str
     rfid: str

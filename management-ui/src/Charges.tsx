@@ -51,10 +51,7 @@ const Charges: React.FC = () => {
       const monthKey = `${year}-${month.toString().padStart(2, '0')}-${transaction.resident_name}`;
       const yearKey = `${year}-${transaction.resident_name}`;
       
-      // Calculate transaction cost
-      const transactionCost = transaction.power_logs?.reduce((sum, log) => {
-        return sum + (log.delta_power_cost || 0);
-      }, 0) || 0;
+      const transactionCost = transaction.total_cost || 0;
 
       // Monthly grouping
       if (!monthlyGroups.has(monthKey)) {

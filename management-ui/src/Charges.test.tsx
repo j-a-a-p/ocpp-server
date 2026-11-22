@@ -11,7 +11,7 @@ vi.mock("./utils/yearlyReportPdf", () => ({ downloadYearlyReportPdf: vi.fn() }))
 
 const charge = (id: number, resident_name: string, created: string, final_energy_kwh: number, costs: number[] = []) => ({
   id, station_id: "CP1", rfid: "04AABBCC", created, final_energy_kwh, resident_name,
-  power_logs: costs.map((delta_power_cost, index) => ({ id: id * 10 + index, delta_power_cost, kwh_rate: 0.3 })),
+  total_cost: costs.reduce((sum, cost) => sum + cost, 0),
 });
 
 // Mid-month dates, so the month is the same in every timezone.

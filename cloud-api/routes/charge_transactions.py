@@ -1,14 +1,23 @@
+from collections import defaultdict
 from fastapi import APIRouter, HTTPException, Security, Depends
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, selectinload
 from typing import List
 from schemas import ChargeTransactionResponse
-from models import ChargeTransaction, Card, Resident
+from models import ChargeTransaction, Card, PowerLog, Resident
 from dependencies import get_db_dependency, get_authenticated_active_resident
 from security import verify_api_key
 
-from crud import calculate_power_log_costs
+from crud import ChargingCostLookup, calculate_power_log_costs, total_power_log_cost
 
 router = APIRouter(prefix="/charge-transactions", tags=["charge-transactions"])
+
+
+def _add_costs(db: Session, transactions: list) -> None:
+    prices = ChargingCostLookup(db)
+    for transaction in transactions:
+        if transaction.power_logs:
+            calculate_power_log_costs(db, transaction.power_logs, prices)
+
 
 @router.get("/", response_model=List[ChargeTransactionResponse])
 def get_all_transactions(
@@ -23,7 +32,8 @@ def get_all_transactions(
     """
     transactions = (
         db.query(ChargeTransaction)
-        .options(joinedload(ChargeTransaction.power_logs))
+        .options(selectinload(ChargeTransaction.power_logs))
+        .order_by(ChargeTransaction.id)
         .offset(skip)
         .limit(limit)
         .all()
@@ -60,16 +70,14 @@ def get_transactions_by_resident(
     transactions = (
         db.query(ChargeTransaction)
         .filter(ChargeTransaction.rfid.in_(rfid_list))
-        .options(joinedload(ChargeTransaction.power_logs))
+        .options(selectinload(ChargeTransaction.power_logs))
+        .order_by(ChargeTransaction.id)
         .offset(skip)
         .limit(limit)
         .all()
     )
     
-    # Calculate costs for power logs
-    for transaction in transactions:
-        if transaction.power_logs:
-            calculate_power_log_costs(db, transaction.power_logs)
+    _add_costs(db, transactions)
     
     return transactions
 
@@ -89,28 +97,22 @@ def get_my_transactions(
     if not resident_cards:
         return []
     
-    # Get RFID values for all cards of this resident
-    rfid_list = [card.rfid for card in resident_cards]
+    card_names = {card.rfid: card.name for card in resident_cards}
     
     # Get transactions for all cards of this resident, ordered by ID desc
     transactions = (
         db.query(ChargeTransaction)
-        .filter(ChargeTransaction.rfid.in_(rfid_list))
-        .options(joinedload(ChargeTransaction.power_logs))
+        .filter(ChargeTransaction.rfid.in_(list(card_names)))
+        .options(selectinload(ChargeTransaction.power_logs))
         .order_by(ChargeTransaction.id.desc())
         .offset(skip)
         .limit(limit)
         .all()
     )
     
-    # Calculate costs for power logs and add card names
+    _add_costs(db, transactions)
     for transaction in transactions:
-        if transaction.power_logs:
-            calculate_power_log_costs(db, transaction.power_logs)
-        
-        card = db.query(Card).filter(Card.rfid == transaction.rfid).first()
-        if card:
-            transaction.card_name = card.name
+        transaction.card_name = card_names.get(transaction.rfid)
     
     return transactions 
 
@@ -120,37 +122,28 @@ def get_all_charge_transactions(
     _: Resident = Depends(get_authenticated_active_resident)
 ):
     """
-    Get all charge transactions with resident information and power logs for cost calculation.
+    Get all charge transactions with the resident, the card and the cost of each charge.
     Requires cookie-based authentication for management access.
     """
-    # Get all charge transactions with power logs and resident information
-    transactions = (
-        db.query(ChargeTransaction)
-        .options(joinedload(ChargeTransaction.power_logs))
+    rows = (
+        db.query(ChargeTransaction, Card.name, Resident.full_name)
         .join(Card, ChargeTransaction.rfid == Card.rfid)
         .join(Resident, Card.resident_id == Resident.id)
         .order_by(ChargeTransaction.created.desc())
         .all()
     )
-    
-    # Calculate costs for power logs and convert to dictionary format
+
+    # Only the columns the cost needs, as plain rows: far cheaper than loading every log as an object.
+    logs_by_transaction = defaultdict(list)
+    for log in db.query(PowerLog.id, PowerLog.charge_transaction_id, PowerLog.created, PowerLog.energy_kwh):
+        logs_by_transaction[log.charge_transaction_id].append(log)
+
+    prices = ChargingCostLookup(db)
     result = []
-    for transaction in transactions:
-        # Calculate costs for power logs
-        if transaction.power_logs:
-            calculate_power_log_costs(db, transaction.power_logs)
-        
-        # Get resident name
-        resident_name = None
-        card = db.query(Card).filter(Card.rfid == transaction.rfid).first()
-        card_name = card.name if card else None
+    for transaction, card_name, resident_name in rows:
+        logs = logs_by_transaction.get(transaction.id, [])
         # The moment of the last measurement: when the charge ended.
-        ended = max((log.created for log in transaction.power_logs if log.created), default=None)
-        if card:
-            resident = db.query(Resident).filter(Resident.id == card.resident_id).first()
-            if resident:
-                resident_name = resident.full_name
-        
+        ended = max((log.created for log in logs if log.created), default=None)
         result.append({
             "id": transaction.id,
             "station_id": transaction.station_id,
@@ -160,15 +153,7 @@ def get_all_charge_transactions(
             "final_energy_kwh": float(transaction.final_energy_kwh) if transaction.final_energy_kwh else 0,
             "resident_name": resident_name,
             "card_name": card_name,
-            "power_logs": [
-                {
-                    "id": log.id,
-                    "energy_kwh": float(log.energy_kwh) if log.energy_kwh is not None else 0,
-                    "delta_power_cost": float(log.delta_power_cost) if hasattr(log, 'delta_power_cost') and log.delta_power_cost is not None else 0,
-                    "kwh_rate": float(log.kwh_rate) if hasattr(log, 'kwh_rate') and log.kwh_rate is not None else 0
-                }
-                for log in (transaction.power_logs or [])
-            ]
+            "total_cost": total_power_log_cost(logs, prices),
         })
     
     return result 

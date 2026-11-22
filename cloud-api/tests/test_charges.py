@@ -72,7 +72,18 @@ class TestAllTransactionsForManagement:
         assert [charge["resident_name"] for charge in charges] == ["Other Person", "Me Myself"]
         assert charges[0]["created"] == "2026-11-02T10:00:00"
         assert charges[0]["final_energy_kwh"] == 4.0
-        assert [round(log["delta_power_cost"], 4) for log in charges[0]["power_logs"]] == [0.30, 0.90]
+        # 1 kWh for the first log and 3 kWh more for the second, at 0.30.
+        assert round(charges[0]["total_cost"], 4) == 1.20
+        assert "power_logs" not in charges[0]
+
+    def test_the_cost_follows_the_tariff_and_ignores_a_meter_that_goes_backwards(self, user, me, make_card, make_transaction):
+        # 20:50 and 20:55 Dutch time are normaal, 21:10 and 21:20 are dal. The drop from 4.0 to 3.5 costs nothing.
+        evening = datetime(2026, 11, 2, 19, 50)
+        make_transaction(make_card(me), [(0, 7.0, 2.0), (5, 7.0, 4.0), (20, 7.0, 3.5), (30, 7.0, 4.5)], started=evening)
+
+        charge = user.get("/charge-transactions/all").json()[0]
+
+        assert round(charge["total_cost"], 4) == round(2.0 * DEFAULT_PRICE + 2.0 * DEFAULT_PRICE + 1.0 * DAL_PRICE, 4)
 
     def test_a_charge_has_the_name_of_the_card_and_the_moment_of_its_last_measurement(
         self, user, me, make_card, make_transaction
@@ -92,7 +103,9 @@ class TestAllTransactionsForManagement:
     def test_a_charge_that_is_still_running_has_zero_energy(self, user, me, make_card, make_transaction):
         make_transaction(make_card(me), logs=[])
 
-        assert user.get("/charge-transactions/all").json()[0]["final_energy_kwh"] == 0
+        charge = user.get("/charge-transactions/all").json()[0]
+
+        assert (charge["final_energy_kwh"], charge["total_cost"]) == (0, 0)
 
 
 class TestApiKeyEndpoints:

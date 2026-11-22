@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { App, Card, Col, Empty, Flex, Row, Spin, Statistic, theme, Typography } from "antd";
 import { Column } from "@ant-design/charts";
-import { getPowerLogs, PowerLog } from "./services/powerLogService";
+import { getPowerLogAnalytics, PowerLogAnalytics } from "./services/powerLogService";
 import { ThunderboltOutlined, ClockCircleOutlined, FireOutlined, DashboardOutlined } from "@ant-design/icons";
 import StatTile from "./components/StatTile";
 import { useThemeMode } from "./theme/themeContext";
-import { calculateAnalytics } from "./utils/powerLogAnalytics";
 import { formatKwh, formatNumber } from "./utils/format";
 
 const { Title } = Typography;
@@ -17,20 +16,18 @@ const PowerLogs: React.FC = () => {
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const { isDark } = useThemeMode();
-  const [powerLogs, setPowerLogs] = useState<PowerLog[]>([]);
+  const [analytics, setAnalytics] = useState<PowerLogAnalytics | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
-    getPowerLogs(0, 10000)
-      .then(setPowerLogs)
+    getPowerLogAnalytics()
+      .then(setAnalytics)
       .catch((error) => {
         console.error("Failed to load PowerLog data:", error);
         message.error("Failed to load PowerLog data.");
       })
       .finally(() => setLoading(false));
   }, [message]);
-
-  const analytics = useMemo(() => (powerLogs.length > 0 ? calculateAnalytics(powerLogs) : null), [powerLogs]);
 
   if (loading) {
     return (
@@ -40,7 +37,7 @@ const PowerLogs: React.FC = () => {
     );
   }
 
-  if (!analytics) {
+  if (!analytics || analytics.hourly_by_year.length === 0) {
     return (
       <Card>
         <Empty description="No power log data yet" />
@@ -49,10 +46,10 @@ const PowerLogs: React.FC = () => {
   }
 
   const summary = analytics.current_year_summary;
-  const hourlyData = analytics.hourly_distribution.map((value, hour) => ({
-    hour: `${String(hour).padStart(2, "0")}:00`,
-    energy: value,
-  }));
+  // A string year, so the chart treats the years as separate series and not as a number scale.
+  const hourlyData = analytics.hourly_by_year.flatMap(({ year, hourly_kwh }) =>
+    hourly_kwh.map((energy, hour) => ({ hour: `${String(hour).padStart(2, "0")}:00`, year: String(year), energy }))
+  );
 
   return (
     <Flex vertical gap={16}>
@@ -95,20 +92,22 @@ const PowerLogs: React.FC = () => {
         </Col>
       </Row>
 
-      <Card title="Hourly power distribution (last 12 months)">
+      <Card title="Hourly energy distribution (last 3 years)">
         <Column
           data={hourlyData}
           xField="hour"
           yField="energy"
+          colorField="year"
+          group
           height={300}
           autoFit
           theme={isDark ? "classicDark" : "classic"}
-          style={{ fill: token.colorPrimary, radiusTopLeft: 4, radiusTopRight: 4 }}
+          style={{ radiusTopLeft: 4, radiusTopRight: 4 }}
           axis={{
             x: { title: false, labelAutoHide: true },
-            y: { title: "kW", labelFormatter: (value: number) => formatNumber(value, 0) },
+            y: { title: "kWh", labelFormatter: (value: number) => formatNumber(value, 0) },
           }}
-          tooltip={{ items: [{ channel: "y", name: "Power", valueFormatter: (value: number) => `${formatNumber(value, 1)} kW` }] }}
+          tooltip={{ items: [(datum: { year: string; energy: number }) => ({ name: datum.year, value: formatKwh(datum.energy, 1) })] }}
         />
       </Card>
 

@@ -8,6 +8,14 @@
 # infra/deploy-hetzner.sh uploads the repository and the rendered configuration to
 # /tmp/configuration.ini, then runs this script. Safe to run again.
 #
+# Usage: bash install-server.sh [install|start|all]
+#   install  everything that does not need the database: firewall, configuration,
+#            Flyway, Python, both UIs and the systemd service files. The services
+#            are not started, so this can run before the database is imported.
+#   start    the database is in place: enable and start the services (the cloud
+#            API runs the Flyway migrations when it starts).
+#   all      both, the default.
+#
 # Apache's HTTPS virtual host is not set up here, it needs the Let's Encrypt
 # certificate, which deploy-hetzner.sh requests once the domain points to this machine.
 #
@@ -38,10 +46,14 @@ die() {
     exit 1
 }
 
-check_prerequisites() {
+check_install_prerequisites() {
     [ "$(uname -m)" = "x86_64" ] || die "only x86_64 machines are supported (Flyway download)"
     [ -d "$REPO_DIR/cloud-api" ] || die "$REPO_DIR is missing, upload the repository first"
     [ -f "$CONFIG_SRC" ] || die "$CONFIG_SRC is missing, the deploy script has to render it"
+}
+
+check_start_prerequisites() {
+    [ -f /etc/systemd/system/cloud-api.service ] || die "the services are not installed, run '$0 install' first"
     # Without this Flyway would silently create an empty database.
     [ -f "$DATA_DIR/cloud.db" ] || die "$DATA_DIR/cloud.db is missing, import a backup first"
 }
@@ -155,7 +167,7 @@ build_uis() {
 }
 
 install_services() {
-    step "systemd services: cloud-api and ocpp (station controller)"
+    step "systemd service files: cloud-api and ocpp (station controller)"
     bash "$REPO_DIR/infra/create-cloud-api-service.sh" >/dev/null
     bash "$REPO_DIR/infra/create-ocpp-service.sh" >/dev/null
 
@@ -173,6 +185,10 @@ install_services() {
 EOF
 
     sudo systemctl daemon-reload
+}
+
+start_services() {
+    step "Starting the services"
     sudo systemctl enable cloud-api.service ocpp.service >/dev/null 2>&1
 
     # The cloud API runs the Flyway migrations on start, the station controller
@@ -207,8 +223,8 @@ EOF
     step "ocpp (station controller) is listening on port 9000"
 }
 
-main() {
-    check_prerequisites
+install_phase() {
+    check_install_prerequisites
     install_firewall
     install_config
     install_flyway
@@ -217,6 +233,21 @@ main() {
     build_uis
     install_services
     echo "  -- server installed"
+}
+
+start_phase() {
+    check_start_prerequisites
+    start_services
+    echo "  -- server started"
+}
+
+main() {
+    case "${1:-all}" in
+        install) install_phase ;;
+        start) start_phase ;;
+        all) install_phase; start_phase ;;
+        *) die "unknown phase: $1 (use install, start or all)" ;;
+    esac
 }
 
 main "$@"

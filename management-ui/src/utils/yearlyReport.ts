@@ -38,9 +38,6 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-const transactionCost = (transaction: ChargeTransaction) =>
-  (transaction.power_logs ?? []).reduce((sum, log) => sum + (log.delta_power_cost || 0), 0);
-
 /**
  * Everything one resident charged in one year. It follows the same rules as the yearly summaries on the
  * Charges page (a charge that delivered no energy does not count, the year is the year the charge started),
@@ -66,7 +63,7 @@ export const buildYearlyReport = (
       station: transaction.station_id,
       card: transaction.card_name || transaction.rfid,
       energy: transaction.final_energy_kwh,
-      cost: transactionCost(transaction),
+      cost: transaction.total_cost || 0,
     }))
     .sort((a, b) => a.started.getTime() - b.started.getTime());
 

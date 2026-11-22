@@ -36,10 +36,7 @@ const ChargeSummaryCards: React.FC = () => {
   const summary = useMemo(() => {
     const valid = transactions.filter((transaction) => transaction.final_energy_kwh > 0);
     const totalEnergy = valid.reduce((sum, transaction) => sum + transaction.final_energy_kwh, 0);
-    const totalCost = valid.reduce(
-      (sum, transaction) => sum + (transaction.power_logs?.reduce((logSum, log) => logSum + (log.delta_power_cost || 0), 0) || 0),
-      0
-    );
+    const totalCost = valid.reduce((sum, transaction) => sum + (transaction.total_cost || 0), 0);
     return {
       totalEnergy,
       totalTransactions: valid.length,

@@ -11,7 +11,7 @@ const charge = (
   extra: Partial<ChargeTransaction> = {}
 ): ChargeTransaction => ({
   id, station_id: "CP1", rfid: "04AABBCC", created, final_energy_kwh, resident_name,
-  power_logs: costs.map((delta_power_cost, index) => ({ id: id * 10 + index, delta_power_cost, kwh_rate: 0.3 })),
+  total_cost: costs.reduce((sum, cost) => sum + cost, 0),
   ...extra,
 });
 
