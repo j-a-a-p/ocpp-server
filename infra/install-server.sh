@@ -109,6 +109,7 @@ install_python_env() {
 install_web_files() {
     step "Web root: dashboard page and meter value files"
     sudo install -o root -g root -m 644 "$REPO_DIR/infra/web/index.html" "$WEB_ROOT/index.html"
+    sudo install -o root -g root -m 644 "$REPO_DIR/infra/web/favicon.svg" "$WEB_ROOT/favicon.svg"
     sudo install -o ubuntu -g www-data -m 644 "$REPO_DIR/infra/web/.htaccess" "$WEB_ROOT/.htaccess"
     # The station controller writes these two files as the ubuntu user.
     local file

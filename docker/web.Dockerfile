@@ -19,5 +19,6 @@ RUN npm run build
 FROM nginx:1.27-alpine
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY infra/web/index.html /srv/www/index.html
+COPY infra/web/favicon.svg /srv/www/favicon.svg
 COPY --from=management-ui /src/dist /srv/www/management-ui
 COPY --from=resident-ui /src/dist /srv/www/resident-ui
