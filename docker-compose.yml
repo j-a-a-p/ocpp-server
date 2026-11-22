@@ -1,0 +1,108 @@
+# The whole OCPP server on one machine, with mocked email and mocked chargers.
+# See DOCKER.md. Start it with:  docker compose up --build
+#
+# Published ports (localhost only), change them with environment variables or a .env file:
+#   WEB_PORT 8180 (the UIs), MAIL_PORT 8025 (mock inbox), SIMULATOR_PORT 8190 (mock chargers)
+# Mock chargers: SIM_AUTO=0 turns the automatic card taps off, SIM_TIME_SCALE sets the speed of charging.
+
+name: ocpp-local
+
+# The real cloud API and station controller, one image for all Python services.
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+  image: ocpp-local-backend
+
+services:
+  # Runs the database migrations and adds the dev users, then exits.
+  init:
+    <<: *backend
+    command: ["sh", "-c", "flyway migrate && python /app/tools/seed.py"]
+    volumes:
+      - ocpp-data:/home/ubuntu/ocpp-data
+      - ./docker/dev-data.json:/app/dev-data.json:ro
+    restart: "no"
+
+  cloud-api:
+    <<: *backend
+    working_dir: /app/cloud-api
+    # The login links in the emails have to match the address of the browser, so the
+    # configuration is rendered from the template when the container starts.
+    command:
+      - sh
+      - -c
+      - sed "s|@PUBLIC_URL@|$${PUBLIC_URL}|g" /app/configuration.ini.template > /etc/ocpp-server/configuration.ini && exec python main.py
+    environment:
+      PUBLIC_URL: http://localhost:${WEB_PORT:-8180}
+    depends_on:
+      init:
+        condition: service_completed_successfully
+      mock-ses:
+        condition: service_started
+    volumes:
+      - ocpp-data:/home/ubuntu/ocpp-data
+      - ./docker/configuration.ini:/app/configuration.ini.template:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
+
+  station-controller:
+    <<: *backend
+    working_dir: /app/station-controller
+    command: ["python", "main.py"]
+    depends_on:
+      cloud-api:
+        condition: service_healthy
+    volumes:
+      - ocpp-data:/home/ubuntu/ocpp-data
+      # meter_values.json and .csv, which the web server publishes
+      - meter-values:/var/www/html
+
+  # Mock of AWS SES with an inbox page for the login links.
+  mock-ses:
+    <<: *backend
+    command: ["python", "/app/tools/mock_ses.py"]
+    environment:
+      CLOUD_API_URL: http://cloud-api:8000
+    volumes:
+      - ./docker/dev-data.json:/app/dev-data.json:ro
+    ports:
+      - "127.0.0.1:${MAIL_PORT:-8025}:8025"
+
+  # Both UIs, plus the reverse proxy for /api and /ws.
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    image: ocpp-local-web
+    depends_on:
+      - cloud-api
+      - station-controller
+    volumes:
+      - meter-values:/srv/meter:ro
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8180}:80"
+
+  # Mock OCPP chargers, connected through the web server like real ones.
+  chargers:
+    <<: *backend
+    command: ["python", "/app/tools/charger_simulator.py"]
+    depends_on:
+      - web
+      - station-controller
+    environment:
+      SIM_SERVER_URL: ws://web/ws
+      SIM_AUTO: ${SIM_AUTO:-1}
+      SIM_TIME_SCALE: ${SIM_TIME_SCALE:-60}
+    volumes:
+      - ./docker/dev-data.json:/app/dev-data.json:ro
+    ports:
+      - "127.0.0.1:${SIMULATOR_PORT:-8190}:8090"
+
+volumes:
+  ocpp-data:
+  meter-values:

@@ -37,6 +37,8 @@ else:
 DB_FILE = "cloud.db"
 SES_ACCESS_KEY = config.get("SimpleEmailService", "SES_ACCESS_KEY", fallback=None)
 SES_SECRET_KEY = config.get("SimpleEmailService", "SES_SECRET_KEY", fallback=None)
+# Only set for local development: send the mail to a mock SES server instead of AWS.
+SES_ENDPOINT_URL = config.get("SimpleEmailService", "SES_ENDPOINT_URL", fallback=None)
 AWS_REGION = "eu-central-1"
 
 JWT_SECRET = config.get("Cloud", "JWT_SECRET", fallback=None)

@@ -1,0 +1,38 @@
+{
+  "price_per_kwh": 0.30,
+  "history": {
+    "days": 14,
+    "sessions_per_card": 5
+  },
+  "residents": [
+    {
+      "full_name": "Alice Anderson",
+      "email": "alice@example.com",
+      "cards": [
+        { "rfid": "04A1B2C3D4E5F6", "name": "Alice - Tesla Model 3" }
+      ]
+    },
+    {
+      "full_name": "Bob Brown",
+      "email": "bob@example.com",
+      "cards": [
+        { "rfid": "04B1B2C3D4E5F7", "name": "Bob - Renault Zoe" }
+      ]
+    },
+    {
+      "full_name": "Carol Clark",
+      "email": "carol@example.com",
+      "cards": [
+        { "rfid": "04C1B2C3D4E5F8", "name": "Carol - Nissan Leaf" },
+        { "rfid": "04C1B2C3D4E5F9", "name": "Carol - Visitor card" }
+      ]
+    }
+  ],
+  "stations": [
+    { "id": "ChargeBox-001", "max_kw": 11.0 },
+    { "id": "ChargeBox-002", "max_kw": 7.4 }
+  ],
+  "unknown_cards": [
+    "04DEADBEEF0001"
+  ]
+}
