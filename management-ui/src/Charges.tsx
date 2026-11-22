@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { App, Card, Flex, Grid, Table } from "antd";
 import { CalendarOutlined, FieldTimeOutlined } from "@ant-design/icons";
 import { getAllChargeTransactions, ChargeTransaction, MonthlyData, YearlySummary } from "./services/chargeTransactionService";
+import { parseUtc } from "./utils/dates";
 
 const Charges: React.FC = () => {
   const { message } = App.useApp();
@@ -39,7 +40,7 @@ const Charges: React.FC = () => {
     const yearlyGroups = new Map<string, { transactions: ChargeTransaction[], total_energy: number, total_cost: number }>();
 
     validTransactions.forEach(transaction => {
-      const date = new Date(transaction.created);
+      const date = parseUtc(transaction.created);
       const year = date.getFullYear();
       const month = date.getMonth() + 1; // getMonth() returns 0-11
       const monthKey = `${year}-${month.toString().padStart(2, '0')}-${transaction.resident_name}`;

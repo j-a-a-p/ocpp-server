@@ -1,7 +1,7 @@
 import { Button, Card, Empty, Flex, Popconfirm, theme, Typography } from "antd";
 import { PlusOutlined, StopOutlined } from "@ant-design/icons";
 import type { RefusedCard } from "../services/cardService";
-import { parseUtc } from "../utils/format";
+import { parseUtc } from "../utils/dates";
 
 const { Text } = Typography;
 

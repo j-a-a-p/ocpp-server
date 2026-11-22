@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { App, Button, Card, Flex, Form, Input, InputNumber, Modal, Popconfirm, Select, Switch, Table, Tag, Typography } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { chargingProfileService, ChargingProfile, ProfileType } from './services/chargingProfileService';
+import { parseUtc } from './utils/dates';
 
 const Profiles: React.FC = () => {
   const { message } = App.useApp();
@@ -144,7 +145,7 @@ const Profiles: React.FC = () => {
       title: 'Created',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (date: string) => new Date(date).toLocaleDateString(),
+      render: (date: string) => parseUtc(date).toLocaleDateString(),
     },
     {
       title: '',

@@ -3,6 +3,7 @@ import { Flex, Statistic, theme } from "antd";
 import type { PowerLog } from "../services/chargeTransactionService";
 import { useThemeMode } from "../theme/themeContext";
 import { formatEuro } from "../utils/format";
+import { parseUtc } from "../utils/dates";
 
 interface PowerLogsChartProps {
   powerLogs: PowerLog[];
@@ -13,12 +14,12 @@ const PowerLogsChart: React.FC<PowerLogsChartProps> = ({ powerLogs, transactionI
   const { token } = theme.useToken();
   const { isDark } = useThemeMode();
 
-  const sortedLogs = [...powerLogs].sort((a, b) => new Date(a.created).getTime() - new Date(b.created).getTime());
+  const sortedLogs = [...powerLogs].sort((a, b) => parseUtc(a.created).getTime() - parseUtc(b.created).getTime());
   const first = sortedLogs[0];
   const last = sortedLogs[sortedLogs.length - 1];
 
   const data = sortedLogs.map((log) => ({
-    time: new Date(log.created).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
+    time: parseUtc(log.created).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
     energy: log.energy_kwh,
     cost: log.delta_power_cost || 0,
   }));
@@ -28,7 +29,7 @@ const PowerLogsChart: React.FC<PowerLogsChartProps> = ({ powerLogs, transactionI
     { title: "Max power", value: Math.max(...sortedLogs.map((log) => log.power_kw)).toFixed(2), suffix: "kW" },
     {
       title: "Duration",
-      value: String(Math.round((new Date(last.created).getTime() - new Date(first.created).getTime()) / 60000)),
+      value: String(Math.round((parseUtc(last.created).getTime() - parseUtc(first.created).getTime()) / 60000)),
       suffix: "min",
     },
     {

@@ -3,6 +3,7 @@ import { Button, Card, Flex, Spin, Table, theme, Tooltip, Typography } from "ant
 import { LineChartOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import type { ChargeTransaction } from "../services/chargeTransactionService";
 import { formatEuro, formatKwh, transactionCost } from "../utils/format";
+import { parseUtc } from "../utils/dates";
 
 const PowerLogsChart = lazy(() => import("./PowerLogsChart"));
 
@@ -75,7 +76,7 @@ const ChargesCard: React.FC<ChargesCardProps> = ({ transactions, loading }) => {
             dataIndex: "created",
             key: "created",
             render: (created: string) => {
-              const date = new Date(created);
+              const date = parseUtc(created);
               return (
                 <Flex vertical>
                   <Text strong>{date.toLocaleDateString()}</Text>

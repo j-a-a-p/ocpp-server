@@ -3,6 +3,7 @@ import { App, Button, Card, DatePicker, Form, InputNumber, Modal, Table, Tag, Ty
 import { EuroOutlined, PlusOutlined } from "@ant-design/icons";
 import { chargingCostService, ChargingCost, ChargingCostCreate } from "./services/chargingCostService";
 import dayjs from "dayjs";
+import { parseUtc } from "./utils/dates";
 
 const Settings: React.FC = () => {
   const { message } = App.useApp();
@@ -68,7 +69,7 @@ const Settings: React.FC = () => {
       title: "Created",
       dataIndex: "created",
       key: "created",
-      render: (created: string) => dayjs(created).format("YYYY-MM-DD HH:mm"),
+      render: (created: string) => dayjs(parseUtc(created)).format("YYYY-MM-DD HH:mm"),
     },
   ];
 

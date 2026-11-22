@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config';
+import { parseUtc } from '../utils/dates';
 
 export interface PowerLog {
   id: number;
@@ -55,7 +56,7 @@ export const calculateMonthlyEnergyStats = (transactions: ChargeTransaction[]): 
 
   transactions.forEach(transaction => {
     if (transaction.final_energy_kwh) {
-      const date = new Date(transaction.created);
+      const date = parseUtc(transaction.created);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       
       if (!monthlyStats.has(monthKey)) {
