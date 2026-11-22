@@ -91,21 +91,36 @@ class ChargePoint(BaseChargePoint):
 
     @on("StartTransaction")
     async def on_start_transaction(self, connector_id, id_tag, meter_start, timestamp, **kwargs):
-        logging.info(f"StartTransaction {kwargs}")        
-        
-        # Store transaction in database
+        logging.info(f"StartTransaction {kwargs}")
+
+        # A charger may skip Authorize, so the card is checked again before any charge starts.
+        # A refused card is remembered with the station, the same as in on_authorize.
+        if not self.rfid_manager.is_authorized(id_tag, self.id):
+            logging.warning(f"StartTransaction refused for RFID {id_tag}")
+            return self.refuse_start()
+
+        # Without a stored transaction the energy of the charge cannot be billed, so the charge is refused.
         try:
             transaction = TransactionService.create_transaction(
                 station_id=self.id,
-                rfid=id_tag
+                rfid=id_tag.strip().upper()
             )
-            logging.info(f"Transaction stored in database with ID: {transaction.id}")
         except Exception as e:
             logging.error(f"Failed to store transaction in database: {e}, for card: {id_tag}")
-                
+            return self.refuse_start()
+
+        logging.info(f"Transaction stored in database with ID: {transaction.id}")
         return call_result.StartTransaction(
             transaction_id=transaction.id,
             id_tag_info={"status": AuthorizationStatus.accepted}
+        )
+
+    @staticmethod
+    def refuse_start():
+        # OCPP 1.6 wants a transactionId in every answer. 0 means that no transaction was started.
+        return call_result.StartTransaction(
+            transaction_id=0,
+            id_tag_info={"status": AuthorizationStatus.invalid}
         )
 
     def log_rejected_rfid(self, rfid_tag):

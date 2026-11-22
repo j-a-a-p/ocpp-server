@@ -3,6 +3,7 @@ import json
 
 import pytest
 
+import charge_point
 from charge_point import ChargePoint
 from conftest import add_card
 from models import ChargeTransaction, PowerLog, RefusedCard, Resident, ResidentStatus
@@ -93,6 +94,42 @@ class TestTransactions:
         assert result.transaction_id == transaction.id
         assert (transaction.station_id, transaction.rfid) == ("CP1", "04AABBCC")
         assert status_of(result) == "Accepted"
+
+    async def test_a_card_that_is_not_known_cannot_start_a_charge(self, cp, db):
+        result = await cp.on_start_transaction(connector_id=1, id_tag="DEADBEEF", meter_start=0, timestamp="t")
+
+        assert status_of(result) == "Invalid"
+        assert result.transaction_id == 0
+        assert db.query(ChargeTransaction).count() == 0
+        assert {row.rfid for row in db.query(RefusedCard)} == {"DEADBEEF"}
+
+    async def test_a_card_of_a_resident_who_is_not_active_cannot_start_a_charge(self, cp, db):
+        invited = Resident(email="new@example.com", full_name="New", status=ResidentStatus.INVITED)
+        db.add(invited)
+        db.commit()
+        add_card(db, "04112233", invited)
+
+        result = await cp.on_start_transaction(connector_id=1, id_tag="04112233", meter_start=0, timestamp="t")
+
+        assert status_of(result) == "Invalid"
+        assert db.query(ChargeTransaction).count() == 0
+
+    async def test_the_card_number_is_stored_in_the_form_the_lookup_uses(self, cp, db, resident_with_card):
+        result = await cp.on_start_transaction(connector_id=1, id_tag=" 04aabbcc ", meter_start=0, timestamp="t")
+
+        assert status_of(result) == "Accepted"
+        assert db.query(ChargeTransaction).one().rfid == "04AABBCC"
+
+    async def test_a_failed_database_write_refuses_the_charge_instead_of_crashing(self, cp, db, resident_with_card, monkeypatch):
+        def broken(**_):
+            raise RuntimeError("database is locked")
+
+        monkeypatch.setattr(charge_point.TransactionService, "create_transaction", staticmethod(broken))
+
+        result = await cp.on_start_transaction(connector_id=1, id_tag="04AABBCC", meter_start=0, timestamp="t")
+
+        assert status_of(result) == "Invalid"
+        assert result.transaction_id == 0
 
     async def test_every_start_is_a_new_transaction(self, cp, db, resident_with_card):
         first = await cp.on_start_transaction(connector_id=1, id_tag="04AABBCC", meter_start=0, timestamp="t")

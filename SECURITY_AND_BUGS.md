@@ -15,7 +15,7 @@ Severity: **High** (fix soon, real impact), **Medium** (fix when you touch that 
   `GET/POST /residents`, `POST /residents/{id}/send-invitation`, `POST /charging-costs`, all `/charging-profiles`
   routes, `/charge-transactions/all` and `/power-logs`. The "management" portal is only a different login link.
   Fix: add a role to `residents` (Flyway migration), and a dependency `get_authenticated_admin` for those routes.
-- [ ] **S3 (High) `StartTransaction` accepts any `idTag`.** `charge_point.py` returns `accepted` without checking the
+- [x] **S3 (High) `StartTransaction` accepts any `idTag`.** (fixed: card checked again, see Done) `charge_point.py` returns `accepted` without checking the
   card. Together with S1, a charger can start a session on any resident's card and they pay for it.
   Fix: check `rfid_manager.is_authorized` in `on_start_transaction`, return `invalid` otherwise.
 - [ ] **S4 (Medium) The charger can rename itself.** `on_boot_notification` replaces the charger id (from the URL)
@@ -57,7 +57,7 @@ Severity: **High** (fix soon, real impact), **Medium** (fix when you touch that 
 
 ## Open: bugs
 
-- [ ] **B1 (High) `on_start_transaction` crashes when the database write fails.** `transaction` is not defined if
+- [x] **B1 (High) `on_start_transaction` crashes when the database write fails.** (fixed, see Done) `transaction` is not defined if
   `create_transaction` raises (the `except` only logs), so the next line raises `UnboundLocalError` and the charger
   gets an error instead of an answer. (`station-controller/charge_point.py`)
 - [ ] **B2 (Medium) A resident cannot get a new invitation for 180 days.** `send_invitation` refuses while the old
@@ -131,3 +131,7 @@ version: **hold** until the toolchain (Vite, `typescript-eslint`) supports it.
 - [x] Apache: HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`.
 - [x] Login page: the "close this page" button was removed (browsers do not allow it).
 - [x] Python dependencies updated to the versions in the table above (D1), no known vulnerabilities left.
+- [x] `StartTransaction` checks the card again and refuses unknown or inactive cards with `Invalid` and
+  `transactionId` 0 (S3). Tests in `station-controller/tests/test_charge_point.py`.
+- [x] `StartTransaction` refuses the charge when the transaction cannot be stored, instead of crashing (B1).
+- [x] The stored transaction card number is normalized (trimmed, upper case) like the lookup.
