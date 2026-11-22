@@ -103,6 +103,25 @@ services:
     ports:
       - "127.0.0.1:${SIMULATOR_PORT:-8190}:8090"
 
+  # The backend tests. They use their own temporary databases, never the one of the stack above.
+  #   docker compose run --rm tests
+  tests:
+    <<: *backend
+    profiles: ["test"]
+    working_dir: /app
+    command:
+      - sh
+      - -c
+      - |
+        status=0
+        (cd cloud-api && python -m pytest) || status=1
+        (cd station-controller && python -m pytest) || status=1
+        exit $$status
+    volumes:
+      # The code is mounted so a code change needs no rebuild.
+      - ./cloud-api:/app/cloud-api:ro
+      - ./station-controller:/app/station-controller:ro
+
 volumes:
   ocpp-data:
   meter-values:

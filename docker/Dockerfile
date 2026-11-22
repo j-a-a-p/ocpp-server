@@ -33,6 +33,10 @@ RUN pip install --no-cache-dir \
         -r /tmp/cloud-api-requirements.txt \
         -r /tmp/station-controller-requirements.txt
 
+# Test tools, used by the "tests" service of docker-compose.yml. Production does not need them.
+COPY docker/requirements-test.txt /tmp/requirements-test.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-test.txt
+
 # The applications look for these exact paths (constants.py in both), so the
 # container uses the same layout as the production server.
 RUN useradd --create-home --uid 1000 --shell /bin/bash ubuntu \

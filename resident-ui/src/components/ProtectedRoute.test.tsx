@@ -1,0 +1,89 @@
+import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useAuth } from "../contexts/AuthContext";
+import { json, mockFetch, requests } from "../test/mockFetch";
+import { renderWithProviders } from "../test/render";
+import ProtectedRoute from "./ProtectedRoute";
+
+vi.mock("../contexts/AuthContext", () => ({ useAuth: vi.fn() }));
+
+const checkAuth = vi.fn(async () => {});
+
+const auth = (state: Partial<ReturnType<typeof useAuth>>) =>
+  vi.mocked(useAuth).mockReturnValue({ isAuthenticated: false, isLoading: false, serverAvailable: true, checkAuth, ...state });
+
+const renderRoute = () =>
+  renderWithProviders(
+    <ProtectedRoute>
+      <p>Secret page</p>
+    </ProtectedRoute>
+  );
+
+beforeEach(() => {
+  checkAuth.mockClear();
+});
+
+describe("ProtectedRoute", () => {
+  it("shows the page to a logged in resident", () => {
+    auth({ isAuthenticated: true });
+
+    renderRoute();
+
+    expect(screen.getByText("Secret page")).toBeInTheDocument();
+  });
+
+  it("shows nothing but a spinner while it checks the login", () => {
+    auth({ isLoading: true });
+
+    renderRoute();
+
+    expect(screen.queryByText("Secret page")).not.toBeInTheDocument();
+    expect(screen.queryByText("Welcome")).not.toBeInTheDocument();
+  });
+
+  it("offers a retry when the server is unavailable", async () => {
+    auth({ serverAvailable: false });
+
+    renderRoute();
+    await userEvent.click(screen.getByRole("button", { name: /retry connection/i }));
+
+    expect(screen.getByText("Server unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("Secret page")).not.toBeInTheDocument();
+    expect(checkAuth).toHaveBeenCalledOnce();
+  });
+
+  it("asks a visitor to sign in and opens the sign-in dialog", async () => {
+    auth({});
+
+    renderRoute();
+
+    expect(screen.getByText("Welcome")).toBeInTheDocument();
+    expect(screen.queryByText("Secret page")).not.toBeInTheDocument();
+    expect(await screen.findByText("Sign in to the resident portal")).toBeInTheDocument();
+  });
+
+  it("sends the email address of the visitor and closes the dialog", async () => {
+    auth({});
+    const fetchMock = mockFetch({ "POST /auth/request-access": json({ success: true, message: "Check your mail" }) });
+    renderRoute();
+
+    await userEvent.type(await screen.findByPlaceholderText("you@example.com"), "anna@example.com");
+    await userEvent.click(screen.getByRole("button", { name: /email me a sign-in link/i }));
+
+    await waitFor(() => expect(requests(fetchMock)).toEqual([expect.stringContaining("email=anna%40example.com&flow=resident")]));
+    await waitFor(() => expect(checkAuth).toHaveBeenCalled());
+  });
+
+  it("does not send an invalid email address", async () => {
+    auth({});
+    const fetchMock = mockFetch({});
+    renderRoute();
+
+    await userEvent.type(await screen.findByPlaceholderText("you@example.com"), "not-an-email");
+    await userEvent.click(screen.getByRole("button", { name: /email me a sign-in link/i }));
+
+    expect(await screen.findByText("Please enter a valid email address")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

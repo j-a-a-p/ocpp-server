@@ -160,6 +160,22 @@ Changes to the code of `cloud-api`, `station-controller` or the UIs need a rebui
 contain a copy of the code. For work on a UI itself it is quicker to run `npm run dev` in `management-ui` or
 `resident-ui`, which talks to the API on `http://localhost:8000`; that port is not published by this setup.
 
+## Tests
+
+```bash
+docker compose --profile test run --rm --build tests   # cloud-api and station-controller (pytest)
+cd management-ui && npm test                           # management UI (Vitest)
+cd resident-ui && npm test                             # resident UI (Vitest)
+```
+
+- The backend tests run in the Docker image because the backend code uses Linux paths. Every test gets a fresh
+  SQLite database built from the real Flyway migrations (`cloud-api/db/migrations`), so a new migration is tested too.
+- `station-controller/tests/test_websocket_session.py` runs a whole OCPP session (boot, authorize, start, meter values,
+  stop) over a real WebSocket.
+- The UI tests render the real components with a mocked `fetch`; `management-ui/src/App.test.tsx` covers sign-in,
+  the menu and the lazy loaded pages together.
+- Run `npm run build` too: it type-checks the tests as well.
+
 ## Services
 
 | Service | Role |
@@ -200,12 +216,3 @@ docker/charger_simulator.py  simulated charging stations
   `docker compose logs init cloud-api` for migration errors.
 - **The charger status says nothing is happening.** Look at the simulator page (http://localhost:8190). A station
   that says *Disconnected* reconnects by itself; see `docker compose logs chargers station-controller`.
-
-## Known issue in the station controller
-
-When a charger presents an unknown card, `station-controller/charge_point.py` answers with
-`AuthorizationStatus.rejected`, which does not exist in OCPP 1.6 (the valid refusal is `invalid`). The
-server then logs an `AttributeError` and sends an internal error to the charger instead of a refusal. The card
-is still recorded as refused first, so the *add card* flow works, and the simulated chargers treat the error as
-a refusal. The same code runs in production. Changing `AuthorizationStatus.rejected` to
-`AuthorizationStatus.invalid` fixes it; this setup leaves the application code as it is.
