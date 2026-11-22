@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import time
 from datetime import datetime
 from ocpp.v16 import ChargePoint as BaseChargePoint
 from ocpp.v16 import call_result, call
@@ -10,12 +11,20 @@ from meter_values_manager import MeterValuesManager
 from transaction_service import TransactionService
 from refused_card_service import RefusedCardService
 from charging_profile import ChargingProfileManager
+from station_connection_service import StationConnectionService
+
+# Meter values can arrive every few seconds. The database only needs to know that the station is
+# still there, so it hears about that at most this often (heartbeats come every 30 seconds).
+SEEN_WRITE_INTERVAL_SECONDS = 5.0
 
 class ChargePoint(BaseChargePoint):
     """ Handles communication with the charging station. """
 
     def __init__(self, id, websocket):
         super().__init__(id, websocket)
+        # The stored connection of this station, for the stations page. None when it is not stored.
+        self.connection_id = None
+        self._seen_written_at = None
         self.rfid_manager = RFIDManager()
         self.meter_values_manager = MeterValuesManager(charge_point=self)
         self.charging_profile_manager = ChargingProfileManager(self)
@@ -26,6 +35,25 @@ class ChargePoint(BaseChargePoint):
         self.max_power_limit = 32.0      # Maximum 32A
         self.power_step = 2.0            # Change by 2A each time
         self.dynamic_load_task = None
+
+    async def start(self):
+        """Handles the messages of the station until the connection ends, and records that it was online."""
+        self.connection_id = StationConnectionService.open(self.id)
+        try:
+            await super().start()
+        finally:
+            if self.connection_id is not None:
+                StationConnectionService.close(self.connection_id)
+
+    def station_is_seen(self):
+        """Remembers that the station is still there. Called with every message that proves it."""
+        if self.connection_id is None:
+            return
+        now = time.monotonic()
+        if self._seen_written_at is not None and now - self._seen_written_at < SEEN_WRITE_INTERVAL_SECONDS:
+            return
+        self._seen_written_at = now
+        StationConnectionService.seen(self.connection_id)
 
     @on("BootNotification")
     async def on_boot_notification(self, **kwargs):
@@ -46,6 +74,9 @@ class ChargePoint(BaseChargePoint):
         if new_id != "Unknown Serial" and new_id != old_id:
             self.id = new_id
             logging.info(f"Updated charge point ID from '{old_id}' to '{new_id}'")
+            if self.connection_id is not None:
+                StationConnectionService.rename(self.connection_id, new_id)
+        self.station_is_seen()
         
         logging.info(f"BootNotification received from {self.id}: {charging_station}, Reason: {reason}")
 
@@ -69,6 +100,7 @@ class ChargePoint(BaseChargePoint):
             logging.info(f"🔄 First heartbeat from {self.id}")
         
         self._heartbeat_count += 1
+        self.station_is_seen()
         
         return call_result.Heartbeat(current_time=datetime.now().isoformat())
 
@@ -138,6 +170,7 @@ class ChargePoint(BaseChargePoint):
     async def on_meter_values(self, connector_id, transaction_id, meter_value):
         """Handles MeterValues event and logs readings to file."""
         logging.debug(f"Received MeterValues for connector {connector_id}, transaction {transaction_id}")
+        self.station_is_seen()
 
         self.meter_values_manager.log_meter_values(connector_id, transaction_id, meter_value)
 
@@ -148,6 +181,7 @@ class ChargePoint(BaseChargePoint):
         """Handle the StatusNotification event from the charge point."""
 
         logging.info(f"StatusNotification received: Connector {connector_id}, Status {status}, Error {error_code}, Timestamp {timestamp}")
+        self.station_is_seen()
 
         return call_result.StatusNotification()
 

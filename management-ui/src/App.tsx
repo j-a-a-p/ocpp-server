@@ -9,6 +9,7 @@ import Dashboard from "./Dashboard";
 const Residents = lazy(() => import("./Residents"));
 const Charges = lazy(() => import("./Charges"));
 const PowerLogs = lazy(() => import("./PowerLogs"));
+const Stations = lazy(() => import("./Stations"));
 const Profiles = lazy(() => import("./Profiles"));
 const Settings = lazy(() => import("./Settings"));
 
@@ -26,6 +27,7 @@ function App() {
             <Route path="residents" element={<Residents />} />
             <Route path="charges" element={<Charges />} />
             <Route path="power-logs" element={<PowerLogs />} />
+            <Route path="stations" element={<Stations />} />
             <Route path="profiles" element={<Profiles />} />
             <Route path="settings" element={<Settings />} />
           </Route>

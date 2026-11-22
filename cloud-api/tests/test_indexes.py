@@ -1,4 +1,4 @@
-"""The frequent queries use an index instead of reading the whole table (migration V13)."""
+"""The frequent queries use an index instead of reading the whole table (migrations V13 and V14)."""
 import sqlite3
 
 import pytest
@@ -26,6 +26,7 @@ def plan(connection: sqlite3.Connection, query: str) -> str:
     ("SELECT * FROM charge_transactions ORDER BY created DESC", "idx_charge_transactions_created"),
     ("SELECT * FROM cards WHERE resident_id = 1", "idx_cards_resident_id"),
     ("SELECT * FROM refused_cards WHERE station_id = 'CP1' ORDER BY created DESC LIMIT 1", "idx_refused_cards_station_created"),
+    ("SELECT * FROM station_connections WHERE station_id = 'CP1' ORDER BY connected_at", "idx_station_connections_station_connected"),
 ])
 def test_query_uses_index(connection, query, index):
     assert index in plan(connection, query)

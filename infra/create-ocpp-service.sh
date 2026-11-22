@@ -15,6 +15,9 @@ StandardError=append:/home/ubuntu/ocpp.log
 Restart=on-failure
 User=ubuntu
 Environment=PYTHONUNBUFFERED=1
+# Chargers connect to port 9000 directly with plain ws:// (wss:// through Apache did not work for them),
+# so it listens on every address. The firewall opens the port, see install_firewall in install-server.sh.
+Environment=OCPP_BIND_HOST=0.0.0.0
 
 [Install]
 WantedBy=multi-user.target

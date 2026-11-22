@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { parseUtc } from "./dates";
+import { formatDuration, parseUtc } from "./dates";
+
+describe("formatDuration", () => {
+  it.each([
+    [0, "less than a minute"],
+    [59, "less than a minute"],
+    [-5, "less than a minute"],
+    [60, "1 min"],
+    [59 * 60 + 59, "59 min"],
+    [3600, "1 h"],
+    [3 * 3600 + 20 * 60, "3 h 20 min"],
+    [24 * 3600, "1 d"],
+    [2 * 86400 + 4 * 3600 + 30 * 60, "2 d 4 h"],
+    [30 * 86400, "30 d"],
+  ])("shows %i seconds as %s", (seconds, text) => {
+    expect(formatDuration(seconds)).toBe(text);
+  });
+});
 
 describe("parseUtc", () => {
   it("reads a timestamp without a timezone as UTC, like the API sends them", () => {

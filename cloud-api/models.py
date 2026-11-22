@@ -85,6 +85,21 @@ class RefusedCard(Base):
     station_id = Column(String, nullable=False)
     created = Column(DateTime(timezone=True), server_default=func.now())
 
+class StationConnection(Base):
+    """One WebSocket connection of a charging station. Written by the station controller, times are UTC.
+
+    A row without disconnected_at is open: the station is connected now, or it was when the station
+    controller stopped. last_seen_at is the last message of the station (the heartbeat), so it tells
+    the two apart.
+    """
+    __tablename__ = "station_connections"
+
+    id = Column(Integer, primary_key=True, index=True)
+    station_id = Column(String, nullable=False)
+    connected_at = Column(DateTime, nullable=False, server_default=func.now())
+    last_seen_at = Column(DateTime, nullable=False, server_default=func.now())
+    disconnected_at = Column(DateTime, nullable=True)
+
 class ChargingCost(Base):
     __tablename__ = "charging_costs"
 

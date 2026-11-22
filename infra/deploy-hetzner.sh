@@ -1102,7 +1102,8 @@ main() {
     echo "  Website:     https://$DOMAIN"
     echo "  Management:  https://$DOMAIN/management-ui/"
     echo "  Residents:   https://$DOMAIN/resident-ui/"
-    echo "  Chargers:    wss://$DOMAIN/ws/<station id>"
+    echo "  Chargers:    ws://$DOMAIN:9000/<station id> (plain, straight to the station controller)"
+    echo "               wss://$DOMAIN/ws/<station id> (encrypted, through the web server)"
     echo "  Database:    $REMOTE_DATA_DIR/cloud.db (from $(basename "$LATEST_BACKUP"))"
     echo
     echo "SSH: ssh -i $SSH_KEY $SSH_USER@$FIP_IP"
