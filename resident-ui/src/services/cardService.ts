@@ -10,6 +10,35 @@ export interface CardUpdate {
   name: string;
 }
 
+export interface RefusedCard {
+  id: number;
+  rfid: string;
+  station_id: string;
+  created: string;
+}
+
+export const getRefusedCards = async (): Promise<RefusedCard[]> => {
+  const response = await fetch(`${API_BASE_URL}/cards/refused`, {
+    credentials: 'include',
+  });
+
+  if (response.status === 404) {
+    return [];
+  }
+  if (!response.ok) {
+    throw new Error('Failed to fetch refused cards');
+  }
+
+  const data: { refused_cards: RefusedCard[] } = await response.json();
+  const seen = new Set<string>();
+  return data.refused_cards.filter((card) => {
+    const key = `${card.station_id}|${card.rfid}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 export const getMyCards = async (): Promise<Card[]> => {
   try {
     const response = await fetch(`${API_BASE_URL}/cards/my_cards`, {

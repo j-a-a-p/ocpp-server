@@ -20,13 +20,6 @@ export interface ChargeTransaction {
   power_logs: PowerLog[];
 }
 
-export interface ChargeTransactionsResponse {
-  transactions: ChargeTransaction[];
-  total: number;
-  skip: number;
-  limit: number;
-}
-
 export interface MonthlyEnergyStats {
   month: string;
   year: number;
@@ -34,37 +27,6 @@ export interface MonthlyEnergyStats {
   transactionCount: number;
   totalCost: number;
 }
-
-export const getCurrentResidentTransactions = async (
-  skip: number = 0,
-  limit: number = 10
-): Promise<ChargeTransactionsResponse> => {
-  try {
-    // Get the transactions for the currently authenticated resident
-    const transactionsResponse = await fetch(
-      `${API_BASE_URL}/charge-transactions/my-transactions?skip=${skip}&limit=${limit}`,
-      {
-        credentials: 'include',
-      }
-    );
-
-    if (!transactionsResponse.ok) {
-      throw new Error('Failed to fetch transactions');
-    }
-
-    const transactions = await transactionsResponse.json();
-
-    return {
-      transactions,
-      total: transactions.length, // Note: API doesn't return total count, so we use length
-      skip,
-      limit,
-    };
-  } catch (error) {
-    console.error('Error fetching charge transactions:', error);
-    throw error;
-  }
-};
 
 export const getAllCurrentResidentTransactions = async (): Promise<ChargeTransaction[]> => {
   try {

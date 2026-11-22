@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Input, Select, InputNumber, message, Tag, Popconfirm } from 'antd';
+import { App, Button, Card, Flex, Form, Input, InputNumber, Modal, Popconfirm, Select, Switch, Table, Tag, Typography } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { chargingProfileService, ChargingProfile, ProfileType } from './services/chargingProfileService';
 
-const { Option } = Select;
-
 const Profiles: React.FC = () => {
+  const { message } = App.useApp();
   const [profiles, setProfiles] = useState<ChargingProfile[]>([]);
   const [profileTypes, setProfileTypes] = useState<ProfileType[]>([]);
   const [loading, setLoading] = useState(false);
@@ -13,11 +12,6 @@ const Profiles: React.FC = () => {
   const [editingProfile, setEditingProfile] = useState<ChargingProfile | null>(null);
   const [showInactive, setShowInactive] = useState(false);
   const [form] = Form.useForm();
-
-  useEffect(() => {
-    fetchProfiles();
-    fetchProfileTypes();
-  }, []);
 
   const fetchProfiles = async () => {
     setLoading(true);
@@ -40,6 +34,12 @@ const Profiles: React.FC = () => {
       console.error('Error fetching profile types:', error);
     }
   };
+
+  useEffect(() => {
+    fetchProfiles();
+    fetchProfileTypes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const showModal = (profile: ChargingProfile | null = null) => {
     setEditingProfile(profile);
@@ -137,7 +137,8 @@ const Profiles: React.FC = () => {
       title: 'Max Current (A)',
       dataIndex: 'max_current',
       key: 'max_current',
-      render: (value: number) => value ? `${value}A` : '-',
+      align: 'right' as const,
+      render: (value: number) => value ? `${value} A` : '-',
     },
     {
       title: 'Created',
@@ -146,10 +147,11 @@ const Profiles: React.FC = () => {
       render: (date: string) => new Date(date).toLocaleDateString(),
     },
     {
-      title: 'Actions',
+      title: '',
       key: 'actions',
+      align: 'right' as const,
       render: (_: unknown, record: ChargingProfile) => (
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
           <Button
             type="link"
             icon={<EditOutlined />}
@@ -218,44 +220,45 @@ const Profiles: React.FC = () => {
   };
 
   return (
-    <div>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2>Charging Profiles</h2>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <Button
-            type={showInactive ? "default" : "primary"}
-            onClick={() => setShowInactive(!showInactive)}
-          >
-            {showInactive ? "Hide Inactive" : "Show Inactive"}
-          </Button>
+    <Card
+      title="Profiles"
+      extra={
+        <Flex gap={16} align="center">
+          <Flex gap={8} align="center">
+            <Switch size="small" checked={showInactive} onChange={setShowInactive} />
+            <Typography.Text type="secondary">Show inactive</Typography.Text>
+          </Flex>
           <Button
             type="primary"
             icon={<PlusOutlined />}
             onClick={() => showModal()}
           >
-            Add Profile
+            Add profile
           </Button>
-        </div>
-      </div>
-
+        </Flex>
+      }
+      styles={{ body: { padding: 0 } }}
+    >
       <Table
         columns={columns}
         dataSource={showInactive ? profiles : profiles.filter(p => p.status !== 'Inactive')}
         loading={loading}
         rowKey="id"
+        scroll={{ x: 'max-content' }}
         pagination={{
           pageSize: 10,
-          showSizeChanger: true,
-          showQuickJumper: true,
+          hideOnSinglePage: true,
+          style: { padding: '0 16px' },
         }}
       />
 
       <Modal
-        title={editingProfile ? 'Edit Profile' : 'Add Profile'}
+        title={editingProfile ? 'Edit profile' : 'Add profile'}
         open={modalVisible}
         onOk={handleOk}
         onCancel={() => setModalVisible(false)}
-        width={600}
+        width={560}
+        forceRender
       >
         <Form form={form} layout="vertical">
           <Form.Item
@@ -274,13 +277,8 @@ const Profiles: React.FC = () => {
             <Select
               placeholder="Select profile type"
               onChange={() => form.setFieldsValue({ max_current: undefined })}
-            >
-              {profileTypes.map((type) => (
-                <Option key={type.value} value={type.value}>
-                  {type.label}
-                </Option>
-              ))}
-            </Select>
+              options={profileTypes.map((type) => ({ value: type.value, label: type.label }))}
+            />
           </Form.Item>
 
           {editingProfile && (
@@ -289,18 +287,19 @@ const Profiles: React.FC = () => {
               label="Status"
               rules={[{ required: true, message: 'Please select status' }]}
             >
-              <Select placeholder="Select status">
-                <Option value="Draft">Draft</Option>
-                <Option value="Active">Active</Option>
-                <Option value="Inactive">Inactive</Option>
-              </Select>
+              <Select
+                placeholder="Select status"
+                options={['Draft', 'Active', 'Inactive'].map((status) => ({ value: status, label: status }))}
+              />
             </Form.Item>
           )}
 
-          {renderProfileFields()}
+          <Form.Item noStyle shouldUpdate={(previous, next) => previous.profile_type !== next.profile_type}>
+            {renderProfileFields}
+          </Form.Item>
         </Form>
       </Modal>
-    </div>
+    </Card>
   );
 };
 

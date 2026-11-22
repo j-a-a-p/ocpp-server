@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Card } from "antd";
-import { Button } from "antd";
+import { Button, Result } from "antd";
+import { LoadingOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
+import AuthLayout from "./components/AuthLayout";
 
 export default function Activate() {
-  console.log("Activate component rendering...");
   const [message, setMessage] = useState("Activating account...");
   const [status, setStatus] = useState("loading");
   const [searchParams] = useSearchParams();
@@ -39,38 +39,20 @@ export default function Activate() {
   }, [searchParams, navigate]);
 
   return (
-    <div style={{
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-      minHeight: "100vh",
-      backgroundColor: "#f5f5f5"
-    }}>
-      <Card 
-        style={{
-          width: "400px",
-          padding: "24px",
-          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-          backgroundColor: "#fff"
-        }} 
-        title="Account Activation"
-      >
-        <p style={{
-          color: status === "error" ? "#ff4d4f" : "#262626",
-          marginBottom: status === "error" ? "16px" : "0"
-        }}>
-          {message}
-        </p>
-        {status === "error" && (
-          <Button 
-            type="primary" 
-            onClick={() => navigate("/")}
-            style={{ marginTop: "16px" }}
-          >
-            Go Home
-          </Button>
-        )}
-      </Card>
-    </div>
+    <AuthLayout>
+      <Result
+        status={status === "success" ? "success" : status === "error" ? "error" : "info"}
+        icon={status === "loading" ? <LoadingOutlined /> : undefined}
+        title={status === "success" ? "Account activated" : status === "error" ? "Activation failed" : "Account activation"}
+        subTitle={message}
+        extra={
+          status === "error" && (
+            <Button type="primary" onClick={() => navigate("/")}>
+              Go home
+            </Button>
+          )
+        }
+      />
+    </AuthLayout>
   );
 }

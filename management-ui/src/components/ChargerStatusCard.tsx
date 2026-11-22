@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Card, Row, Col, Statistic, Spin, Tag, Typography } from "antd";
-import { ThunderboltOutlined, PoweroffOutlined, ClockCircleOutlined, SettingOutlined } from "@ant-design/icons";
+import { Card, Col, Flex, Row, Statistic, Tag, theme, Typography } from "antd";
+import { CheckCircleFilled, DisconnectOutlined, SettingOutlined, ThunderboltFilled } from "@ant-design/icons";
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 
 interface MeterValues {
   timestamp: string;
@@ -26,196 +26,129 @@ interface MeterValues {
   };
 }
 
+type StationStatus = "available" | "charging" | "unknown";
+
+const FRESH_WINDOW_MS = 2 * 60 * 1000;
+
 const ChargerStatusCard: React.FC = () => {
-  const [loading, setLoading] = useState<boolean>(true);
+  const { token } = theme.useToken();
+  const [loading, setLoading] = useState(true);
   const [meterValues, setMeterValues] = useState<MeterValues | null>(null);
-  const [stationStatus, setStationStatus] = useState<'available' | 'charging' | 'unknown'>('unknown');
+  const [stationStatus, setStationStatus] = useState<StationStatus>("unknown");
   const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
-  const [isMobile, setIsMobile] = useState<boolean>(false);
 
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  useEffect(() => {
-    fetchMeterValues();
-    
-    // Set up 10-second refresh interval
-    const interval = setInterval(() => {
-      fetchMeterValues();
-    }, 10000);
-
-    // Cleanup interval on component unmount
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchMeterValues = async () => {
-    try {
-      const response = await fetch('/meter_values.json');
-      if (response.ok) {
-        const data: MeterValues = await response.json();
-        setMeterValues(data);
-        setLastUpdateTime(new Date());
-        
-        // Check if the file was updated recently (within 2 minutes)
-        const fileTimestamp = new Date(data.timestamp);
-        const now = new Date();
-        const timeDiff = now.getTime() - fileTimestamp.getTime();
-        const twoMinutes = 2 * 60 * 1000; // 2 minutes in milliseconds
-        
-        if (timeDiff < twoMinutes) {
-          setStationStatus('charging');
+    let cancelled = false;
+    const fetchMeterValues = async () => {
+      try {
+        const response = await fetch("/meter_values.json", { cache: "no-store" });
+        if (cancelled) return;
+        if (response.ok) {
+          const data: MeterValues = await response.json();
+          if (cancelled) return;
+          setMeterValues(data);
+          setLastUpdateTime(new Date());
+          setStationStatus(Date.now() - new Date(data.timestamp).getTime() < FRESH_WINDOW_MS ? "charging" : "available");
         } else {
-          setStationStatus('available');
+          setStationStatus("unknown");
         }
-      } else {
-        setStationStatus('unknown');
+      } catch (error) {
+        console.error("Error fetching meter values:", error);
+        if (!cancelled) setStationStatus("unknown");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-    } catch (error) {
-      console.error("Error fetching meter values:", error);
-      setStationStatus('unknown');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'charging':
-        return 'green';
-      case 'available':
-        return 'blue';
-      case 'unknown':
-        return 'orange';
-      default:
-        return 'default';
-    }
-  };
+    fetchMeterValues();
+    const interval = setInterval(fetchMeterValues, 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'charging':
-        return <ThunderboltOutlined />;
-      case 'available':
-        return <PoweroffOutlined />;
-      case 'unknown':
-        return <ClockCircleOutlined />;
-      default:
-        return <ClockCircleOutlined />;
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'charging':
-        return 'Charging';
-      case 'available':
-        return 'Available';
-      case 'unknown':
-        return 'Unknown';
-      default:
-        return 'Unknown';
-    }
-  };
-
-  if (loading) {
-    return (
-      <Card size={isMobile ? "small" : "default"} title="Charger Status">
-        <div style={{ textAlign: 'center', padding: '20px' }}>
-          <Spin size="large" />
-          <p>Loading charger status...</p>
-        </div>
-      </Card>
-    );
-  }
+  const appearance = {
+    charging: {
+      color: token.colorPrimary,
+      background: token.colorPrimaryBg,
+      icon: <ThunderboltFilled />,
+      title: "Charging",
+      description: "A charging session is in progress.",
+    },
+    available: {
+      color: token.colorSuccess,
+      background: token.colorSuccessBg,
+      icon: <CheckCircleFilled />,
+      title: "Available",
+      description: "The charger is idle and ready for the next session.",
+    },
+    unknown: {
+      color: token.colorTextTertiary,
+      background: token.colorFillSecondary,
+      icon: <DisconnectOutlined />,
+      title: "Unknown",
+      description: "There is no data from the charger.",
+    },
+  }[stationStatus];
 
   return (
-    <Card 
-      size={isMobile ? "small" : "default"} 
-      title={
-        <span>
-          <SettingOutlined style={{ marginRight: 8 }} />
-          Charger Status
-        </span>
+    <Card
+      title="Charger status"
+      loading={loading}
+      style={{ height: "100%" }}
+      extra={
+        lastUpdateTime && (
+          <Flex align="center" gap={8}>
+            {stationStatus === "charging" && <span className="live-dot" style={{ color: appearance.color }} />}
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              Updated {lastUpdateTime.toLocaleTimeString()}
+            </Text>
+          </Flex>
+        )
       }
     >
-      <Row gutter={isMobile ? 8 : 16}>
-        <Col xs={24} sm={12}>
-          <Tag 
-            color={getStatusColor(stationStatus)} 
-            style={{ 
-              fontSize: '16px', 
-              padding: '8px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-          >
-            {getStatusIcon(stationStatus)}
-            {getStatusText(stationStatus)}
-          </Tag>
-        </Col>
-        
-        <Col xs={24} sm={12}>
-          <Statistic
-            title="Current Power"
-            value={meterValues?.data["Power.Active.Import"] || 0}
-            precision={2}
-            suffix="kW"
-            prefix={<ThunderboltOutlined />}
-            valueStyle={{ color: '#3f8600' }}
-          />
-        </Col>
-      </Row>
-
-      {meterValues?.chargingProfile && (
-        <Row gutter={isMobile ? 8 : 16} style={{ marginTop: 16 }}>
-          <Col xs={24} sm={12}>
-            <Statistic
-              title="Profile Name"
-              value={meterValues.chargingProfile.name}
-              prefix={<SettingOutlined />}
-            />
-          </Col>
-          
-          <Col xs={24} sm={12}>
-            <Statistic
-              title="Max Power Limit"
-              value={meterValues.chargingProfile.currentMaxPower}
-              precision={1}
-              suffix="A"
-              valueStyle={{ color: '#1890ff' }}
-            />
-          </Col>
-        </Row>
-      )}
+      <Flex align="center" gap={16}>
+        <span className="status-icon" style={{ color: appearance.color, background: appearance.background }}>
+          {appearance.icon}
+        </span>
+        <div>
+          <Title level={3} style={{ margin: 0, color: appearance.color }}>
+            {appearance.title}
+          </Title>
+          <Text type="secondary">{appearance.description}</Text>
+        </div>
+      </Flex>
 
       {meterValues && (
-        <Row gutter={isMobile ? 8 : 16} style={{ marginTop: 16 }}>
-          <Col xs={24}>
+        <Row gutter={16} style={{ marginTop: 24 }}>
+          <Col span={12}>
             <Statistic
-              title="Energy Imported"
-              value={meterValues.data["Energy.Active.Import.Register"] || 0}
-              precision={2}
+              title="Current power"
+              value={(stationStatus === "charging" ? meterValues.data["Power.Active.Import"] : 0).toFixed(2)}
+              suffix="kW"
+              styles={{ content: { fontSize: 20, fontWeight: 600 } }}
+            />
+          </Col>
+          <Col span={12}>
+            <Statistic
+              title="Energy imported"
+              value={(meterValues.data["Energy.Active.Import.Register"] || 0).toFixed(2)}
               suffix="kWh"
+              styles={{ content: { fontSize: 20, fontWeight: 600 } }}
             />
           </Col>
         </Row>
       )}
 
-      {lastUpdateTime && (
-        <div style={{ marginTop: 16, textAlign: 'center' }}>
-          <Text type="secondary">
-            Last updated: {lastUpdateTime.toLocaleTimeString()}
-          </Text>
-        </div>
+      {meterValues?.chargingProfile && (
+        <Flex align="center" gap={8} wrap style={{ marginTop: 20 }}>
+          <SettingOutlined style={{ color: token.colorTextSecondary }} />
+          <Text type="secondary">Charging profile</Text>
+          <Tag color="processing">{meterValues.chargingProfile.name}</Tag>
+          <Text type="secondary">limited to</Text>
+          <Text strong>{meterValues.chargingProfile.currentMaxPower.toFixed(1)} A</Text>
+        </Flex>
       )}
     </Card>
   );

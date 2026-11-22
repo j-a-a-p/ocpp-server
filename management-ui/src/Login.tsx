@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Card, Button, Result, Alert } from "antd";
+import { Button, Result } from "antd";
+import { LoadingOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
+import AuthLayout from "./components/AuthLayout";
 
 export default function Login() {
-  console.log("Login component rendering...");
   const [message, setMessage] = useState("Logging in...");
   const [status, setStatus] = useState("loading");
   const [serverAvailable, setServerAvailable] = useState(true);
@@ -35,7 +36,6 @@ export default function Login() {
       .catch((err) => {
         console.error('Login error:', err);
         if (err.message.includes('fetch')) {
-          // Network error - server unavailable
           setServerAvailable(false);
           setMessage("Server is currently unavailable. Please try again later.");
         } else {
@@ -45,62 +45,38 @@ export default function Login() {
       });
   }, [searchParams, navigate]);
 
-  const handleRetryLogin = () => {
-    // Clear the current URL parameters and redirect to home to trigger the auth popup
-    window.location.href = "/";
-  };
-
-  const handleRetryConnection = () => {
-    window.location.reload();
-  };
-
   if (!serverAvailable) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh',
-        background: '#f5f5f5'
-      }}>
-        <Card style={{ maxWidth: '400px', textAlign: 'center' }}>
-          <Alert
-            message="Server Unavailable"
-            description="The server is currently unavailable. Please check your connection and try again."
-            type="warning"
-            showIcon
-            style={{ marginBottom: '16px' }}
-          />
-          <Button type="primary" onClick={handleRetryConnection}>
-            Retry Connection
-          </Button>
-        </Card>
-      </div>
+      <AuthLayout>
+        <Result
+          status="warning"
+          title="Server unavailable"
+          subTitle="The server is currently unavailable. Please check your connection and try again."
+          extra={
+            <Button type="primary" onClick={() => window.location.reload()}>
+              Retry connection
+            </Button>
+          }
+        />
+      </AuthLayout>
     );
   }
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      justifyContent: 'center', 
-      alignItems: 'center', 
-      height: '100vh',
-      background: '#f5f5f5'
-    }}>
-      <Card style={{ maxWidth: '400px', textAlign: 'center' }}>
-        <Result
-          status={status === "success" ? "success" : status === "error" ? "error" : "info"}
-          title={status === "success" ? "Login Successful!" : status === "error" ? "Login Failed" : "Logging In..."}
-          subTitle={message}
-          extra={
-            status === "error" && (
-              <Button type="primary" onClick={handleRetryLogin}>
-                Try Again
-              </Button>
-            )
-          }
-        />
-      </Card>
-    </div>
+    <AuthLayout>
+      <Result
+        status={status === "success" ? "success" : status === "error" ? "error" : "info"}
+        icon={status === "loading" ? <LoadingOutlined /> : undefined}
+        title={status === "success" ? "Login successful" : status === "error" ? "Login failed" : "Logging in..."}
+        subTitle={message}
+        extra={
+          status === "error" && (
+            <Button type="primary" onClick={() => navigate("/")}>
+              Try again
+            </Button>
+          )
+        }
+      />
+    </AuthLayout>
   );
-} 
+}

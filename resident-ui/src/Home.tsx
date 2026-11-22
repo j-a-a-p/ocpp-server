@@ -1,842 +1,123 @@
-import { useState, useEffect } from "react";
-import { Layout, Menu, message, List, Button, Table, Card, Space, Typography, Input } from "antd";
-import { HomeOutlined, ThunderboltOutlined, CheckCircleOutlined, CloseCircleOutlined, LineChartOutlined, EditOutlined } from "@ant-design/icons";
-import { API_BASE_URL } from "./config";
-import { getCurrentResidentTransactions, getAllCurrentResidentTransactions, calculateMonthlyEnergyStats, ChargeTransaction, MonthlyEnergyStats } from "./services/chargeTransactionService";
-import { getMyCards, addCard, updateCardName, Card as CardType } from "./services/cardService";
-import { chargingCostService, ChargingCost } from "./services/chargingCostService";
-import PowerLogsChart from "./components/PowerLogsChart";
-
-const { Content } = Layout;
-const { Text } = Typography;
-
-// Remove the old Card interface as we're now using CardType from the service
-
-interface MeterValues {
-  timestamp: string;
-  connectorId: number;
-  transactionId: number;
-  context: string;
-  data: {
-    "Current.Offered": number;
-    "Current.Import.L1": number;
-    "Current.Import.L2": number;
-    "Current.Import.L3": number;
-    "Voltage.L1": number;
-    "Voltage.L2": number;
-    "Voltage.L3": number;
-    "Energy.Active.Import.Register": number;
-    "Power.Active.Import": number;
-  };
-}
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { App, Col, Row } from "antd";
+import { calculateMonthlyEnergyStats, getAllCurrentResidentTransactions, type ChargeTransaction } from "./services/chargeTransactionService";
+import { addCard, getMyCards, getRefusedCards, updateCardName, type Card as CardType, type RefusedCard } from "./services/cardService";
+import { chargingCostService } from "./services/chargingCostService";
+import { useStationStatus } from "./hooks/useStationStatus";
+import AppHeader from "./components/AppHeader";
+import StationStatusCard from "./components/StationStatusCard";
+import MonthlyUsageCard from "./components/MonthlyUsageCard";
+import UsageSummary from "./components/UsageSummary";
+import ChargesCard from "./components/ChargesCard";
+import MyCardsCard from "./components/MyCardsCard";
+import RefusedCardsCard from "./components/RefusedCardsCard";
 
 const Home: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<string>("home");
-  const [myCards, setMyCards] = useState<CardType[]>([]);
-  const [refusedCards, setRefusedCards] = useState<Array<{station_id: string; timestamp: string}>>([]);
-  const [chargeTransactions, setChargeTransactions] = useState<ChargeTransaction[]>([]);
-  const [transactionsLoading, setTransactionsLoading] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [totalTransactions, setTotalTransactions] = useState(0);
-  const [monthlyStats, setMonthlyStats] = useState<MonthlyEnergyStats[]>([]);
-  const [monthlyStatsLoading, setMonthlyStatsLoading] = useState(false);
-  
-  // State for expanded rows in the charges table
-  const [expandedRowKeys, setExpandedRowKeys] = useState<React.Key[]>([]);
-  
-  // New state for station status
-  const [meterValues, setMeterValues] = useState<MeterValues | null>(null);
-  const [stationStatus, setStationStatus] = useState<'available' | 'charging' | 'unknown'>('unknown');
-  const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
-  const [isResidentCharging, setIsResidentCharging] = useState(false);
-  const [myCardsLoaded, setMyCardsLoaded] = useState(false);
-  const [editingCard, setEditingCard] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState<string>("");
-  const [activeChargingCost, setActiveChargingCost] = useState<ChargingCost | null>(null);
+  const { message } = App.useApp();
+  const station = useStationStatus();
+  const [transactions, setTransactions] = useState<ChargeTransaction[]>([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(true);
+  const [cards, setCards] = useState<CardType[]>([]);
+  const [cardsLoading, setCardsLoading] = useState(true);
+  const [refusedCards, setRefusedCards] = useState<RefusedCard[]>([]);
+  const [rate, setRate] = useState<number | null>(null);
 
-  const fetchMyCards = async () => {
+  const monthlyStats = useMemo(() => calculateMonthlyEnergyStats(transactions), [transactions]);
+
+  const loadTransactions = useCallback(async () => {
     try {
-      const cards = await getMyCards();
-      setMyCards(cards);
-      setMyCardsLoaded(true);
-    } catch (error) {
-      console.error("Error fetching my cards:", error);
-    }
-  };
-
-  const fetchActiveChargingCost = async () => {
-    try {
-      const cost = await chargingCostService.getActiveChargingCost();
-      setActiveChargingCost(cost);
-    } catch (error) {
-      console.error("Error fetching active charging cost:", error);
-    }
-  };
-
-  const fetchRefusedCards = () => {
-    fetch(`${API_BASE_URL}/cards/refused`)
-      .then(response => response.json())
-      .then(data => setRefusedCards(data.refused_cards))
-      .catch(error => console.error("Error fetching refused cards:", error));
-  };
-
-  const fetchChargeTransactions = async (page: number = 1, size: number = 10) => {
-    setTransactionsLoading(true);
-    try {
-      const skip = (page - 1) * size;
-      const response = await getCurrentResidentTransactions(skip, size);
-      setChargeTransactions(response.transactions);
-      setTotalTransactions(response.total);
-      setCurrentPage(page);
-      setPageSize(size);
+      setTransactions(await getAllCurrentResidentTransactions());
     } catch (error) {
       console.error("Error fetching charge transactions:", error);
-      message.error("Failed to load charge transactions");
+      message.error("Failed to load your charging sessions");
     } finally {
       setTransactionsLoading(false);
     }
-  };
+  }, [message]);
 
-  const fetchMonthlyStats = async () => {
-    setMonthlyStatsLoading(true);
+  const loadCards = useCallback(async () => {
     try {
-      const allTransactions = await getAllCurrentResidentTransactions();
-      const stats = calculateMonthlyEnergyStats(allTransactions);
-      setMonthlyStats(stats);
+      setCards(await getMyCards());
     } catch (error) {
-      console.error("Error fetching monthly stats:", error);
-      message.error("Failed to load monthly statistics");
+      console.error("Error fetching my cards:", error);
     } finally {
-      setMonthlyStatsLoading(false);
+      setCardsLoading(false);
     }
-  };
-
-  const fetchMeterValues = async () => {
-    try {
-      const response = await fetch('/meter_values.json');
-      if (response.ok) {
-        const data: MeterValues = await response.json();
-        setMeterValues(data);
-        setLastUpdateTime(new Date());
-        
-        // Check if the file was updated recently (within 2 minutes)
-        const fileTimestamp = new Date(data.timestamp);
-        const now = new Date();
-        const timeDiff = now.getTime() - fileTimestamp.getTime();
-        const twoMinutes = 2 * 60 * 1000; // 2 minutes in milliseconds
-        
-        if (timeDiff < twoMinutes) {
-          setStationStatus('charging');
-          // Check if the resident is charging by comparing transaction ID
-          if (data.transactionId) {
-            // Get recent transactions for the resident and check if any match the current transaction ID
-            try {
-              const recentTransactions = await getAllCurrentResidentTransactions();
-              const isResidentTransaction = recentTransactions.some(
-                transaction => transaction.id === data.transactionId
-              );
-              setIsResidentCharging(isResidentTransaction);
-            } catch (error) {
-              console.error("Error checking resident charging status:", error);
-              setIsResidentCharging(false);
-            }
-          } else {
-            setIsResidentCharging(false);
-          }
-        } else {
-          setStationStatus('available');
-          setIsResidentCharging(false);
-        }
-      } else {
-        setStationStatus('unknown');
-        setIsResidentCharging(false);
-      }
-    } catch (error) {
-      console.error("Error fetching meter values:", error);
-      setStationStatus('unknown');
-      setIsResidentCharging(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchMyCards();
-    fetchRefusedCards();
-    fetchChargeTransactions();
-    fetchMonthlyStats();
-    fetchMeterValues(); // Fetch meter values on mount
-    fetchActiveChargingCost();
   }, []);
 
-  // Set up interval to fetch meter values every 10 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      fetchMeterValues();
-    }, 10000); // 10 seconds
+  const loadRefusedCards = useCallback(async () => {
+    try {
+      setRefusedCards(await getRefusedCards());
+    } catch (error) {
+      console.error("Error fetching refused cards:", error);
+    }
+  }, []);
 
-    return () => clearInterval(interval);
-  }, []); // No dependencies needed since we fetch transactions inside fetchMeterValues
+  const loadRate = useCallback(async () => {
+    try {
+      const cost = await chargingCostService.getActiveChargingCost();
+      setRate(cost.kwh_price);
+    } catch (error) {
+      console.error("Error fetching active charging cost:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadTransactions();
+    loadCards();
+    loadRefusedCards();
+    loadRate();
+  }, [loadTransactions, loadCards, loadRefusedCards, loadRate]);
 
   const handleAddCard = async (stationId: string) => {
     try {
       await addCard(stationId);
-      message.success("Card added successfully");
-      // Refresh both lists after successful addition
-      fetchMyCards();
-      fetchRefusedCards();
+      message.success("Card added to your account");
+      loadCards();
+      loadRefusedCards();
     } catch (error) {
       console.error("Error adding card:", error);
       message.error("Failed to add card");
     }
   };
 
-  const handleTableChange = (pagination: { current?: number; pageSize?: number }) => {
-    fetchChargeTransactions(pagination.current || 1, pagination.pageSize || 10);
-  };
-
-  const handleEditCardName = (card: CardType) => {
-    setEditingCard(card.rfid);
-    setEditingName(card.name);
-  };
-
-  const handleSaveCardName = async (rfid: string) => {
+  const handleRenameCard = async (rfid: string, name: string) => {
     try {
-      await updateCardName(rfid, editingName);
-      message.success("Card name updated successfully");
-      setEditingCard(null);
-      setEditingName("");
-      fetchMyCards(); // Refresh the cards list
+      await updateCardName(rfid, name);
+      message.success("Card renamed");
+      loadCards();
     } catch (error) {
       console.error("Error updating card name:", error);
-      message.error("Failed to update card name");
+      message.error("Failed to rename card");
     }
   };
 
-  const handleCancelEdit = () => {
-    setEditingCard(null);
-    setEditingName("");
-  };
-
-  const transactionColumns = [
-    {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
-      width: 80,
-      render: (id: number) => <Text code>{id}</Text>,
-    },
-    {
-      title: 'Date',
-      dataIndex: 'created',
-      key: 'created',
-      render: (created: string) => (
-        <Text>{new Date(created).toLocaleDateString()}</Text>
-      ),
-    },
-    {
-      title: 'Time',
-      dataIndex: 'created',
-      key: 'created_time',
-      render: (created: string) => (
-        <Text>{new Date(created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
-      ),
-    },
-    {
-      title: 'Energy (kWh)',
-      dataIndex: 'final_energy_kwh',
-      key: 'final_energy_kwh',
-      render: (energy: number | null) => (
-        <Text type={energy ? 'success' : 'secondary'}>
-          {energy ? `${energy.toFixed(1)} kWh` : 'N/A'}
-        </Text>
-      ),
-    },
-    {
-      title: 'Cost (€)',
-      key: 'total_cost',
-      render: (_: unknown, record: ChargeTransaction) => {
-        if (!record.power_logs || record.power_logs.length === 0) {
-          return <Text type="secondary">N/A</Text>;
-        }
-        
-        const totalCost = record.power_logs.reduce((sum, log) => {
-          return sum + (log.delta_power_cost || 0);
-        }, 0);
-        
-        return (
-          <Text type={totalCost > 0 ? 'success' : 'secondary'}>
-            {totalCost > 0 ? `€${totalCost.toFixed(2)}` : 'N/A'}
-          </Text>
-        );
-      },
-    },
-    {
-      title: 'Card Name',
-      dataIndex: 'card_name',
-      key: 'card_name',
-      render: (cardName: string, record: ChargeTransaction) => (
-        <Text strong>{cardName || record.rfid}</Text>
-      ),
-    },
-    {
-      title: 'Station',
-      dataIndex: 'station_id',
-      key: 'station_id',
-      render: (stationId: string) => <Text strong>{stationId}</Text>,
-    },
-    {
-      title: 'Power Logs',
-      key: 'chart',
-      width: 80,
-      render: (_: unknown, record: ChargeTransaction) => {
-        const hasPowerLogs = record.power_logs && record.power_logs.length > 1;
-        const isExpanded = expandedRowKeys.includes(record.id);
-        
-        if (!hasPowerLogs) {
-          return null; // Don't show anything if less than 2 power logs
-        }
-        
-        return (
-          <Button
-            type="text"
-            size="small"
-            icon={<LineChartOutlined />}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isExpanded) {
-                setExpandedRowKeys(expandedRowKeys.filter(key => key !== record.id));
-              } else {
-                setExpandedRowKeys([...expandedRowKeys, record.id]);
-              }
-            }}
-            style={{ 
-              color: isExpanded ? '#1890ff' : '#666',
-              padding: '4px 8px'
-            }}
-          />
-        );
-      },
-    },
-  ];
-
   return (
-    <Layout style={{ 
-      minHeight: "100vh",
-      maxWidth: "800px",
-      margin: "0 auto",
-      display: "flex",
-      flexDirection: "column"
-    }}>
-      <Content style={{ 
-        flex: 1,
-        padding: "16px",
-        overflowY: "auto",
-        backgroundColor: "#fff"
-      }}>
-        {activeTab === "home" && (
-          <div>
-            <h1 style={{ 
-              fontSize: "24px",
-              marginBottom: "16px"
-            }}>
-              Charger Resident
-            </h1>
-            
-            {/* Responsive Layout for Current Station Status and Monthly Usage */}
-            <div style={{ 
-              display: "flex", 
-              flexDirection: "row", 
-              gap: "16px",
-              marginBottom: "24px",
-              flexWrap: "wrap"
-            }}>
-              {/* Current Station Status Card - Only show after My Cards have loaded */}
-              {myCardsLoaded && (
-                <Card
-                  title={
-                    <Space>
-                      <span>Station Status</span>
-                    </Space>
-                  }
-                  style={{ 
-                    flex: "0 0 auto",
-                    width: "280px"
-                  }}
-                >
-                  {stationStatus === 'available' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <Button 
-                        type="primary" 
-                        size="large"
-                        style={{ 
-                          width: '80px', 
-                          height: '80px', 
-                          borderRadius: '8px',
-                          backgroundColor: '#52c41a',
-                          borderColor: '#52c41a'
-                        }}
-                        icon={<CheckCircleOutlined style={{ fontSize: '32px' }} />}
-                      />
-                      <div style={{ flex: 1, textAlign: 'center' }}>
-                        <h1 style={{ 
-                          color: '#52c41a', 
-                          margin: '0 0 8px 0',
-                          fontSize: '24px',
-                          fontWeight: 'bold'
-                        }}>
-                          Available
-                        </h1>
-                        {activeChargingCost && (
-                          <div style={{ marginBottom: '8px' }}>
-                            <Text strong style={{ fontSize: '16px', color: '#1890ff' }}>
-                              Current Rate: €{activeChargingCost.kwh_price.toFixed(2)}/kWh
-                            </Text>
-                          </div>
-                        )}
-                        {lastUpdateTime && (
-                          <Text type="secondary" style={{ fontSize: '12px', display: 'block' }}>
-                            Last updated: {lastUpdateTime.toLocaleTimeString()}
-                          </Text>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {stationStatus === 'charging' && isResidentCharging && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <Button 
-                        type="primary" 
-                        size="large"
-                        style={{ 
-                          width: '80px', 
-                          height: '80px', 
-                          borderRadius: '8px',
-                          backgroundColor: '#52c41a',
-                          borderColor: '#52c41a'
-                        }}
-                        icon={<CheckCircleOutlined style={{ fontSize: '32px' }} />}
-                      />
-                      <div style={{ flex: 1, textAlign: 'center' }}>
-                        <h1 style={{ 
-                          color: '#52c41a', 
-                          margin: '0 0 8px 0',
-                          fontSize: '24px',
-                          fontWeight: 'bold'
-                        }}>
-                          Charging
-                        </h1>
-                        <Text type="success" strong style={{ display: 'block', marginBottom: '8px' }}>
-                          You are charging now.
-                        </Text>
-                        {activeChargingCost && (
-                          <div style={{ marginBottom: '8px' }}>
-                            <Text strong style={{ fontSize: '14px', color: '#1890ff' }}>
-                              Current Rate: €{activeChargingCost.kwh_price.toFixed(2)}/kWh
-                            </Text>
-                          </div>
-                        )}
-                        {lastUpdateTime && (
-                          <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
-                            Last updated: {lastUpdateTime.toLocaleTimeString()}
-                          </Text>
-                        )}
-                        {meterValues && (
-                          <div>
-                            <Text type="secondary" style={{ fontSize: '12px', display: 'block' }}>
-                              Power: {meterValues.data["Power.Active.Import"].toFixed(2)} kW
-                            </Text>
-                            <Text type="secondary" style={{ fontSize: '12px' }}>
-                              Energy: {meterValues.data["Energy.Active.Import.Register"].toFixed(2)} kWh
-                            </Text>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {stationStatus === 'charging' && !isResidentCharging && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <Button 
-                        type="primary" 
-                        size="large"
-                        style={{ 
-                          width: '80px', 
-                          height: '80px', 
-                          borderRadius: '8px',
-                          backgroundColor: '#faad14',
-                          borderColor: '#faad14'
-                        }}
-                        icon={<CheckCircleOutlined style={{ fontSize: '32px' }} />}
-                      />
-                      <div style={{ flex: 1, textAlign: 'center' }}>
-                        <h1 style={{ 
-                          color: '#faad14', 
-                          margin: '0 0 8px 0',
-                          fontSize: '24px',
-                          fontWeight: 'bold'
-                        }}>
-                          Charging
-                        </h1>
-                        <Text type="warning" strong style={{ display: 'block', marginBottom: '8px' }}>
-                          Another resident is charging.
-                        </Text>
-                        {lastUpdateTime && (
-                          <Text type="secondary" style={{ fontSize: '12px', display: 'block', marginBottom: '4px' }}>
-                            Last updated: {lastUpdateTime.toLocaleTimeString()}
-                          </Text>
-                        )}
-                        {meterValues && (
-                          <div>
-                            <Text type="secondary" style={{ fontSize: '12px' }}>
-                              Energy: {meterValues.data["Energy.Active.Import.Register"].toFixed(2)} kWh
-                            </Text>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {stationStatus === 'unknown' && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                      <Button 
-                        type="primary" 
-                        size="large"
-                        style={{ 
-                          width: '80px', 
-                          height: '80px', 
-                          borderRadius: '8px',
-                          backgroundColor: '#ff4d4f',
-                          borderColor: '#ff4d4f'
-                        }}
-                        icon={<CloseCircleOutlined style={{ fontSize: '32px' }} />}
-                      />
-                      <div style={{ flex: 1, textAlign: 'center' }}>
-                        <h1 style={{ 
-                          color: '#ff4d4f', 
-                          margin: '0 0 8px 0',
-                          fontSize: '24px',
-                          fontWeight: 'bold'
-                        }}>
-                          Unknown
-                        </h1>
-                        {lastUpdateTime && (
-                          <Text type="secondary" style={{ fontSize: '12px', display: 'block' }}>
-                            Last updated: {lastUpdateTime.toLocaleTimeString()}
-                          </Text>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </Card>
-              )}
-              
-
-              
-              {/* Monthly Energy Statistics Card */}
-              <Card
-                title={
-                  <Space>
-                    <span>Monthly Usage</span>
-                  </Space>
-                }
-                style={{ 
-                  flex: "1 1 0",
-                  minWidth: "400px"
-                }}
-              >
-              <Table
-                dataSource={monthlyStats}
-                columns={[
-                  {
-                    title: 'Month',
-                    dataIndex: 'month',
-                    key: 'month',
-                    render: (month: string, record: MonthlyEnergyStats) => (
-                      <Text strong>{`${month} '${String(record.year).slice(-2)}`}</Text>
-                    ),
-                  },
-                  {
-                    title: 'Energy (kWh)',
-                    dataIndex: 'totalEnergy',
-                    key: 'totalEnergy',
-                    render: (energy: number) => (
-                      <Text type="success" strong>
-                        {energy.toFixed(1)} kWh
-                      </Text>
-                    ),
-                  },
-                  {
-                    title: 'Transactions',
-                    dataIndex: 'transactionCount',
-                    key: 'transactionCount',
-                    render: (count: number) => (
-                      <Text>{count}</Text>
-                    ),
-                  },
-                  {
-                    title: 'Cost (€)',
-                    dataIndex: 'totalCost',
-                    key: 'totalCost',
-                    render: (cost: number) => (
-                      <Text type="success" strong>
-                        €{cost.toFixed(2)}
-                      </Text>
-                    ),
-                  },
-                ]}
-                rowKey={(record) => `${record.month}-${record.year}`}
-                loading={monthlyStatsLoading}
-                pagination={false}
-                size="small"
-                bordered
-                locale={{ 
-                  emptyText: 'No monthly data found'
-                }}
-              />
-            </Card>
-            </div>
-
-            {/* Charges Summary Card */}
-            <Card
-              style={{ marginBottom: "16px" }}
-              bodyStyle={{ padding: "12px 16px" }}
-            >
-              <div style={{ 
-                display: "flex", 
-                justifyContent: "space-between", 
-                alignItems: "center",
-                flexWrap: "wrap",
-                gap: "16px"
-              }}>
-                <div>
-                  <Text type="secondary">Total Transactions</Text>
-                  <br />
-                  <Text strong style={{ fontSize: "18px" }}>
-                    {chargeTransactions.length}
-                  </Text>
-                </div>
-                <div>
-                  <Text type="secondary">Total Energy</Text>
-                  <br />
-                  <Text strong style={{ fontSize: "18px" }}>
-                    {chargeTransactions.reduce((sum, t) => sum + (t.final_energy_kwh || 0), 0).toFixed(1)} kWh
-                  </Text>
-                </div>
-                <div>
-                  <Text type="secondary">Total Cost</Text>
-                  <br />
-                  <Text strong style={{ fontSize: "18px", color: "#52c41a" }}>
-                    €{chargeTransactions.reduce((sum, transaction) => {
-                      if (transaction.power_logs) {
-                        return sum + transaction.power_logs.reduce((logSum, log) => {
-                          return logSum + (log.delta_power_cost || 0);
-                        }, 0);
-                      }
-                      return sum;
-                    }, 0).toFixed(2)}
-                  </Text>
-                </div>
-              </div>
-            </Card>
-
-            {/* Charges Card - Full Width */}
-            <Card
-              title={
-                <Space>
-                  <ThunderboltOutlined />
-                  <span>Charges</span>
-                </Space>
-              }
-              style={{ marginBottom: "24px" }}
-              extra={
-                <div style={{ textAlign: 'right' }}>
-                  <Text strong>Total Cost: €{
-                    chargeTransactions.reduce((sum, transaction) => {
-                      if (transaction.power_logs) {
-                        return sum + transaction.power_logs.reduce((logSum, log) => {
-                          return logSum + (log.delta_power_cost || 0);
-                        }, 0);
-                      }
-                      return sum;
-                    }, 0).toFixed(2)
-                  }</Text>
-                </div>
-              }
-            >
-              <Table
-                dataSource={chargeTransactions}
-                columns={transactionColumns}
-                rowKey="id"
-                loading={transactionsLoading}
-                expandable={{
-                  expandedRowKeys: expandedRowKeys,
-                  onExpand: (expanded, record) => {
-                    if (expanded) {
-                      setExpandedRowKeys([...expandedRowKeys, record.id]);
-                    } else {
-                      setExpandedRowKeys(expandedRowKeys.filter(key => key !== record.id));
-                    }
-                  },
-                  expandedRowRender: (record: ChargeTransaction) => {
-                    if (!record.power_logs || record.power_logs.length < 2) {
-                      return null;
-                    }
-                    return <PowerLogsChart powerLogs={record.power_logs} transactionId={record.id} />;
-                  },
-                  rowExpandable: (record: ChargeTransaction) => {
-                    return record.power_logs && record.power_logs.length > 1;
-                  },
-                }}
-                pagination={{
-                  current: currentPage,
-                  pageSize: pageSize,
-                  total: totalTransactions,
-                  showSizeChanger: true,
-                  showQuickJumper: true,
-                  showTotal: (total, range) => 
-                    `${range[0]}-${range[1]} of ${total} transactions`,
-                  pageSizeOptions: ['5', '10', '20', '50'],
-                }}
-                onChange={handleTableChange}
-                size="small"
-                bordered
-                locale={{ 
-                  emptyText: 'No charge transactions found'
-                }}
-                scroll={{ x: 'max-content' }}
-              />
-            </Card>
-
-            {/* Responsive Layout for My Cards and Refused Cards */}
-            <div style={{ 
-              display: "flex", 
-              flexDirection: "row", 
-              gap: "16px",
-              marginBottom: "24px",
-              flexWrap: "wrap"
-            }}>
-              {/* My Cards Card - Smaller */}
-              <Card
-                title={
-                  <Space>
-                    <span>My Cards</span>
-                  </Space>
-                }
-                style={{ 
-                  flex: "1 1 0",
-                  minWidth: "300px"
-                }}
-              >
-                <Table
-                  dataSource={myCards}
-                  columns={[
-                    {
-                      title: 'Card Name',
-                      dataIndex: 'name',
-                      key: 'name',
-                      render: (name: string, record: CardType) => {
-                        if (editingCard === record.rfid) {
-                          return (
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                              <Input
-                                value={editingName}
-                                onChange={(e) => setEditingName(e.target.value)}
-                                size="small"
-                                style={{ flex: 1 }}
-                                onPressEnter={() => handleSaveCardName(record.rfid)}
-                              />
-                              <Button
-                                type="primary"
-                                size="small"
-                                onClick={() => handleSaveCardName(record.rfid)}
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                size="small"
-                                onClick={handleCancelEdit}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          );
-                        }
-                        return (
-                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <span>{name}</span>
-                            <Button
-                              type="text"
-                              size="small"
-                              icon={<EditOutlined />}
-                              onClick={() => handleEditCardName(record)}
-                              style={{ padding: '4px' }}
-                            />
-                          </div>
-                        );
-                      },
-                    },
-                    {
-                      title: 'RFID',
-                      dataIndex: 'rfid',
-                      key: 'rfid',
-                      render: (rfid: string) => (
-                        <Text code style={{ fontSize: '12px' }}>{rfid}</Text>
-                      ),
-                    },
-                  ]}
-                  pagination={false}
-                  size="small"
-                  bordered
-                  locale={{ emptyText: 'No cards found' }}
-                />
-              </Card>
-
-              {/* Refused Cards List */}
-              <List
-                header={<h3>Refused Cards</h3>}
-                bordered
-                style={{ 
-                  flex: "1 1 0",
-                  minWidth: "300px"
-                }}
-                dataSource={refusedCards}
-                renderItem={item => (
-                  <List.Item
-                    actions={[<Button type="primary" onClick={() => handleAddCard(item.station_id)}>Add Card</Button>]}
-                  >
-                    <div>
-                      <strong>Station:</strong> {item.station_id} <br />
-                      <strong>Timestamp:</strong> {new Date(item.timestamp).toLocaleString()}
-                    </div>
-                  </List.Item>
-                )}
-              />
-            </div>
-          </div>
-        )}
-      </Content>
-
-      <Menu
-        mode="horizontal"
-        selectedKeys={[activeTab]}
-        onClick={(e) => setActiveTab(e.key)}
-        style={{
-          position: "sticky",
-          bottom: 0,
-          width: "100%",
-          borderTop: "1px solid #f0f0f0",
-          display: "flex",
-          justifyContent: "center"
-        }}
-        items={[
-          {
-            key: "home",
-            label: "Charge APT",
-            icon: <HomeOutlined />
-          }
-        ]}
-      />
-    </Layout>
+    <>
+      <AppHeader />
+      <main className="page-container">
+        <Row gutter={[16, 16]}>
+          <Col xs={24} lg={10}>
+            <StationStatusCard {...station} rate={rate} />
+          </Col>
+          <Col xs={24} lg={14}>
+            <MonthlyUsageCard stats={monthlyStats} loading={transactionsLoading} />
+          </Col>
+          <Col span={24}>
+            <UsageSummary transactions={transactions} loading={transactionsLoading} />
+          </Col>
+          <Col span={24}>
+            <ChargesCard transactions={transactions} loading={transactionsLoading} />
+          </Col>
+          <Col xs={24} lg={12}>
+            <MyCardsCard cards={cards} loading={cardsLoading} onRename={handleRenameCard} />
+          </Col>
+          <Col xs={24} lg={12}>
+            <RefusedCardsCard refusedCards={refusedCards} onAdd={handleAddCard} />
+          </Col>
+        </Row>
+      </main>
+    </>
   );
 };
 

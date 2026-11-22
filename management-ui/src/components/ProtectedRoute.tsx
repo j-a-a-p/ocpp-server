@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Spin, Alert, Button } from 'antd';
+import { Button, Result, Spin } from 'antd';
+import { MailOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
+import AuthLayout from './AuthLayout';
 import AuthPopup from './AuthPopup';
 
 interface ProtectedRouteProps {
@@ -17,7 +19,6 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       setShowAuthPopup(true);
     }
     
-    // Reset popupManuallyClosed when user becomes authenticated
     if (isAuthenticated) {
       setPopupManuallyClosed(false);
     }
@@ -30,18 +31,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     await checkAuth();
   };
 
-  const handleRetryConnection = async () => {
-    await checkAuth();
-  };
-
   if (isLoading) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh' 
-      }}>
+      <div className="auth-page">
         <Spin size="large" />
       </div>
     );
@@ -49,46 +41,38 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
 
   if (!serverAvailable) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh',
-        background: '#f5f5f5'
-      }}>
-        <div style={{ textAlign: 'center', maxWidth: '400px' }}>
-          <Alert
-            message="Server Unavailable"
-            description="The server is currently unavailable. Please check your connection and try again."
-            type="warning"
-            showIcon
-            style={{ marginBottom: '16px' }}
-          />
-          <Button type="primary" onClick={handleRetryConnection}>
-            Retry Connection
-          </Button>
-        </div>
-      </div>
+      <AuthLayout>
+        <Result
+          status="warning"
+          title="Server unavailable"
+          subTitle="The server is currently unavailable. Please check your connection and try again."
+          extra={
+            <Button type="primary" onClick={checkAuth}>
+              Retry connection
+            </Button>
+          }
+        />
+      </AuthLayout>
     );
   }
 
   if (!isAuthenticated) {
     return (
       <>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          height: '100vh',
-          background: '#f5f5f5'
-        }}>
-          <div style={{ textAlign: 'center' }}>
-            <h2>Welcome to Management Portal</h2>
-            <p>Please authenticate to continue...</p>
-          </div>
-        </div>
+        <AuthLayout>
+          <Result
+            icon={<MailOutlined />}
+            title="Welcome"
+            subTitle="Sign in with the link we email you to manage the chargers."
+            extra={
+              <Button type="primary" onClick={() => setShowAuthPopup(true)}>
+                Sign in
+              </Button>
+            }
+          />
+        </AuthLayout>
         <AuthPopup
-          visible={showAuthPopup}
+          open={showAuthPopup}
           onClose={handleAuthClose}
         />
       </>
@@ -98,4 +82,4 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   return <>{children}</>;
 };
 
-export default ProtectedRoute; 
+export default ProtectedRoute;

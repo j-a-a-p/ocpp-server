@@ -1,38 +1,23 @@
 import { useEffect, useState, useMemo } from "react";
-import { Table, Card, Spin, message } from "antd";
+import { App, Card, Flex, Grid, Table } from "antd";
+import { CalendarOutlined, FieldTimeOutlined } from "@ant-design/icons";
 import { getAllChargeTransactions, ChargeTransaction, MonthlyData, YearlySummary } from "./services/chargeTransactionService";
 
 const Charges: React.FC = () => {
+  const { message } = App.useApp();
+  const isMobile = Grid.useBreakpoint().md === false;
   const [loading, setLoading] = useState<boolean>(true);
   const [transactions, setTransactions] = useState<ChargeTransaction[]>([]);
-  const [isMobile, setIsMobile] = useState<boolean>(false);
 
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  useEffect(() => {
-    fetchChargeTransactions();
-  }, []);
-
-  const fetchChargeTransactions = async () => {
-    setLoading(true);
-    try {
-      const data = await getAllChargeTransactions();
-      setTransactions(data);
-    } catch (error) {
-      console.error("Failed to load charge transactions:", error);
-      message.error("Failed to load charge transactions.");
-    }
-    setLoading(false);
-  };
+    getAllChargeTransactions()
+      .then(setTransactions)
+      .catch((error) => {
+        console.error("Failed to load charge transactions:", error);
+        message.error("Failed to load charge transactions.");
+      })
+      .finally(() => setLoading(false));
+  }, [message]);
 
   // Process raw transactions into monthly and yearly summaries
   const reportData = useMemo(() => {
@@ -157,6 +142,7 @@ const Charges: React.FC = () => {
       title: "Energy (kWh)",
       dataIndex: "total_energy",
       key: "total_energy",
+      align: "right" as const,
       render: (value: number) => value.toFixed(2),
       sorter: (a: MonthlyData, b: MonthlyData) => a.total_energy - b.total_energy,
     },
@@ -164,12 +150,14 @@ const Charges: React.FC = () => {
       title: "Transactions",
       dataIndex: "transaction_count",
       key: "transaction_count",
+      align: "right" as const,
       sorter: (a: MonthlyData, b: MonthlyData) => a.transaction_count - b.transaction_count,
     },
     {
       title: "Cost (€)",
       dataIndex: "total_cost",
       key: "total_cost",
+      align: "right" as const,
       render: (value: number) => `€${value.toFixed(2)}`,
       sorter: (a: MonthlyData, b: MonthlyData) => a.total_cost - b.total_cost,
     },
@@ -193,6 +181,7 @@ const Charges: React.FC = () => {
       title: "Energy (kWh)",
       dataIndex: "total_energy",
       key: "total_energy",
+      align: "right" as const,
       render: (value: number) => value.toFixed(2),
       sorter: (a: YearlySummary, b: YearlySummary) => a.total_energy - b.total_energy,
     },
@@ -200,66 +189,69 @@ const Charges: React.FC = () => {
       title: "Transactions",
       dataIndex: "transaction_count",
       key: "transaction_count",
+      align: "right" as const,
       sorter: (a: YearlySummary, b: YearlySummary) => a.transaction_count - b.transaction_count,
     },
     {
       title: "Cost (€)",
       dataIndex: "total_cost",
       key: "total_cost",
+      align: "right" as const,
       render: (value: number) => `€${value.toFixed(2)}`,
       sorter: (a: YearlySummary, b: YearlySummary) => a.total_cost - b.total_cost,
     },
   ];
 
-  if (loading) {
-    return (
-      <div style={{ textAlign: 'center', padding: isMobile ? '20px' : '50px' }}>
-        <Spin size="large" />
-        <p>Loading charge transactions...</p>
-      </div>
-    );
-  }
-
-  if (!transactions.length) {
-    return (
-      <div style={{ textAlign: 'center', padding: isMobile ? '20px' : '50px' }}>
-        <p>No charge transactions available.</p>
-      </div>
-    );
-  }
-
   return (
-    <div>
-      {/* Yearly Summaries */}
-      <Card title="Yearly Summaries" style={{ marginBottom: 24 }}>
+    <Flex vertical gap={16}>
+      <Card
+        title={
+          <span>
+            <CalendarOutlined style={{ marginRight: 8 }} />
+            Yearly summaries
+          </span>
+        }
+        styles={{ body: { padding: 0 } }}
+      >
         <Table
           columns={yearlyColumns}
           dataSource={reportData.yearly_summaries}
           rowKey={(record) => `${record.year}-${record.resident_name}`}
+          loading={loading}
           pagination={false}
           size={isMobile ? "small" : "middle"}
-          scroll={{ x: isMobile ? 600 : undefined }}
+          scroll={{ x: "max-content" }}
+          locale={{ emptyText: "No charge transactions yet" }}
         />
       </Card>
 
-      {/* Monthly Data */}
-      <Card title="Monthly Charge Data">
+      <Card
+        title={
+          <span>
+            <FieldTimeOutlined style={{ marginRight: 8 }} />
+            Monthly charge data
+          </span>
+        }
+        styles={{ body: { padding: 0 } }}
+      >
         <Table
           columns={monthlyColumns}
           dataSource={reportData.monthly_data}
           rowKey={(record) => `${record.year}-${record.month}-${record.resident_name}`}
+          loading={loading}
           pagination={{
             pageSize: isMobile ? 10 : 20,
             showSizeChanger: !isMobile,
-            showQuickJumper: !isMobile,
-            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} items`,
-            size: isMobile ? "small" : "default",
+            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
+            size: isMobile ? "small" : "medium",
+            style: { padding: "0 16px" },
           }}
           size={isMobile ? "small" : "middle"}
-          scroll={{ x: isMobile ? 600 : undefined }}
+          scroll={{ x: "max-content" }}
+          locale={{ emptyText: "No charge transactions yet" }}
         />
       </Card>
-    </div>
+    </Flex>
   );
 };
 
