@@ -2,13 +2,15 @@ import { API_BASE_URL } from '../config';
 
 export interface ChargingCost {
   id: number;
-  kwh_price: number;
+  kwh_price: number; // tariff Normaal
+  kwh_price_dal: number | null; // tariff Dal: weekend and 21:00-07:00
   end_date: string | null;
   created: string;
 }
 
 export interface ChargingCostCreate {
   kwh_price: number;
+  kwh_price_dal?: number;
   start_date: string;
 }
 

@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Floa
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
+from tariff import DAL, tariff_at
 from datetime import datetime, date
 import enum
 
@@ -88,9 +89,19 @@ class ChargingCost(Base):
     __tablename__ = "charging_costs"
 
     id = Column(Integer, primary_key=True, index=True)
-    kwh_price = Column(Numeric(10, 4), nullable=False)
+    kwh_price = Column(Numeric(10, 4), nullable=False)  # tariff "normaal"
+    kwh_price_dal = Column(Numeric(10, 4), nullable=True)  # tariff "dal"; empty means the same as normaal
     end_date = Column(Date, nullable=True)
     created = Column(DateTime(timezone=True), server_default=func.now())
+
+    def price_for_tariff(self, tariff):
+        if tariff == DAL and self.kwh_price_dal is not None:
+            return self.kwh_price_dal
+        return self.kwh_price
+
+    def price_at(self, moment):
+        """The price per kWh at a moment in time (a datetime; without timezone means UTC)."""
+        return self.price_for_tariff(tariff_at(moment))
 
     @classmethod
     def get_active_cost(cls, db_session):

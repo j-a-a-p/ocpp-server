@@ -1,6 +1,7 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { MeterValues, StationState } from "../hooks/useStationStatus";
+import type { Tariff } from "../services/chargingCostService";
 import { renderWithProviders } from "../test/render";
 import StationStatusCard from "./StationStatusCard";
 
@@ -12,9 +13,9 @@ const meterValues = {
   data: { "Power.Active.Import": 7.234, "Energy.Active.Import.Register": 12.5 },
 } as MeterValues;
 
-const renderCard = (state: StationState, { values = meterValues, rate = 0.3 as number | null, loaded = true } = {}) =>
+const renderCard = (state: StationState, { values = meterValues, rate = 0.3 as number | null, tariff = undefined as Tariff | undefined, loaded = true } = {}) =>
   renderWithProviders(
-    <StationStatusCard state={state} meterValues={values} lastUpdate={new Date("2026-11-22T08:00:05Z")} loaded={loaded} rate={rate} />
+    <StationStatusCard state={state} meterValues={values} lastUpdate={new Date("2026-11-22T08:00:05Z")} loaded={loaded} rate={rate} tariff={tariff} />
   );
 
 // Ant Design splits a value like 7.23 into separate elements for the whole and decimal part,
@@ -39,6 +40,12 @@ describe("StationStatusCard", () => {
     expect(metric("Power")).toHaveTextContent("7.23kW");
     expect(metric("Energy")).toHaveTextContent("12.50kWh");
     expect(metric("Rate")).toHaveTextContent("€0.30/kWh");
+  });
+
+  it("names the tariff that applies next to the rate", () => {
+    renderCard("available", { rate: 0.29, tariff: "dal" });
+
+    expect(metric("Rate")).toHaveTextContent("€0.29/kWh · dal");
   });
 
   it("shows only the energy while somebody else charges, and no rate", () => {

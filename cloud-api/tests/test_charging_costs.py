@@ -22,6 +22,18 @@ class TestReading:
         assert active["kwh_price"] == 0.30
         assert active["end_date"] is None
 
+    def test_the_dal_price_starts_at_twenty_nine_cents(self, user):
+        active = user.get("/charging-costs/active").json()
+
+        assert active["kwh_price_dal"] == 0.29
+
+    def test_the_active_price_says_which_tariff_applies_now(self, user):
+        active = user.get("/charging-costs/active").json()
+
+        assert active["current_tariff"] in ("normaal", "dal")
+        expected = active["kwh_price"] if active["current_tariff"] == "normaal" else active["kwh_price_dal"]
+        assert active["current_kwh_price"] == expected
+
     def test_no_active_price(self, user, db):
         db.query(ChargingCost).delete()
         db.commit()
@@ -44,6 +56,26 @@ class TestChangingThePrice:
         user.post("/charging-costs/", json={"kwh_price": 0.45, "start_date": str(TODAY)})
 
         assert user.get("/charging-costs/active").json()["kwh_price"] == 0.45
+
+    def test_new_price_has_a_normaal_and_a_dal_price(self, user):
+        response = user.post("/charging-costs/", json={"kwh_price": 0.45, "kwh_price_dal": 0.40, "start_date": str(TODAY)})
+
+        assert response.status_code == 200
+        assert (response.json()["kwh_price"], response.json()["kwh_price_dal"]) == (0.45, 0.40)
+
+    def test_without_a_dal_price_dal_costs_the_same_as_normaal(self, user):
+        response = user.post("/charging-costs/", json={"kwh_price": 0.45, "start_date": str(TODAY)})
+
+        assert response.json()["kwh_price_dal"] == 0.45
+
+    def test_dal_price_must_be_positive(self, user):
+        for price in (0, -0.1):
+            response = user.post(
+                "/charging-costs/", json={"kwh_price": 0.45, "kwh_price_dal": price, "start_date": str(TODAY)}
+            )
+            assert response.status_code == 400
+
+        assert prices(user) == {(0.30, None)}
 
     def test_price_must_be_positive(self, user):
         for price in (0, -0.1):

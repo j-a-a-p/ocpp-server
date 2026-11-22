@@ -134,7 +134,7 @@ charger of your own. The station controller names a station after the serial num
 On the first start the `init` container runs the database migrations and then `docker/seed.py`, which adds:
 
 - the three users with their cards,
-- a price of 0.30 per kWh,
+- a price of 0.30 per kWh (normaal) and 0.29 (dal: weekend and 21:00-07:00),
 - 20 past charging sessions with power measurements, spread over the last two weeks,
 - one refused card.
 

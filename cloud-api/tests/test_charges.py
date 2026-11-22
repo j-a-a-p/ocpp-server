@@ -4,8 +4,12 @@ from datetime import datetime, timedelta
 from crud import calculate_power_log_costs
 from models import ChargingCost, PowerLog
 
-# The migrations start with a price of 0.30 per kWh.
+# The migrations start with a price of 0.30 per kWh (normaal) and 0.29 (dal: weekend and 21:00-07:00 Dutch time).
 DEFAULT_PRICE = 0.30
+DAL_PRICE = 0.29
+
+# Dutch winter time (UTC+1) applies on these days; 2026-11-02 is a Monday.
+MONDAY_AFTERNOON = datetime(2026, 11, 2, 12, 0)
 
 
 class TestMyTransactions:
@@ -32,7 +36,7 @@ class TestMyTransactions:
 
     def test_power_logs_carry_the_cost_of_the_energy_since_the_previous_log(self, user, me, make_card, make_transaction):
         card = make_card(me)
-        make_transaction(card, [(0, 7.0, 1.0), (5, 7.0, 3.0), (10, 7.0, 6.0)], final_energy_kwh=6.0)
+        make_transaction(card, [(0, 7.0, 1.0), (5, 7.0, 3.0), (10, 7.0, 6.0)], final_energy_kwh=6.0, started=MONDAY_AFTERNOON)
 
         logs = user.get("/charge-transactions/my-transactions").json()[0]["power_logs"]
 
@@ -130,7 +134,7 @@ class TestCostCalculation:
     """crud.calculate_power_log_costs, the rule behind every price shown in the portals."""
 
     def logs(self, *readings, day=None):
-        start = day or datetime(2026, 11, 1, 12, 0)
+        start = day or MONDAY_AFTERNOON
         return [
             PowerLog(id=index + 1, created=start + timedelta(minutes=5 * index), power_kw=7.0, energy_kwh=energy)
             for index, energy in enumerate(readings)

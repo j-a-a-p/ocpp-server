@@ -12,7 +12,7 @@ const stack = (validate: Response) =>
     "GET /charge-transactions/all": json([]),
     "GET /meter_values.json": new Response("", { status: 404 }),
     "GET /residents/": json([]),
-    "GET /charging-costs/": json([{ id: 1, kwh_price: 0.31, end_date: null, created: "2026-11-01T08:00:00" }]),
+    "GET /charging-costs/": json([{ id: 1, kwh_price: 0.31, kwh_price_dal: 0.3, end_date: null, created: "2026-11-01T08:00:00" }]),
     "GET /charging-profiles/types/available": json({ profile_types: [] }),
     "GET /charging-profiles/": json([]),
     "GET /power-logs/": json([]),

@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from models import Resident, ResidentStatus, Card, RefusedCard, ChargingCost, ChargingProfile, ProfileType, ProfileStatus
 from schemas import ResidentBase, CardBase, ChargingCostBase, ChargingProfileCreate, ChargingProfileUpdate
+from tariff import to_local
 from datetime import datetime, date
 from typing import List, Optional
 
@@ -76,8 +77,10 @@ def get_active_charging_cost(db: Session) -> ChargingCost:
     """Get the currently active charging cost"""
     return ChargingCost.get_active_cost(db)
 
-def create_charging_cost(db: Session, kwh_price: float, start_date: date) -> ChargingCost:
-    """Create a new charging cost and deactivate the current one"""
+def create_charging_cost(db: Session, kwh_price: float, start_date: date, kwh_price_dal: Optional[float] = None) -> ChargingCost:
+    """Create a new charging cost and deactivate the current one.
+
+    kwh_price is the "normaal" price. Without a "dal" price, dal costs the same as normaal."""
     # Check if there's an active cost to deactivate
     active_cost = ChargingCost.get_active_cost(db)
     
@@ -91,6 +94,7 @@ def create_charging_cost(db: Session, kwh_price: float, start_date: date) -> Cha
     # Create new charging cost
     new_cost = ChargingCost(
         kwh_price=kwh_price,
+        kwh_price_dal=kwh_price_dal if kwh_price_dal is not None else kwh_price,
         end_date=None  # This will be the new active cost
     )
     db.add(new_cost)
@@ -126,22 +130,18 @@ def calculate_power_log_costs(db: Session, power_logs: list) -> list:
     # Sort power logs by timestamp to calculate deltas correctly
     sorted_logs = sorted(power_logs, key=lambda x: x.created)
     
-    # Get all unique dates from power logs to batch fetch charging costs
-    dates = set()
-    for log in sorted_logs:
-        dates.add(log.created.date())
-    
-    # Get charging costs for all relevant dates
+    # The price list is looked up once per (local) day. Which of the two prices applies
+    # depends on the time of day, so it is chosen per power log.
     charging_costs = {}
-    for date in dates:
-        cost = get_active_charging_cost_at_date(db, datetime.combine(date, datetime.min.time()))
-        if cost:
-            charging_costs[date] = float(cost.kwh_price)
+    for log in sorted_logs:
+        local_date = to_local(log.created).date()
+        if local_date not in charging_costs:
+            charging_costs[local_date] = get_active_charging_cost_at_date(db, datetime.combine(local_date, datetime.min.time()))
     
     # Calculate costs for each power log
     for i, log in enumerate(sorted_logs):
-        log_date = log.created.date()
-        kwh_rate = charging_costs.get(log_date, 0.0)
+        cost = charging_costs[to_local(log.created).date()]
+        kwh_rate = float(cost.price_at(log.created)) if cost else 0.0
         log.kwh_rate = float(kwh_rate)
         
         # Calculate delta energy (difference from previous log)

@@ -72,15 +72,21 @@ class ChargingCostBase(BaseModel):
 
 class ChargingCostResponse(BaseModel):
     id: int
-    kwh_price: float
+    kwh_price: float  # tariff "normaal"
+    kwh_price_dal: Optional[float] = None  # tariff "dal": weekend and 21:00-07:00
     end_date: Optional[date] = None
     created: datetime
 
     class Config:
         from_attributes = True
 
+class ActiveChargingCostResponse(ChargingCostResponse):
+    current_tariff: str  # "normaal" or "dal", the one that applies right now
+    current_kwh_price: float  # the price that applies right now
+
 class ChargingCostCreate(BaseModel):
-    kwh_price: float
+    kwh_price: float  # tariff "normaal"
+    kwh_price_dal: Optional[float] = None  # tariff "dal"; the same as normaal when left out
     start_date: date
 
 class ChargingProfileBase(BaseModel):

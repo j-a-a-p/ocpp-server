@@ -67,12 +67,12 @@ describe("chargingCostService", () => {
   it("creates a price", async () => {
     const fetchMock = mockFetch({ "POST /charging-costs/": json({ id: 2, kwh_price: 0.45 }) });
 
-    await chargingCostService.createChargingCost({ kwh_price: 0.45, start_date: "2026-12-01" });
+    await chargingCostService.createChargingCost({ kwh_price: 0.45, kwh_price_dal: 0.44, start_date: "2026-12-01" });
 
     expect(fetchMock.mock.calls[0][1]).toMatchObject({
       method: "POST",
       credentials: "include",
-      body: JSON.stringify({ kwh_price: 0.45, start_date: "2026-12-01" }),
+      body: JSON.stringify({ kwh_price: 0.45, kwh_price_dal: 0.44, start_date: "2026-12-01" }),
     });
   });
 

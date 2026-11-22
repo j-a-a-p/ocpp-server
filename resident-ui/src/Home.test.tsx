@@ -28,7 +28,7 @@ const stack = (extra: Parameters<typeof mockFetch>[0] = {}) =>
     "GET /charge-transactions/my-transactions": json(charges),
     "GET /cards/my_cards": json({ cards: myCards }),
     "GET /cards/refused": json({ detail: "No refused cards found" }, 404),
-    "GET /charging-costs/active": json({ id: 1, kwh_price: 0.3, end_date: null, created: "2026-01-01T00:00:00" }),
+    "GET /charging-costs/active": json({ id: 1, kwh_price: 0.3, kwh_price_dal: 0.29, end_date: null, created: "2026-01-01T00:00:00", current_tariff: "dal", current_kwh_price: 0.29 }),
     "GET /meter_values.json": new Response("", { status: 404 }),
     ...extra,
   });

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { App, Col, Row } from "antd";
 import { calculateMonthlyEnergyStats, getAllCurrentResidentTransactions, type ChargeTransaction } from "./services/chargeTransactionService";
 import { addCard, getMyCards, getRefusedCards, updateCardName, type Card as CardType, type RefusedCard } from "./services/cardService";
-import { chargingCostService } from "./services/chargingCostService";
+import { chargingCostService, type Tariff } from "./services/chargingCostService";
 import { useStationStatus } from "./hooks/useStationStatus";
 import AppHeader from "./components/AppHeader";
 import StationStatusCard from "./components/StationStatusCard";
@@ -21,6 +21,7 @@ const Home: React.FC = () => {
   const [cardsLoading, setCardsLoading] = useState(true);
   const [refusedCards, setRefusedCards] = useState<RefusedCard[]>([]);
   const [rate, setRate] = useState<number | null>(null);
+  const [tariff, setTariff] = useState<Tariff | null>(null);
 
   const monthlyStats = useMemo(() => calculateMonthlyEnergyStats(transactions), [transactions]);
 
@@ -56,7 +57,8 @@ const Home: React.FC = () => {
   const loadRate = useCallback(async () => {
     try {
       const cost = await chargingCostService.getActiveChargingCost();
-      setRate(cost.kwh_price);
+      setRate(cost.current_kwh_price);
+      setTariff(cost.current_tariff);
     } catch (error) {
       console.error("Error fetching active charging cost:", error);
     }
@@ -98,7 +100,7 @@ const Home: React.FC = () => {
       <main className="page-container">
         <Row gutter={[16, 16]}>
           <Col xs={24} lg={10}>
-            <StationStatusCard {...station} rate={rate} />
+            <StationStatusCard {...station} rate={rate} tariff={tariff} />
           </Col>
           <Col xs={24} lg={14}>
             <MonthlyUsageCard stats={monthlyStats} loading={transactionsLoading} />

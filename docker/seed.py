@@ -55,8 +55,8 @@ def seed_residents(cur: sqlite3.Cursor, data: dict) -> list[tuple[str, str]]:
 def seed_price(cur: sqlite3.Cursor, data: dict) -> None:
     if cur.execute("SELECT COUNT(*) FROM charging_costs").fetchone()[0] == 0:
         cur.execute(
-            "INSERT INTO charging_costs (kwh_price, end_date, created) VALUES (?, NULL, ?)",
-            (data["price_per_kwh"], timestamp(datetime.utcnow() - timedelta(days=60))),
+            "INSERT INTO charging_costs (kwh_price, kwh_price_dal, end_date, created) VALUES (?, ?, NULL, ?)",
+            (data["price_per_kwh"], data["price_per_kwh_dal"], timestamp(datetime.utcnow() - timedelta(days=60))),
         )
 
 
