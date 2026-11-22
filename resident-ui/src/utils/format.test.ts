@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChargeTransaction } from "../services/chargeTransactionService";
-import { formatEuro, formatKwh, transactionCost } from "./format";
+import { formatEuro, formatInteger, formatKwh, formatNumber, transactionCost } from "./format";
 
 const transaction = (costs: Array<number | undefined> | undefined): ChargeTransaction => ({
   id: 1,
@@ -16,6 +16,16 @@ const transaction = (costs: Array<number | undefined> | undefined): ChargeTransa
     created: "2026-11-20T10:00:00",
     delta_power_cost,
   })) as ChargeTransaction["power_logs"],
+});
+
+describe("thousands separators", () => {
+  it("are in every format", () => {
+    expect(formatNumber(1234567.891)).toBe("1,234,567.89");
+    expect(formatNumber("1234.5", 1)).toBe("1,234.5");
+    expect(formatInteger(12345)).toBe("12,345");
+    expect(formatEuro(1234.5)).toBe("€1,234.50");
+    expect(formatKwh(12345.67)).toBe("12,345.7 kWh");
+  });
 });
 
 describe("formatEuro", () => {

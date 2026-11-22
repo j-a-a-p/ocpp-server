@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { App, Col, Row, theme } from "antd";
 import { EuroOutlined, HistoryOutlined, RiseOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { getAllChargeTransactions, type ChargeTransaction } from "../services/chargeTransactionService";
+import { formatEuro } from "../utils/format";
 import StatTile from "./StatTile";
 
 const ChargeSummaryCards: React.FC = () => {
@@ -68,7 +69,7 @@ const ChargeSummaryCards: React.FC = () => {
         <StatTile
           title="Total cost"
           value={summary.totalCost}
-          formatter={(value) => `€${Number(value).toFixed(2)}`}
+          formatter={(value) => formatEuro(value)}
           icon={<EuroOutlined />}
           color={token.colorWarning}
           background={token.colorWarningBg}

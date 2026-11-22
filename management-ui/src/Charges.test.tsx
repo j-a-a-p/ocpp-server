@@ -1,8 +1,13 @@
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Charges from "./Charges";
 import { json, mockFetch } from "./test/mockFetch";
 import { renderWithProviders } from "./test/render";
+import { downloadYearlyReportPdf } from "./utils/yearlyReportPdf";
+
+// The PDF itself is tested in utils/yearlyReportPdf.test.ts; here only what the page hands to it.
+vi.mock("./utils/yearlyReportPdf", () => ({ downloadYearlyReportPdf: vi.fn() }));
 
 const charge = (id: number, resident_name: string, created: string, final_energy_kwh: number, costs: number[] = []) => ({
   id, station_id: "CP1", rfid: "04AABBCC", created, final_energy_kwh, resident_name,
@@ -26,6 +31,7 @@ const rowsOf = (title: string) => {
 
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.mocked(downloadYearlyReportPdf).mockReset().mockResolvedValue(undefined);
 });
 
 describe("Charges", () => {
@@ -36,10 +42,57 @@ describe("Charges", () => {
 
     await screen.findAllByText("2026");
     expect(rowsOf("Yearly summaries")).toEqual([
-      ["2026", "Anna Anderson", "19.50", "3", "€5.85"],
-      ["2026", "Bob Brown", "8.00", "1", "€2.40"],
-      ["2025", "Anna Anderson", "6.00", "1", "€1.80"],
+      ["2026", "Anna Anderson", "19.50", "3", "€5.85", "PDF"],
+      ["2026", "Bob Brown", "8.00", "1", "€2.40", "PDF"],
+      ["2025", "Anna Anderson", "6.00", "1", "€1.80", "PDF"],
     ]);
+  });
+
+  it("shows thousands separators in the energy, the cost and the counts, but not in the year", async () => {
+    mockFetch({ "GET /charge-transactions/all": json([charge(1, "Bob Brown", "2026-11-12T12:00:00", 12345.678, [1234.5, 1000])]) });
+
+    renderWithProviders(<Charges />);
+
+    await screen.findAllByText("2026");
+    expect(rowsOf("Yearly summaries")).toEqual([["2026", "Bob Brown", "12,345.68", "1", "€2,234.50", "PDF"]]);
+    expect(rowsOf("Monthly charge data")).toEqual([["November '26", "Bob Brown", "12,345.68", "1", "€2,234.50"]]);
+  });
+
+  it("makes the PDF report of the resident and year of the row, with the same totals as the row", async () => {
+    mockFetch({ "GET /charge-transactions/all": json(charges) });
+    renderWithProviders(<Charges />);
+    await screen.findAllByText("2026");
+
+    await userEvent.click(screen.getByRole("button", { name: "Export the 2026 report of Anna Anderson as PDF" }));
+
+    expect(downloadYearlyReportPdf).toHaveBeenCalledTimes(1);
+    const report = vi.mocked(downloadYearlyReportPdf).mock.calls[0][0];
+    expect(report).toMatchObject({ resident_name: "Anna Anderson", year: 2026 });
+    expect(report.total_cost).toBeCloseTo(5.85);
+    expect(report.total_energy).toBeCloseTo(19.5);
+    expect(report.sessions).toHaveLength(3);
+  });
+
+  it("makes a report for every resident and year in the table", async () => {
+    mockFetch({ "GET /charge-transactions/all": json(charges) });
+    renderWithProviders(<Charges />);
+    await screen.findAllByText("2026");
+
+    expect(screen.getAllByRole("button", { name: /^Export the \d{4} report of .* as PDF$/ })).toHaveLength(3);
+    await userEvent.click(screen.getByRole("button", { name: "Export the 2025 report of Anna Anderson as PDF" }));
+
+    expect(vi.mocked(downloadYearlyReportPdf).mock.calls[0][0]).toMatchObject({ resident_name: "Anna Anderson", year: 2025 });
+  });
+
+  it("tells the user when the PDF cannot be made", async () => {
+    vi.mocked(downloadYearlyReportPdf).mockRejectedValue(new Error("boom"));
+    mockFetch({ "GET /charge-transactions/all": json(charges) });
+    renderWithProviders(<Charges />);
+    await screen.findAllByText("2026");
+
+    await userEvent.click(screen.getByRole("button", { name: "Export the 2026 report of Bob Brown as PDF" }));
+
+    expect(await screen.findByText("Failed to create the PDF report.")).toBeInTheDocument();
   });
 
   it("lists the months per resident, newest month first", async () => {

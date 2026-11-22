@@ -74,6 +74,21 @@ class TestAllTransactionsForManagement:
         assert charges[0]["final_energy_kwh"] == 4.0
         assert [round(log["delta_power_cost"], 4) for log in charges[0]["power_logs"]] == [0.30, 0.90]
 
+    def test_a_charge_has_the_name_of_the_card_and_the_moment_of_its_last_measurement(
+        self, user, me, make_card, make_transaction
+    ):
+        make_transaction(make_card(me, "04AABBCC", "Tesla"), [(0, 7.0, 1.0), (45, 7.0, 4.0)], started=datetime(2026, 11, 2, 10, 0))
+
+        charge = user.get("/charge-transactions/all").json()[0]
+
+        assert charge["card_name"] == "Tesla"
+        assert charge["ended"] == "2026-11-02T10:45:00"
+
+    def test_a_charge_without_measurements_has_no_end(self, user, me, make_card, make_transaction):
+        make_transaction(make_card(me), logs=[])
+
+        assert user.get("/charge-transactions/all").json()[0]["ended"] is None
+
     def test_a_charge_that_is_still_running_has_zero_energy(self, user, me, make_card, make_transaction):
         make_transaction(make_card(me), logs=[])
 

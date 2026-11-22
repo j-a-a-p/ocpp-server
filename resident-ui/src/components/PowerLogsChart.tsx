@@ -2,7 +2,7 @@ import { Line } from "@ant-design/charts";
 import { Flex, Statistic, theme } from "antd";
 import type { PowerLog } from "../services/chargeTransactionService";
 import { useThemeMode } from "../theme/themeContext";
-import { formatEuro } from "../utils/format";
+import { formatEuro, formatInteger, formatNumber } from "../utils/format";
 import { runningTotals } from "../utils/energy";
 
 interface PowerLogsChartProps {
@@ -26,11 +26,11 @@ const PowerLogsChart: React.FC<PowerLogsChartProps> = ({ powerLogs, transactionI
   }));
 
   const summary = [
-    { title: "Energy", value: last.energy.toFixed(2), suffix: "kWh" },
-    { title: "Max power", value: Math.max(...totals.map(({ log }) => log.power_kw)).toFixed(2), suffix: "kW" },
+    { title: "Energy", value: formatNumber(last.energy), suffix: "kWh" },
+    { title: "Max power", value: formatNumber(Math.max(...totals.map(({ log }) => log.power_kw))), suffix: "kW" },
     {
       title: "Duration",
-      value: String(Math.round((last.time.getTime() - first.time.getTime()) / 60000)),
+      value: formatInteger(Math.round((last.time.getTime() - first.time.getTime()) / 60000)),
       suffix: "min",
     },
     { title: "Cost", value: formatEuro(last.cost) },
@@ -49,13 +49,13 @@ const PowerLogsChart: React.FC<PowerLogsChartProps> = ({ powerLogs, transactionI
         style={{ stroke: token.colorPrimary, lineWidth: 2 }}
         axis={{
           x: { title: false, labelAutoHide: true },
-          y: { title: "kWh", labelFormatter: (value: number) => value.toFixed(1) },
+          y: { title: "kWh", labelFormatter: (value: number) => formatNumber(value, 1) },
         }}
         tooltip={{
           title: "time",
           items: [
-            { channel: "y", name: "Energy", valueFormatter: (value: number) => `${value.toFixed(2)} kWh` },
-            { field: "cost", name: "Cost so far", valueFormatter: (value: number) => `€${value.toFixed(2)}` },
+            { channel: "y", name: "Energy", valueFormatter: (value: number) => `${formatNumber(value)} kWh` },
+            { field: "cost", name: "Cost so far", valueFormatter: (value: number) => formatEuro(value) },
           ],
         }}
       />

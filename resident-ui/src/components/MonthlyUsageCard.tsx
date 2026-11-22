@@ -1,7 +1,7 @@
 import { Card, Table, Typography } from "antd";
 import { CalendarOutlined } from "@ant-design/icons";
 import type { MonthlyEnergyStats } from "../services/chargeTransactionService";
-import { formatEuro, formatKwh } from "../utils/format";
+import { formatEuro, formatInteger, formatKwh } from "../utils/format";
 
 const { Text } = Typography;
 
@@ -48,6 +48,7 @@ const MonthlyUsageCard: React.FC<MonthlyUsageCardProps> = ({ stats, loading }) =
           dataIndex: "transactionCount",
           key: "transactionCount",
           align: "right",
+          render: (count: number) => formatInteger(count),
         },
         {
           title: "Cost",

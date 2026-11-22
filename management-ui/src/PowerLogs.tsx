@@ -6,12 +6,12 @@ import { ThunderboltOutlined, ClockCircleOutlined, FireOutlined, DashboardOutlin
 import StatTile from "./components/StatTile";
 import { useThemeMode } from "./theme/themeContext";
 import { calculateAnalytics } from "./utils/powerLogAnalytics";
+import { formatKwh, formatNumber } from "./utils/format";
 
 const { Title } = Typography;
 
-const formatKWh = (value: number | string) => `${Number(value).toFixed(2)} kWh`;
-const formatKW = (value: number | string) => `${Number(value).toFixed(2)} kW`;
-const formatHours = (value: number | string) => `${Number(value).toFixed(1)} h`;
+const formatKW = (value: number | string) => `${formatNumber(value)} kW`;
+const formatHours = (value: number | string) => `${formatNumber(value, 1)} h`;
 
 const PowerLogs: React.FC = () => {
   const { message } = App.useApp();
@@ -67,7 +67,7 @@ const PowerLogs: React.FC = () => {
           <StatTile
             title="Total energy"
             value={summary.total_kwh}
-            formatter={formatKWh}
+            formatter={(value) => formatKwh(value)}
             icon={<ThunderboltOutlined />}
             color={token.colorSuccess}
             background={token.colorSuccessBg}
@@ -106,9 +106,9 @@ const PowerLogs: React.FC = () => {
           style={{ fill: token.colorPrimary, radiusTopLeft: 4, radiusTopRight: 4 }}
           axis={{
             x: { title: false, labelAutoHide: true },
-            y: { title: "kW", labelFormatter: (value: number) => value.toFixed(0) },
+            y: { title: "kW", labelFormatter: (value: number) => formatNumber(value, 0) },
           }}
-          tooltip={{ items: [{ channel: "y", name: "Power", valueFormatter: (value: number) => `${value.toFixed(1)} kW` }] }}
+          tooltip={{ items: [{ channel: "y", name: "Power", valueFormatter: (value: number) => `${formatNumber(value, 1)} kW` }] }}
         />
       </Card>
 
@@ -124,7 +124,7 @@ const PowerLogs: React.FC = () => {
                   <Statistic title="Hours" value={month.total_hours} formatter={formatHours} styles={{ content: { fontSize: 18 } }} />
                 </Col>
                 <Col span={12}>
-                  <Statistic title="Energy" value={month.total_kwh} formatter={formatKWh} styles={{ content: { fontSize: 18 } }} />
+                  <Statistic title="Energy" value={month.total_kwh} formatter={(value) => formatKwh(value)} styles={{ content: { fontSize: 18 } }} />
                 </Col>
                 <Col span={12}>
                   <Statistic title="Max power" value={month.max_power_kw} formatter={formatKW} styles={{ content: { fontSize: 18 } }} />

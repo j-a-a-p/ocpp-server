@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Card, Col, Flex, Row, Statistic, Tag, theme, Typography } from "antd";
 import { CheckCircleFilled, DisconnectOutlined, SettingOutlined, ThunderboltFilled } from "@ant-design/icons";
+import { formatNumber } from "../utils/format";
 
 const { Text, Title } = Typography;
 
@@ -125,7 +126,7 @@ const ChargerStatusCard: React.FC = () => {
           <Col span={12}>
             <Statistic
               title="Current power"
-              value={(stationStatus === "charging" ? meterValues.data["Power.Active.Import"] : 0).toFixed(2)}
+              value={formatNumber(stationStatus === "charging" ? meterValues.data["Power.Active.Import"] : 0)}
               suffix="kW"
               styles={{ content: { fontSize: 20, fontWeight: 600 } }}
             />
@@ -133,7 +134,7 @@ const ChargerStatusCard: React.FC = () => {
           <Col span={12}>
             <Statistic
               title="Energy imported"
-              value={(meterValues.data["Energy.Active.Import.Register"] || 0).toFixed(2)}
+              value={formatNumber(meterValues.data["Energy.Active.Import.Register"] || 0)}
               suffix="kWh"
               styles={{ content: { fontSize: 20, fontWeight: 600 } }}
             />
@@ -147,7 +148,7 @@ const ChargerStatusCard: React.FC = () => {
           <Text type="secondary">Charging profile</Text>
           <Tag color="processing">{meterValues.chargingProfile.name}</Tag>
           <Text type="secondary">limited to</Text>
-          <Text strong>{meterValues.chargingProfile.currentMaxPower.toFixed(1)} A</Text>
+          <Text strong>{formatNumber(meterValues.chargingProfile.currentMaxPower, 1)} A</Text>
         </Flex>
       )}
     </Card>

@@ -3,6 +3,7 @@ import { App, Button, Card, Flex, Form, Input, InputNumber, Modal, Popconfirm, S
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { chargingProfileService, ChargingProfile, ProfileType } from './services/chargingProfileService';
 import { parseUtc } from './utils/dates';
+import { formatNumber } from './utils/format';
 
 const Profiles: React.FC = () => {
   const { message } = App.useApp();
@@ -139,7 +140,7 @@ const Profiles: React.FC = () => {
       dataIndex: 'max_current',
       key: 'max_current',
       align: 'right' as const,
-      render: (value: number) => value ? `${value} A` : '-',
+      render: (value: number) => value ? `${formatNumber(value, Number.isInteger(value) ? 0 : 1)} A` : '-',
     },
     {
       title: 'Created',

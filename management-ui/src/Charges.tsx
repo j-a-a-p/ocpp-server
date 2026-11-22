@@ -1,14 +1,19 @@
 import { useEffect, useState, useMemo } from "react";
-import { App, Card, Flex, Grid, Table } from "antd";
-import { CalendarOutlined, FieldTimeOutlined } from "@ant-design/icons";
+import { App, Button, Card, Flex, Grid, Table } from "antd";
+import { CalendarOutlined, FieldTimeOutlined, FilePdfOutlined } from "@ant-design/icons";
 import { getAllChargeTransactions, ChargeTransaction, MonthlyData, YearlySummary } from "./services/chargeTransactionService";
 import { parseUtc } from "./utils/dates";
+import { formatEuro, formatInteger, formatNumber } from "./utils/format";
+import { buildYearlyReport } from "./utils/yearlyReport";
+import { downloadYearlyReportPdf } from "./utils/yearlyReportPdf";
 
 const Charges: React.FC = () => {
   const { message } = App.useApp();
   const isMobile = Grid.useBreakpoint().md === false;
   const [loading, setLoading] = useState<boolean>(true);
   const [transactions, setTransactions] = useState<ChargeTransaction[]>([]);
+  // The resident and year of the report that is being made
+  const [exporting, setExporting] = useState<string | null>(null);
 
   useEffect(() => {
     getAllChargeTransactions()
@@ -125,6 +130,18 @@ const Charges: React.FC = () => {
     return { monthly_data, yearly_summaries };
   }, [transactions]);
 
+  const exportReport = async (summary: YearlySummary) => {
+    setExporting(`${summary.year}-${summary.resident_name}`);
+    try {
+      await downloadYearlyReportPdf(buildYearlyReport(transactions, summary.resident_name, summary.year));
+    } catch (error) {
+      console.error("Failed to create the PDF report:", error);
+      message.error("Failed to create the PDF report.");
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const monthlyColumns = [
     {
       title: "Month",
@@ -148,7 +165,7 @@ const Charges: React.FC = () => {
       dataIndex: "total_energy",
       key: "total_energy",
       align: "right" as const,
-      render: (value: number) => value.toFixed(2),
+      render: (value: number) => formatNumber(value),
       sorter: (a: MonthlyData, b: MonthlyData) => a.total_energy - b.total_energy,
     },
     {
@@ -163,7 +180,7 @@ const Charges: React.FC = () => {
       dataIndex: "total_cost",
       key: "total_cost",
       align: "right" as const,
-      render: (value: number) => `€${value.toFixed(2)}`,
+      render: (value: number) => formatEuro(value),
       sorter: (a: MonthlyData, b: MonthlyData) => a.total_cost - b.total_cost,
     },
   ];
@@ -187,7 +204,7 @@ const Charges: React.FC = () => {
       dataIndex: "total_energy",
       key: "total_energy",
       align: "right" as const,
-      render: (value: number) => value.toFixed(2),
+      render: (value: number) => formatNumber(value),
       sorter: (a: YearlySummary, b: YearlySummary) => a.total_energy - b.total_energy,
     },
     {
@@ -202,8 +219,25 @@ const Charges: React.FC = () => {
       dataIndex: "total_cost",
       key: "total_cost",
       align: "right" as const,
-      render: (value: number) => `€${value.toFixed(2)}`,
+      render: (value: number) => formatEuro(value),
       sorter: (a: YearlySummary, b: YearlySummary) => a.total_cost - b.total_cost,
+    },
+    {
+      title: "Report",
+      key: "report",
+      align: "center" as const,
+      render: (_: unknown, record: YearlySummary) => (
+        <Button
+          size="small"
+          icon={<FilePdfOutlined />}
+          loading={exporting === `${record.year}-${record.resident_name}`}
+          disabled={exporting !== null}
+          aria-label={`Export the ${record.year} report of ${record.resident_name} as PDF`}
+          onClick={() => exportReport(record)}
+        >
+          PDF
+        </Button>
+      ),
     },
   ];
 
@@ -247,7 +281,7 @@ const Charges: React.FC = () => {
           pagination={{
             pageSize: isMobile ? 10 : 20,
             showSizeChanger: !isMobile,
-            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
+            showTotal: (total, range) => `${formatInteger(range[0])}-${formatInteger(range[1])} of ${formatInteger(total)}`,
             size: isMobile ? "small" : "medium",
             style: { padding: "0 16px" },
           }}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { App, Avatar, Button, Card, Flex, Form, Input, Modal, Table, Tag, theme, Typography } from "antd";
 import { EditOutlined, UserAddOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
+import { formatInteger } from "./utils/format";
 
 const { Text } = Typography;
 
@@ -99,7 +100,7 @@ const Residents: React.FC = () => {
 
   return (
     <Card
-      title={`${residents.length} residents`}
+      title={`${formatInteger(residents.length)} residents`}
       extra={
         <Button type="primary" icon={<UserAddOutlined />} onClick={() => showModal()}>
           Add resident

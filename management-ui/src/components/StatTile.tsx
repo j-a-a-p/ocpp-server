@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Card, Flex, Statistic, theme } from "antd";
+import { formatNumber } from "../utils/format";
 
 interface StatTileProps {
   title: ReactNode;
@@ -16,7 +17,7 @@ interface StatTileProps {
 
 const StatTile: React.FC<StatTileProps> = ({ title, value, icon, precision, prefix, suffix, formatter, color, background, loading }) => {
   const { token } = theme.useToken();
-  const display = formatter ?? (precision !== undefined ? (v: number | string) => Number(v).toFixed(precision) : undefined);
+  const display = formatter ?? ((v: number | string) => formatNumber(v, precision ?? 0));
 
   return (
     <Card size="small" style={{ height: "100%" }} styles={{ body: { padding: 16 } }}>

@@ -1,6 +1,7 @@
 import { Card, Empty, Flex, Tag, theme, Typography } from "antd";
 import { CreditCardOutlined } from "@ant-design/icons";
 import type { Card as CardType } from "../services/cardService";
+import { formatInteger } from "../utils/format";
 
 const { Text } = Typography;
 
@@ -21,7 +22,7 @@ const MyCardsCard: React.FC<MyCardsCardProps> = ({ cards, loading, onRename }) =
           My cards
         </span>
       }
-      extra={<Tag>{cards.length}</Tag>}
+      extra={<Tag>{formatInteger(cards.length)}</Tag>}
       loading={loading}
       style={{ height: "100%" }}
     >

@@ -5,8 +5,11 @@ export interface ChargeTransaction {
   station_id: string;
   rfid: string;
   created: string;
+  /** The moment of the last measurement, empty when the charge has none. */
+  ended?: string | null;
   final_energy_kwh: number;
   resident_name: string;
+  card_name?: string | null;
   power_logs?: Array<{
     id: number;
     delta_power_cost?: number;

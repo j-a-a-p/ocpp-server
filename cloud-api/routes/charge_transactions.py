@@ -143,6 +143,9 @@ def get_all_charge_transactions(
         # Get resident name
         resident_name = None
         card = db.query(Card).filter(Card.rfid == transaction.rfid).first()
+        card_name = card.name if card else None
+        # The moment of the last measurement: when the charge ended.
+        ended = max((log.created for log in transaction.power_logs if log.created), default=None)
         if card:
             resident = db.query(Resident).filter(Resident.id == card.resident_id).first()
             if resident:
@@ -153,8 +156,10 @@ def get_all_charge_transactions(
             "station_id": transaction.station_id,
             "rfid": transaction.rfid,
             "created": transaction.created.isoformat() if transaction.created else None,
+            "ended": ended.isoformat() if ended else None,
             "final_energy_kwh": float(transaction.final_energy_kwh) if transaction.final_energy_kwh else 0,
             "resident_name": resident_name,
+            "card_name": card_name,
             "power_logs": [
                 {
                     "id": log.id,

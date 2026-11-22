@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Card, Col, Flex, Row, Statistic, theme, Typography } from "antd";
 import { CheckCircleFilled, DisconnectOutlined, HourglassFilled, ThunderboltFilled } from "@ant-design/icons";
 import type { MeterValues, StationState } from "../hooks/useStationStatus";
-import { formatEuro } from "../utils/format";
+import { formatEuro, formatNumber } from "../utils/format";
 import type { Tariff } from "../services/chargingCostService";
 
 const { Text, Title } = Typography;
@@ -58,10 +58,10 @@ const StationStatusCard: React.FC<StationStatusCardProps> = ({ state, meterValue
 
   const metrics: Metric[] = [];
   if (state === "mine" && meterValues) {
-    metrics.push({ title: "Power", value: meterValues.data["Power.Active.Import"].toFixed(2), suffix: "kW" });
+    metrics.push({ title: "Power", value: formatNumber(meterValues.data["Power.Active.Import"]), suffix: "kW" });
   }
   if ((state === "mine" || state === "other") && meterValues) {
-    metrics.push({ title: "Energy", value: meterValues.data["Energy.Active.Import.Register"].toFixed(2), suffix: "kWh" });
+    metrics.push({ title: "Energy", value: formatNumber(meterValues.data["Energy.Active.Import.Register"]), suffix: "kWh" });
   }
   if ((state === "mine" || state === "available") && rate !== null) {
     metrics.push({ title: "Rate", value: formatEuro(rate), suffix: tariff ? `/kWh · ${tariff}` : "/kWh" });

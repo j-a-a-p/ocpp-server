@@ -2,7 +2,7 @@ import { lazy, Suspense } from "react";
 import { Button, Card, Flex, Spin, Table, theme, Tooltip, Typography } from "antd";
 import { LineChartOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import type { ChargeTransaction } from "../services/chargeTransactionService";
-import { formatEuro, formatKwh, transactionCost } from "../utils/format";
+import { formatEuro, formatInteger, formatKwh, transactionCost } from "../utils/format";
 import { parseUtc } from "../utils/dates";
 
 const PowerLogsChart = lazy(() => import("./PowerLogsChart"));
@@ -40,7 +40,7 @@ const ChargesCard: React.FC<ChargesCardProps> = ({ transactions, loading }) => {
           defaultPageSize: 10,
           showSizeChanger: true,
           pageSizeOptions: ["5", "10", "20", "50"],
-          showTotal: (total, range) => `${range[0]}-${range[1]} of ${total}`,
+          showTotal: (total, range) => `${formatInteger(range[0])}-${formatInteger(range[1])} of ${formatInteger(total)}`,
           style: { padding: "0 16px" },
         }}
         expandable={{

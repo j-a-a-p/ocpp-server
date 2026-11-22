@@ -4,6 +4,7 @@ import { EuroOutlined, PlusOutlined } from "@ant-design/icons";
 import { chargingCostService, ChargingCost, ChargingCostCreate } from "./services/chargingCostService";
 import dayjs from "dayjs";
 import { parseUtc } from "./utils/dates";
+import { formatEuro } from "./utils/format";
 
 // A price has no start date of its own: it starts the day after the price before it ends. The price without
 // an end date is therefore a future price when the latest end date of the other prices is today or later.
@@ -67,7 +68,7 @@ const Settings: React.FC = () => {
       title: "Normaal per kWh",
       dataIndex: "kwh_price",
       key: "kwh_price",
-      render: (price: number) => <Typography.Text strong>€{price.toFixed(4)}</Typography.Text>,
+      render: (price: number) => <Typography.Text strong>{formatEuro(price, 4)}</Typography.Text>,
     },
     {
       title: "Dal per kWh",
@@ -75,7 +76,7 @@ const Settings: React.FC = () => {
       key: "kwh_price_dal",
       // Prices from before the split have no separate dal price: dal costs the same as normaal.
       render: (price: number | null, cost: ChargingCost) => (
-        <Typography.Text strong>€{(price ?? cost.kwh_price).toFixed(4)}</Typography.Text>
+        <Typography.Text strong>{formatEuro(price ?? cost.kwh_price, 4)}</Typography.Text>
       ),
     },
     {
