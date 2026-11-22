@@ -4,6 +4,7 @@ import { getAllChargeTransactions } from "./chargeTransactionService";
 import { chargingCostService } from "./chargingCostService";
 import { chargingProfileService } from "./chargingProfileService";
 import { getPowerLogAnalytics } from "./powerLogService";
+import { getStations } from "./stationService";
 
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -24,6 +25,23 @@ describe("getAllChargeTransactions", () => {
     mockFetch({ "GET /charge-transactions/all": json({}, 401) });
 
     await expect(getAllChargeTransactions()).rejects.toThrow("HTTP error! status: 401");
+  });
+});
+
+describe("getStations", () => {
+  it("reads the stations of the window with the cookie", async () => {
+    const overview = { generated_at: "2026-11-22T12:00:00Z", window_start: "2026-11-21T12:00:00Z", window_hours: 24, online_count: 0, stations: [] };
+    const fetchMock = mockFetch({ "GET /stations/": json(overview) });
+
+    expect(await getStations(24)).toEqual(overview);
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/stations\/\?hours=24$/);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: "include" });
+  });
+
+  it("fails on an error", async () => {
+    mockFetch({ "GET /stations/": json({}, 401) });
+
+    await expect(getStations(24)).rejects.toThrow("Failed to fetch stations");
   });
 });
 

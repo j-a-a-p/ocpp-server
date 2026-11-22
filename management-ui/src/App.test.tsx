@@ -16,6 +16,7 @@ const stack = (validate: Response) =>
     "GET /charging-profiles/types/available": json({ profile_types: [] }),
     "GET /charging-profiles/": json([]),
     "GET /power-logs/analytics": json({ current_year_summary: {}, monthly_data: [], hourly_by_year: [] }),
+    "GET /stations/": json({ generated_at: "2026-11-22T12:00:00Z", window_start: "2026-11-21T12:00:00Z", window_hours: 24, online_count: 0, stations: [] }),
   });
 
 const open = (path: string) => {
@@ -60,7 +61,7 @@ describe("management App", () => {
 
     await waitFor(() => expect(pageTitle()).toBe("Dashboard"));
     const labels = within(sidebar()).getAllByRole("menuitem").map((item) => item.textContent);
-    expect(labels).toEqual(["Dashboard", "Residents", "Charges", "Power logs", "Profiles", "Settings"]);
+    expect(labels).toEqual(["Dashboard", "Residents", "Charges", "Power logs", "Stations", "Profiles", "Settings"]);
   });
 
   it("opens the page of a menu item and loads its data", async () => {
@@ -73,6 +74,18 @@ describe("management App", () => {
     expect(await screen.findByText("€0.3100")).toBeInTheDocument();
     expect(pageTitle()).toBe("Settings");
     expect(window.location.pathname).toBe("/management-ui/settings");
+  });
+
+  it("opens the stations page from the menu", async () => {
+    stack(json({}));
+    open("/");
+    await waitFor(() => expect(pageTitle()).toBe("Dashboard"));
+
+    await userEvent.click(within(sidebar()).getByRole("menuitem", { name: /stations/i }));
+
+    expect(await screen.findByText("No charging station has connected yet")).toBeInTheDocument();
+    expect(pageTitle()).toBe("Charging stations");
+    expect(window.location.pathname).toBe("/management-ui/stations");
   });
 
   it("signs in through the link in the mail and lands on the dashboard without asking again", async () => {

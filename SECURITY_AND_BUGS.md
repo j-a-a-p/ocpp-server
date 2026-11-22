@@ -54,6 +54,13 @@ Severity: **High** (fix soon, real impact), **Medium** (fix when you touch that 
 - [ ] **S17 (Low) Config errors are silent.** `constants.py` reads the config file without checking it. A missing file
   or missing `JWT_SECRET` only shows up as a 500 on the first login. Fix: fail at startup when `JWT_SECRET`,
   `INVITE_URL` or the SES keys are missing.
+- [ ] **S18 (High) Port 9000 is open to the internet, with plain `ws://`.** The chargers could not get `wss://` through
+  Apache to work, so the station controller listens on every address again (`OCPP_BIND_HOST=0.0.0.0` in
+  `infra/create-ocpp-service.sh`) and the firewall allows 9000 (`infra/install-server.sh`). Nothing on that connection is
+  encrypted (card numbers are readable on the way), and together with S1 anyone who finds the port can act as a charger.
+  Do S1 first. Until then limit the port to the chargers' addresses: `sudo ufw delete allow 9000/tcp` and
+  `sudo ufw allow from <charger address> to any port 9000 proto tcp`. The real fix is a working `wss://` (then close 9000
+  again). The connect log shows each charger's address, use it to see who connects.
 
 ## Open: bugs
 
@@ -124,6 +131,7 @@ version: **hold** until the toolchain (Vite, `typescript-eslint`) supports it.
 
 - [x] Plain `ws://` port 9000 and the API port 8000 now listen on `127.0.0.1` only (`OCPP_BIND_HOST`,
   `API_BIND_HOST`; Docker sets `0.0.0.0`). Chargers use `wss://` through Apache.
+  (Port 9000 was opened again for the chargers, see S18. The API port 8000 is still local only.)
 - [x] Hardcoded API key `your-secure-api-key` removed. The key is `[Cloud] API_KEY` in the configuration, compared in
   constant time, and refused when not set. `deploy-hetzner.sh` generates it. Redeploy needed on the live server.
 - [x] Login cookie: `Secure` when the request came over HTTPS, `SameSite=Lax` on both login cookies.

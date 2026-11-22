@@ -59,10 +59,12 @@ check_start_prerequisites() {
 }
 
 install_firewall() {
-    step "Firewall: only SSH, HTTP and HTTPS are reachable"
+    step "Firewall: only SSH, HTTP, HTTPS and the charger port 9000 are reachable"
     sudo ufw allow 22/tcp >/dev/null
     sudo ufw allow 80/tcp >/dev/null
     sudo ufw allow 443/tcp >/dev/null
+    # The chargers connect here with plain ws://, straight to the station controller (see SECURITY_AND_BUGS.md, S18).
+    sudo ufw allow 9000/tcp >/dev/null
     sudo ufw default deny incoming >/dev/null
     sudo ufw default allow outgoing >/dev/null
     sudo ufw --force enable >/dev/null

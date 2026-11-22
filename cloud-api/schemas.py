@@ -73,6 +73,27 @@ class PowerLogAnalyticsResponse(BaseModel):
     monthly_data: List[PowerLogMonthSummary]  # the last twelve months, newest first
     hourly_by_year: List[PowerLogHourlyYear]  # the last three years with logs, oldest first
 
+class StationPeriod(BaseModel):
+    start: datetime  # UTC
+    end: datetime  # UTC, "now" while the station is still online
+
+class StationStatusResponse(BaseModel):
+    station_id: str
+    online: bool
+    connected_since: Optional[datetime] = None  # only while online
+    last_seen: datetime  # the last message of the station, or when it disconnected
+    first_seen: datetime  # the first time the station connected
+    uptime_percent: Optional[float] = None  # of the window, counted from the first connection when that is later
+    connections: int  # how many times it came online in the window
+    online_periods: List[StationPeriod]  # in time order, never overlapping, cut off at the window
+
+class StationOverviewResponse(BaseModel):
+    generated_at: datetime
+    window_start: datetime
+    window_hours: int
+    online_count: int
+    stations: List[StationStatusResponse]  # by station id
+
 class ChargeTransactionBase(BaseModel):
     station_id: str
     rfid: str
