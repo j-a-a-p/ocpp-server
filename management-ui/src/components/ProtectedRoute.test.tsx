@@ -63,16 +63,52 @@ describe("ProtectedRoute", () => {
     expect(await screen.findByText("Sign in to the management portal")).toBeInTheDocument();
   });
 
-  it("sends the email address of the visitor and closes the dialog", async () => {
-    auth({});
+  const sendMail = async () => {
     const fetchMock = mockFetch({ "POST /auth/request-access": json({ success: true, message: "Check your mail" }) });
     renderRoute();
-
     await userEvent.type(await screen.findByPlaceholderText("you@example.com"), "anna@example.com");
     await userEvent.click(screen.getByRole("button", { name: /email me a sign-in link/i }));
+    return fetchMock;
+  };
+
+  it("sends the email address of the visitor", async () => {
+    auth({});
+
+    const fetchMock = await sendMail();
 
     await waitFor(() => expect(requests(fetchMock)).toEqual([expect.stringContaining("email=anna%40example.com&flow=management")]));
-    await waitFor(() => expect(checkAuth).toHaveBeenCalled());
+  });
+
+  it("then says the mail is sent instead of asking to sign in again", async () => {
+    auth({});
+
+    await sendMail();
+
+    expect(await screen.findByText("Login mail is sent")).toBeInTheDocument();
+    expect(screen.getByText(/anna@example.com/)).toBeInTheDocument();
+    expect(screen.queryByText("Welcome")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("you@example.com")).not.toBeInTheDocument();
+  });
+
+  it("closes the page on request, and tells the visitor to do it when the browser refuses", async () => {
+    auth({});
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    await sendMail();
+
+    await userEvent.click(await screen.findByRole("button", { name: /click here to close this page/i }));
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(await screen.findByText(/close this tab yourself/)).toBeInTheDocument();
+  });
+
+  it("lets the visitor use another email address", async () => {
+    auth({});
+    await sendMail();
+
+    await userEvent.click(await screen.findByRole("button", { name: /different email address/i }));
+
+    expect(await screen.findByPlaceholderText("you@example.com")).toBeInTheDocument();
+    expect(screen.queryByText("Login mail is sent")).not.toBeInTheDocument();
   });
 
   it("does not send an invalid email address", async () => {

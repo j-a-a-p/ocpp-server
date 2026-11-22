@@ -1,70 +1,61 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Button, Result } from "antd";
+import { App, Button, Result } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
 import { useAuth } from "./contexts/AuthContext";
 import AuthLayout from "./components/AuthLayout";
 
+// The page behind the link in the email. It signs the resident in and goes straight to the app:
+// there is no "logged in" page, only a toast on the page the resident lands on.
 export default function Login() {
-  const [message, setMessage] = useState("Checking authentication...");
-  const [status, setStatus] = useState("loading");
+  const { message: toast } = App.useApp();
+  const [error, setError] = useState<string | null>(null);
   const [serverAvailable, setServerAvailable] = useState(true);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { checkAuth, isAuthenticated } = useAuth();
+  const { checkAuth, isAuthenticated, isLoading } = useAuth();
+  // A login link works once, so never use it twice (React runs effects twice in development).
+  const started = useRef(false);
 
   useEffect(() => {
+    if (isLoading || started.current) return;
+    started.current = true;
+
+    if (isAuthenticated) {
+      navigate("/", { replace: true });
+      return;
+    }
+
     const token = searchParams.get("token");
-    
-    const checkIfAlreadyAuthenticated = async () => {
-      await checkAuth();
-      
-      if (isAuthenticated) {
-        setMessage("You are already logged in. Redirecting to the app...");
-        setStatus("success");
-        setTimeout(() => navigate("/"), 2000);
-        return;
-      }
-      
-      if (!token) {
-        setMessage("Invalid login link.");
-        setStatus("error");
-        return;
-      }
+    if (!token) {
+      setError("Invalid login link.");
+      return;
+    }
 
-      setMessage("Logging in...");
-      
-      fetch(`${API_BASE_URL}/auth/login/${token}`, {
-        method: "POST",
-        credentials: "include",
+    fetch(`${API_BASE_URL}/auth/login/${token}`, {
+      method: "POST",
+      credentials: "include",
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.detail || "Login failed");
+        }
+        // Without this the app still believes nobody is signed in and asks for the email address again.
+        await checkAuth();
+        toast.success("Login successful");
+        navigate("/", { replace: true });
       })
-        .then(async (res) => {
-          const data = await res.json();
-          if (!res.ok) {
-            throw new Error(data.detail || "Login failed");
-          }
-          setMessage(data.message);
-          setStatus("success");
-          
-          await checkAuth();
-          
-          setTimeout(() => navigate("/"), 2000);
-        })
-        .catch((err) => {
-          console.error('Login error:', err);
-          if (err.message.includes('fetch')) {
-            setServerAvailable(false);
-            setMessage("Server is currently unavailable. Please try again later.");
-          } else {
-            setMessage(err.message);
-          }
-          setStatus("error");
-        });
-    };
-
-    checkIfAlreadyAuthenticated();
-  }, [searchParams, navigate, checkAuth, isAuthenticated]);
+      .catch((err) => {
+        console.error("Login error:", err);
+        if (err.message.includes("fetch")) {
+          setServerAvailable(false);
+        } else {
+          setError(err.message);
+        }
+      });
+  }, [isLoading, isAuthenticated, searchParams, navigate, checkAuth, toast]);
 
   if (!serverAvailable) {
     return (
@@ -83,21 +74,26 @@ export default function Login() {
     );
   }
 
-  return (
-    <AuthLayout>
-      <Result
-        status={status === "success" ? "success" : status === "error" ? "error" : "info"}
-        icon={status === "loading" ? <LoadingOutlined /> : undefined}
-        title={status === "success" ? "Login successful" : status === "error" ? "Login failed" : "Logging in..."}
-        subTitle={message}
-        extra={
-          status === "error" && (
+  if (error) {
+    return (
+      <AuthLayout>
+        <Result
+          status="error"
+          title="Login failed"
+          subTitle={error}
+          extra={
             <Button type="primary" onClick={() => navigate("/")}>
               Try again
             </Button>
-          )
-        }
-      />
+          }
+        />
+      </AuthLayout>
+    );
+  }
+
+  return (
+    <AuthLayout>
+      <Result icon={<LoadingOutlined />} title="Logging in..." />
     </AuthLayout>
   );
 }

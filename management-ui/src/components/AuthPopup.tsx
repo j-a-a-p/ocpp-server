@@ -6,9 +6,10 @@ import { submitEmail } from '../services/authService';
 interface AuthPopupProps {
   open: boolean;
   onClose: () => void;
+  onSent: (email: string) => void;
 }
 
-const AuthPopup: React.FC<AuthPopupProps> = ({ open, onClose }) => {
+const AuthPopup: React.FC<AuthPopupProps> = ({ open, onClose, onSent }) => {
   const { message } = App.useApp();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -20,10 +21,9 @@ const AuthPopup: React.FC<AuthPopupProps> = ({ open, onClose }) => {
       const response = await submitEmail(values.email);
       
       if (response.success) {
-        message.success(response.message || 'Email submitted successfully!');
         form.resetFields();
         // The user is not logged in until they open the emailed link
-        onClose();
+        onSent(values.email);
       } else {
         message.error(response.message || 'Failed to submit email. Please try again.');
       }

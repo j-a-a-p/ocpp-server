@@ -75,6 +75,29 @@ describe("management App", () => {
     expect(window.location.pathname).toBe("/management-ui/settings");
   });
 
+  it("signs in through the link in the mail and lands on the dashboard without asking again", async () => {
+    let signedIn = false;
+    const fetchMock = stack(json({}));
+    const answer = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/auth/validate")) return new Response("", { status: signedIn ? 200 : 401 });
+      if (url.includes("/auth/login/abc")) {
+        signedIn = true;
+        return json({ message: "ok" });
+      }
+      return answer(input, init);
+    });
+
+    open("/login?token=abc");
+
+    await waitFor(() => expect(pageTitle()).toBe("Dashboard"));
+    expect(screen.getByText("Login successful")).toBeInTheDocument();
+    expect(screen.queryByText("Welcome")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("you@example.com")).not.toBeInTheDocument();
+    expect(window.location.pathname).toBe("/management-ui");
+  });
+
   it("opens a page directly from its address", async () => {
     stack(json({}));
 

@@ -1,21 +1,28 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Button, Result } from "antd";
+import { App, Button, Result } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
+import { useAuth } from "./contexts/AuthContext";
 import AuthLayout from "./components/AuthLayout";
 
+// The page behind the activation link. Activating also signs the resident in, so go straight to the app.
 export default function Activate() {
-  const [message, setMessage] = useState("Activating account...");
-  const [status, setStatus] = useState("loading");
+  const { message: toast } = App.useApp();
+  const [error, setError] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { checkAuth } = useAuth();
+  // An activation link works once, so never use it twice (React runs effects twice in development).
+  const started = useRef(false);
 
   useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+
     const token = searchParams.get("token");
     if (!token) {
-      setMessage("Invalid activation link.");
-      setStatus("error");
+      setError("Invalid activation link.");
       return;
     }
 
@@ -28,31 +35,34 @@ export default function Activate() {
         if (!res.ok) {
           throw new Error(data.detail || "Activation failed");
         }
-        setMessage(data.message);
-        setStatus("success");
-        setTimeout(() => navigate("/"), 2000);
+        // Without this the app still believes nobody is signed in and asks for the email address again.
+        await checkAuth();
+        toast.success("Account activated");
+        navigate("/", { replace: true });
       })
-      .catch((err) => {
-        setMessage(err.message);
-        setStatus("error");
-      });
-  }, [searchParams, navigate]);
+      .catch((err) => setError(err.message));
+  }, [searchParams, navigate, checkAuth, toast]);
 
-  return (
-    <AuthLayout>
-      <Result
-        status={status === "success" ? "success" : status === "error" ? "error" : "info"}
-        icon={status === "loading" ? <LoadingOutlined /> : undefined}
-        title={status === "success" ? "Account activated" : status === "error" ? "Activation failed" : "Account activation"}
-        subTitle={message}
-        extra={
-          status === "error" && (
+  if (error) {
+    return (
+      <AuthLayout>
+        <Result
+          status="error"
+          title="Activation failed"
+          subTitle={error}
+          extra={
             <Button type="primary" onClick={() => navigate("/")}>
               Go home
             </Button>
-          )
-        }
-      />
+          }
+        />
+      </AuthLayout>
+    );
+  }
+
+  return (
+    <AuthLayout>
+      <Result icon={<LoadingOutlined />} title="Activating your account..." />
     </AuthLayout>
   );
 }
