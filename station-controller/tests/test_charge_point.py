@@ -140,6 +140,24 @@ class TestMeterValues:
         db.expire_all()
         assert db.get(ChargeTransaction, transaction_id).final_energy_kwh == 4.0
 
+    async def test_the_final_energy_never_drops_when_the_charger_counter_drops(self, cp, db, transaction_id):
+        # A charger counter that restarts after a pause: 4.0 kWh, then 0.5, then it counts on to 1.5.
+        for power, energy in ((7.0, 1.0), (7.1, 2.5), (7.2, 4.0), (7.0, 0.5), (7.0, 1.5)):
+            await cp.on_meter_values(connector_id=1, transaction_id=transaction_id, meter_value=meter_value(power, energy))
+
+        db.expire_all()
+        # 4.0 before the drop, nothing for the drop itself, then 1.0 more.
+        assert db.get(ChargeTransaction, transaction_id).final_energy_kwh == 5.0
+        # The readings themselves are kept as the charger sent them.
+        assert [log.energy_kwh for log in db.query(PowerLog).order_by(PowerLog.id)] == [1.0, 2.5, 4.0, 0.5, 1.5]
+
+    async def test_a_last_reading_below_the_total_does_not_lower_the_final_energy(self, cp, db, transaction_id):
+        for power, energy in ((20.0, 11.0), (20.0, 12.0), (0.0, 2.2)):
+            await cp.on_meter_values(connector_id=1, transaction_id=transaction_id, meter_value=meter_value(power, energy))
+
+        db.expire_all()
+        assert db.get(ChargeTransaction, transaction_id).final_energy_kwh == 12.0
+
     async def test_a_reading_of_zero_energy_is_not_stored(self, cp, db, transaction_id):
         await cp.on_meter_values(connector_id=1, transaction_id=transaction_id, meter_value=meter_value(0.0, 0.0))
 

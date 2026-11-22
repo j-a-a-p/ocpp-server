@@ -3,7 +3,7 @@ import { Flex, Statistic, theme } from "antd";
 import type { PowerLog } from "../services/chargeTransactionService";
 import { useThemeMode } from "../theme/themeContext";
 import { formatEuro } from "../utils/format";
-import { parseUtc } from "../utils/dates";
+import { runningTotals } from "../utils/energy";
 
 interface PowerLogsChartProps {
   powerLogs: PowerLog[];
@@ -14,28 +14,26 @@ const PowerLogsChart: React.FC<PowerLogsChartProps> = ({ powerLogs, transactionI
   const { token } = theme.useToken();
   const { isDark } = useThemeMode();
 
-  const sortedLogs = [...powerLogs].sort((a, b) => parseUtc(a.created).getTime() - parseUtc(b.created).getTime());
-  const first = sortedLogs[0];
-  const last = sortedLogs[sortedLogs.length - 1];
+  // The energy and the cost so far, so the line only goes up and the tooltip shows what the session cost up to that moment.
+  const totals = runningTotals(powerLogs);
+  const first = totals[0];
+  const last = totals[totals.length - 1];
 
-  const data = sortedLogs.map((log) => ({
-    time: parseUtc(log.created).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
-    energy: log.energy_kwh,
-    cost: log.delta_power_cost || 0,
+  const data = totals.map(({ time, energy, cost }) => ({
+    time: time.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
+    energy,
+    cost,
   }));
 
   const summary = [
-    { title: "Energy", value: last.energy_kwh.toFixed(2), suffix: "kWh" },
-    { title: "Max power", value: Math.max(...sortedLogs.map((log) => log.power_kw)).toFixed(2), suffix: "kW" },
+    { title: "Energy", value: last.energy.toFixed(2), suffix: "kWh" },
+    { title: "Max power", value: Math.max(...totals.map(({ log }) => log.power_kw)).toFixed(2), suffix: "kW" },
     {
       title: "Duration",
-      value: String(Math.round((parseUtc(last.created).getTime() - parseUtc(first.created).getTime()) / 60000)),
+      value: String(Math.round((last.time.getTime() - first.time.getTime()) / 60000)),
       suffix: "min",
     },
-    {
-      title: "Cost",
-      value: formatEuro(sortedLogs.reduce((sum, log) => sum + (log.delta_power_cost || 0), 0)),
-    },
+    { title: "Cost", value: formatEuro(last.cost) },
   ];
 
   return (
@@ -57,7 +55,7 @@ const PowerLogsChart: React.FC<PowerLogsChartProps> = ({ powerLogs, transactionI
           title: "time",
           items: [
             { channel: "y", name: "Energy", valueFormatter: (value: number) => `${value.toFixed(2)} kWh` },
-            { field: "cost", name: "Cost", valueFormatter: (value: number) => `€${value.toFixed(2)}` },
+            { field: "cost", name: "Cost so far", valueFormatter: (value: number) => `€${value.toFixed(2)}` },
           ],
         }}
       />

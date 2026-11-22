@@ -89,18 +89,12 @@ class MeterValuesManager:
                     if energy_kwh == 0.0:
                         logging.debug(f"Skipping PowerLog creation for transaction {transaction_id}: energy dropped to zero (end of charging)")
                     else:
-                        PowerLogService.create_power_log(
-                            charge_transaction_id=transaction_id,
+                        # Stores the reading and adds the energy since the previous one to the transaction's total
+                        PowerLogService.record_reading(
+                            transaction_id=transaction_id,
                             power_kw=power_kw,
                             energy_kwh=energy_kwh
                         )
-                        
-                        # Update the transaction's final_energy_kwh with the latest energy value
-                        if energy_kwh is not None and energy_kwh > 0:
-                            PowerLogService.update_transaction_final_energy(
-                                transaction_id=transaction_id,
-                                final_energy_kwh=energy_kwh
-                            )
                         
                         logging.info(f"Created PowerLog record for transaction {transaction_id}: power_kw={power_kw}, energy_kwh={energy_kwh}")
                 except Exception as e:
