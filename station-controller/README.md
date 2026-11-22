@@ -20,7 +20,9 @@ Run from console:
 ```bash
 python3 main.py
 ```
-This will start the WebSocket server on `ws://0.0.0.0:9000`.
+This will start the WebSocket server on `ws://127.0.0.1:9000`. That port is plain `ws://` and only reachable
+from the machine itself; chargers connect with `wss://<domain>/ws/<station id>`, where Apache ends the TLS
+and passes the connection on. Set `OCPP_BIND_HOST=0.0.0.0` only when a proxy in another container needs it (Docker).
 
 ## System Dependencies
 1. **Bluetooth**

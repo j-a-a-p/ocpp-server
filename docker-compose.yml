@@ -35,6 +35,7 @@ services:
       - sed "s|@PUBLIC_URL@|$${PUBLIC_URL}|g" /app/configuration.ini.template > /etc/ocpp-server/configuration.ini && exec python main.py
     environment:
       PUBLIC_URL: http://localhost:${WEB_PORT:-8180}
+      API_BIND_HOST: 0.0.0.0
     depends_on:
       init:
         condition: service_completed_successfully
@@ -54,6 +55,8 @@ services:
     <<: *backend
     working_dir: /app/station-controller
     command: ["python", "main.py"]
+    environment:
+      OCPP_BIND_HOST: 0.0.0.0
     depends_on:
       cloud-api:
         condition: service_healthy

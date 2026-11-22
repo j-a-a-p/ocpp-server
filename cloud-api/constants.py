@@ -42,6 +42,8 @@ SES_ENDPOINT_URL = config.get("SimpleEmailService", "SES_ENDPOINT_URL", fallback
 AWS_REGION = "eu-central-1"
 
 JWT_SECRET = config.get("Cloud", "JWT_SECRET", fallback=None)
+# Key for the endpoints that other systems call with an X-API-Key header. Not set: they refuse everybody.
+API_KEY = config.get("Cloud", "API_KEY", fallback=None)
 JWT_EXPIRATION_DAYS = 180
 
 INVITE_URL = config.get("ResidentUI", "INVITE_URL", fallback=None)

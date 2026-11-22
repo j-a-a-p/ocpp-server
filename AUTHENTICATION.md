@@ -171,6 +171,8 @@ else:
 
 - `VITE_API_BASE_URL`: API base URL for frontend
 - `JWT_SECRET`: Secret key for JWT tokens
+- `API_KEY` (`[Cloud]` section of `configuration.ini`): value of the `X-API-Key` header for the machine-to-machine
+  endpoints. When it is not set, those endpoints refuse every request.
 - `INVITE_URL`: Base URL for email links
 
 ### Database Schema

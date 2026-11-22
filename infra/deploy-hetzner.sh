@@ -35,6 +35,9 @@
 #   JWT_SECRET             optional, signs the login tokens. Generated on the
 #                          first run and saved in infra/.hetzner.env, so it
 #                          stays the same on later deployments.
+#   API_KEY                optional, the X-API-Key that the machine-to-machine
+#                          endpoints of the cloud API require. Generated and
+#                          saved like JWT_SECRET.
 #   OCPP_DOMAIN            default apt.aircokopen.nu
 #   OCPP_LE_STAGING        set to 1 to use the Let's Encrypt staging server.
 #                          Use it while testing: the production server allows
@@ -190,6 +193,15 @@ ensure_secrets() {
         echo "  Everyone has to log in again after this deployment."
     fi
     check_secret JWT_SECRET
+
+    load_from_env_file API_KEY
+    if [ -z "${API_KEY:-}" ]; then
+        API_KEY="$(openssl rand -hex 32)"
+        [ -n "$API_KEY" ] || die "could not generate an API key"
+        persist_env_value API_KEY "$API_KEY"
+        log "Generated a new API key and saved it in $ENV_FILE"
+    fi
+    check_secret API_KEY
 }
 
 # Writes infra/configuration.ini to $1 with the @NAME@ placeholders filled in.
@@ -200,13 +212,13 @@ render_config() {
     # Checked on the template, a secret may contain anything.
     local unknown
     unknown="$(grep -o '@[A-Z_]*@' "$CONFIG_TEMPLATE" | sort -u \
-        | grep -vx -e '@DOMAIN@' -e '@SES_ACCESS_KEY@' -e '@SES_SECRET_KEY@' -e '@JWT_SECRET@' || true)"
+        | grep -vx -e '@DOMAIN@' -e '@SES_ACCESS_KEY@' -e '@SES_SECRET_KEY@' -e '@JWT_SECRET@' -e '@API_KEY@' || true)"
     [ -z "$unknown" ] || die "$CONFIG_TEMPLATE has a placeholder this script does not know: ${unknown//$'\n'/ }"
     DOMAIN="$DOMAIN" SES_ACCESS_KEY="$SES_ACCESS_KEY" SES_SECRET_KEY="$SES_SECRET_KEY" \
-    JWT_SECRET="$JWT_SECRET" awk '
+    JWT_SECRET="$JWT_SECRET" API_KEY="$API_KEY" awk '
         # One pass over the line: text that was filled in is never scanned again.
         function fill(line,    names, count, i, pos, best, found, result) {
-            count = split("DOMAIN SES_ACCESS_KEY SES_SECRET_KEY JWT_SECRET", names, " ")
+            count = split("DOMAIN SES_ACCESS_KEY SES_SECRET_KEY JWT_SECRET API_KEY", names, " ")
             result = ""
             while (1) {
                 best = 0

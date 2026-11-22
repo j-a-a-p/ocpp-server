@@ -1,3 +1,4 @@
+import os
 import subprocess
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,4 +34,6 @@ app.add_middleware(
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Only the web server in front (Apache) talks to this port, so it listens on this machine only.
+    # The Docker setup sets API_BIND_HOST=0.0.0.0, there the web server is another container.
+    uvicorn.run(app, host=os.environ.get("API_BIND_HOST", "127.0.0.1"), port=8000)

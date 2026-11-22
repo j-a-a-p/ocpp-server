@@ -45,6 +45,29 @@ class TestRequestAccess:
         expires = db.get(Resident, resident.id).login_expires_at
         assert timedelta(minutes=59) < expires - datetime.utcnow() <= timedelta(hours=1)
 
+    def test_asking_again_right_away_sends_no_second_mail(self, client, db, make_resident, outbox):
+        resident = make_resident(email="anna@example.com")
+
+        first = client.post("/auth/request-access", params={"email": "anna@example.com"})
+        token = stored_login_token(db, resident)
+        again = client.post("/auth/request-access", params={"email": "anna@example.com"})
+
+        assert again.status_code == 200
+        assert again.json() == first.json()
+        assert len(outbox) == 1
+        assert stored_login_token(db, resident) == token
+
+    def test_asking_again_after_a_minute_sends_a_new_mail(self, client, db, make_resident, outbox):
+        resident = make_resident(email="anna@example.com")
+        client.post("/auth/request-access", params={"email": "anna@example.com"})
+        db.expire_all()
+        db.get(Resident, resident.id).login_expires_at = datetime.utcnow() + timedelta(minutes=58)
+        db.commit()
+
+        client.post("/auth/request-access", params={"email": "anna@example.com"})
+
+        assert len(outbox) == 2
+
     def test_unknown_email_gets_the_same_answer_and_no_mail(self, client, outbox):
         known = client.post("/auth/request-access", params={"email": "nobody@example.com"})
 
@@ -95,7 +118,7 @@ class TestLogin:
 
         assert response.status_code == 200
         cookie = response.headers["set-cookie"]
-        assert "auth_token=" in cookie and "HttpOnly" in cookie
+        assert "auth_token=" in cookie and "HttpOnly" in cookie and "samesite=lax" in cookie.lower()
         payload = jwt.decode(response.cookies["auth_token"], JWT_SECRET, algorithms=["HS256"])
         assert payload["resident_id"] == resident.id
         validated = client.get("/auth/validate")
@@ -104,6 +127,13 @@ class TestLogin:
             "resident_id": resident.id, "email": resident.email,
             "full_name": resident.full_name, "status": "active",
         }
+
+    def test_the_cookie_is_secure_when_the_browser_used_https(self, client, db, make_resident):
+        token = self.request_link(client, db, make_resident())
+
+        response = client.post(f"/auth/login/{token}", headers={"X-Forwarded-Proto": "https"})
+
+        assert "secure" in response.headers["set-cookie"].lower()
 
     def test_link_works_only_once(self, client, db, make_resident):
         token = self.request_link(client, db, make_resident())

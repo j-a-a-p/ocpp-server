@@ -90,15 +90,12 @@ describe("ProtectedRoute", () => {
     expect(screen.queryByPlaceholderText("you@example.com")).not.toBeInTheDocument();
   });
 
-  it("closes the page on request, and tells the visitor to do it when the browser refuses", async () => {
+  it("does not offer a button to close the page, a browser does not allow that", async () => {
     auth({});
-    const close = vi.spyOn(window, "close").mockImplementation(() => {});
     await sendMail();
 
-    await userEvent.click(await screen.findByRole("button", { name: /click here to close this page/i }));
-
-    expect(close).toHaveBeenCalledOnce();
-    expect(await screen.findByText(/close this tab yourself/)).toBeInTheDocument();
+    expect(await screen.findByText("Login mail is sent")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /close/i })).not.toBeInTheDocument();
   });
 
   it("lets the visitor use another email address", async () => {

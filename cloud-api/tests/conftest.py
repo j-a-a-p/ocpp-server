@@ -20,12 +20,13 @@ from sqlalchemy.orm import sessionmaker
 with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "", "")):
     from main import app
 
+import constants
 import dependencies
 import invite
 from models import Card, ChargeTransaction, PowerLog, RefusedCard, Resident, ResidentStatus
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "db" / "migrations"
-API_KEY = "your-secure-api-key"
+API_KEY = "test-api-key-for-the-machine-endpoints"
 INVITE_URL = "https://charge.example.test/resident-ui"
 JWT_SECRET = "test-secret-with-enough-length-for-hs256"
 
@@ -92,6 +93,12 @@ def outbox(monkeypatch):
 def client(session_factory, outbox):
     """A visitor who is not logged in."""
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def configured_api_key(monkeypatch):
+    """The key that the configuration file of the server would hold."""
+    monkeypatch.setattr(constants, "API_KEY", API_KEY)
 
 
 @pytest.fixture

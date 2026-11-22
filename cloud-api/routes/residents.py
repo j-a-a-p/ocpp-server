@@ -124,6 +124,7 @@ def activate_resident(token: str, response: Response, db: Session = Depends(get_
         value=auth_token,
         httponly=True,
         secure=True,
+        samesite="lax",
         max_age=JWT_EXPIRATION_DAYS * 24 * 60 * 60
     )
     

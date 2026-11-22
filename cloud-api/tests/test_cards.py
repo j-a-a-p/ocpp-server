@@ -1,6 +1,7 @@
 """Cards: registering, renaming, and the refused-card flow behind "add as my card"."""
 from datetime import timedelta
 
+import constants
 from models import Card, RefusedCard
 
 
@@ -126,3 +127,14 @@ class TestStationAuthentication:
         assert client.get("/cards/authenticate/04AABBCC", params={"station_id": "CP1"}).status_code == 403
         wrong = client.get("/cards/authenticate/04AABBCC", params={"station_id": "CP1"}, headers={"X-API-Key": "wrong"})
         assert wrong.status_code == 403
+
+    def test_refuses_everybody_when_no_key_is_configured(self, client, monkeypatch, api_key_headers):
+        monkeypatch.setattr(constants, "API_KEY", None)
+
+        assert client.get("/cards/authenticate/04AABBCC", params={"station_id": "CP1"}, headers=api_key_headers).status_code == 403
+        assert client.get("/cards/authenticate/04AABBCC", params={"station_id": "CP1"}, headers={"X-API-Key": ""}).status_code == 403
+
+    def test_the_old_published_key_does_not_work(self, client):
+        response = client.get("/cards/authenticate/04AABBCC", params={"station_id": "CP1"}, headers={"X-API-Key": "your-secure-api-key"})
+
+        assert response.status_code == 403

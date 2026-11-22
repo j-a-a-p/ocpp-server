@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Response, Query, Depends
+from fastapi import APIRouter, HTTPException, Request, Response, Query, Depends
 from sqlalchemy.orm import Session
 from dependencies import get_db_dependency, get_authenticated_active_resident
 from crud import get_resident_by_email, update_resident
@@ -6,12 +6,17 @@ from invite import generate_invitation_token, send_login_email, generate_auth_to
 from datetime import datetime, timedelta
 from models import ResidentStatus, Resident
 from constants import JWT_EXPIRATION_DAYS
+from security import request_is_https
 import logging
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+LOGIN_LINK_VALID = timedelta(hours=1)
+# A new link is only mailed this long after the previous one, so the endpoint cannot be used to flood a mailbox.
+LOGIN_LINK_COOLDOWN = timedelta(minutes=1)
 
 @router.post("/request-access")
 def request_access(email: str, flow: str = Query("resident", description="Flow type: resident or management"), db: Session = Depends(get_db_dependency)):
@@ -40,9 +45,18 @@ def request_access(email: str, flow: str = Query("resident", description="Flow t
                 "message": "If your email is registered, you will receive a login link shortly."
             }
         
+        # A link was mailed a moment ago: it is still valid, do not mail another one.
+        if (resident.login_token and resident.login_expires_at
+                and resident.login_expires_at > datetime.utcnow() + LOGIN_LINK_VALID - LOGIN_LINK_COOLDOWN):
+            logger.info(f"Login request for {resident.email} ignored, a link was sent less than a minute ago")
+            return {
+                "success": True,
+                "message": "If your email is registered, you will receive a login link shortly."
+            }
+
         # Generate login token (1 hour expiration)
         login_token, expires_at = generate_invitation_token()
-        expires_at = datetime.utcnow() + timedelta(hours=1)  # Override to 1 hour
+        expires_at = datetime.utcnow() + LOGIN_LINK_VALID
         
         # Update resident with login token
         resident = update_resident(db, resident.id, {
@@ -74,7 +88,7 @@ def request_access(email: str, flow: str = Query("resident", description="Flow t
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @router.post("/login/{token}")
-def login_resident(token: str, response: Response, db: Session = Depends(get_db_dependency)):
+def login_resident(token: str, request: Request, response: Response, db: Session = Depends(get_db_dependency)):
     """Login resident using login token."""
     try:
         # Find resident by login token
@@ -103,7 +117,8 @@ def login_resident(token: str, response: Response, db: Session = Depends(get_db_
             key="auth_token",
             value=auth_token,
             httponly=True,
-            #secure=True,  # Enable in production
+            secure=request_is_https(request),
+            samesite="lax",
             max_age=JWT_EXPIRATION_DAYS * 24 * 60 * 60
         )
         
