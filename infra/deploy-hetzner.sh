@@ -35,7 +35,7 @@
 #   JWT_SECRET             optional, signs the login tokens. Generated on the
 #                          first run and saved in infra/.hetzner.env, so it
 #                          stays the same on later deployments.
-#   OCPP_DOMAIN            default iaap.nl
+#   OCPP_DOMAIN            default apt.aircokopen.nu
 #   OCPP_LE_STAGING        set to 1 to use the Let's Encrypt staging server.
 #                          Use it while testing: the production server allows
 #                          only 5 identical certificates per week.
@@ -67,7 +67,7 @@ SERVER_TYPE="${HCLOUD_SERVER_TYPE:-cx23}"
 IMAGE="${HCLOUD_IMAGE:-ubuntu-26.04}"
 FIP_NAME="${OCPP_FLOATING_IP_NAME:-ocpp-server}"
 SSH_KEY="${OCPP_DEPLOY_SSH_KEY:-$HOME/.ssh/ocpp-hetzner-deploy}"
-DOMAIN="${OCPP_DOMAIN:-iaap.nl}"
+DOMAIN="${OCPP_DOMAIN:-apt.aircokopen.nu}"
 LE_STAGING="${OCPP_LE_STAGING:-0}"
 PYTHON_VERSION="${OCPP_PYTHON_VERSION:-3.12}"
 NODE_VERSION="${OCPP_NODE_VERSION:-22.12.0}"
