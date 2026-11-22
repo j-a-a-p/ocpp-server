@@ -78,7 +78,9 @@ const Charges: React.FC = () => {
 
     const monthly_data: MonthlyData[] = Array.from(monthlyGroups.entries())
       .map(([key, group]) => {
-        const [yearStr, monthStr, resident_name] = key.split('-', 3);
+        // The name is the rest of the key: it can contain hyphens itself.
+        const [yearStr, monthStr, ...nameParts] = key.split('-');
+        const resident_name = nameParts.join('-');
         const year = parseInt(yearStr);
         const month = parseInt(monthStr);
         const monthName = monthNames[month - 1];
@@ -102,7 +104,8 @@ const Charges: React.FC = () => {
 
     const yearly_summaries: YearlySummary[] = Array.from(yearlyGroups.entries())
       .map(([key, group]) => {
-        const [yearStr, resident_name] = key.split('-', 2);
+        const [yearStr, ...nameParts] = key.split('-');
+        const resident_name = nameParts.join('-');
         const year = parseInt(yearStr);
         
         return {
@@ -127,9 +130,10 @@ const Charges: React.FC = () => {
       title: "Month",
       dataIndex: "month_display",
       key: "month_display",
+      // Ascending comparison: the default 'descend' order then shows the newest month first.
       sorter: (a: MonthlyData, b: MonthlyData) => {
-        if (a.year !== b.year) return b.year - a.year;
-        return b.month - a.month;
+        if (a.year !== b.year) return a.year - b.year;
+        return a.month - b.month;
       },
       defaultSortOrder: 'descend' as const,
     },
@@ -169,7 +173,7 @@ const Charges: React.FC = () => {
       title: "Year",
       dataIndex: "year",
       key: "year",
-      sorter: (a: YearlySummary, b: YearlySummary) => b.year - a.year,
+      sorter: (a: YearlySummary, b: YearlySummary) => a.year - b.year,
       defaultSortOrder: 'descend' as const,
     },
     {

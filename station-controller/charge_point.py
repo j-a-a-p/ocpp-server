@@ -86,7 +86,7 @@ class ChargePoint(BaseChargePoint):
             logging.info(f"RFID {id_tag} not authorized")
             self.log_rejected_rfid(id_tag)
             return call_result.Authorize(
-                id_tag_info={"status": AuthorizationStatus.rejected}
+                id_tag_info={"status": AuthorizationStatus.invalid}
             )
 
     @on("StartTransaction")
@@ -137,7 +137,7 @@ class ChargePoint(BaseChargePoint):
         return call_result.StatusNotification()
 
     @on("StopTransaction")
-    async def on_stop_transaction(self, transaction_id, id_tag, meter_stop, timestamp, **kwargs):
+    async def on_stop_transaction(self, transaction_id, meter_stop, timestamp, id_tag=None, **kwargs):
         """Handle the StopTransaction event from the charge point."""
         
         logging.info(f"StopTransaction received: Transaction {transaction_id}, RFID {id_tag}, Meter stop {meter_stop}")

@@ -192,8 +192,7 @@ class Station:
         self.note = ""
         log.info("%s: card %s tapped", self.id, rfid)
         authorized = await link.call(call.Authorize(id_tag=rfid))
-        # An error answer (the library returns None) counts as not authorized: the
-        # server currently answers that way for unknown cards, see DOCKER.md.
+        # An error answer (the library returns None) counts as not authorized too.
         verdict = authorized.id_tag_info.get("status") if authorized is not None else None
         if str(getattr(verdict, "value", verdict)) != "Accepted":
             log.info("%s: card %s refused", self.id, rfid)
