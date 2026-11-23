@@ -36,6 +36,17 @@ class TestRequestAccess:
         assert "https://charge.example.test/management-ui/login?token=" + token in outbox[0]["body"]
         assert "Management" in outbox[0]["subject"]
 
+    def test_the_mail_has_a_styled_html_version_next_to_the_text(self, client, db, make_resident, outbox):
+        resident = make_resident(email="anna@example.com")
+
+        client.post("/auth/request-access", params={"email": "anna@example.com"})
+
+        token = stored_login_token(db, resident)
+        html = outbox[0]["html"]
+        assert f'href="{INVITE_URL}/login?token={token}"' in html
+        assert "#0d9488" in html and "Inter" in html
+        assert "Sign in" in html and "expires in 1 hour" in html
+
     def test_the_link_is_valid_for_one_hour(self, client, db, make_resident):
         resident = make_resident()
 
@@ -161,6 +172,29 @@ class TestLogin:
         )
 
         assert client.post("/auth/login/stale").status_code == 400
+
+
+class TestLogout:
+    def test_logging_out_ends_the_session(self, client, db, make_resident):
+        resident = make_resident()
+        client.post("/auth/request-access", params={"email": resident.email})
+        client.post(f"/auth/login/{stored_login_token(db, resident)}")
+        assert client.get("/auth/validate").status_code == 200
+
+        response = client.post("/auth/logout")
+
+        assert response.status_code == 200
+        cookie = response.headers["set-cookie"].lower()
+        assert "auth_token=" in cookie and "max-age=0" in cookie and "httponly" in cookie
+        assert client.get("/auth/validate").status_code == 401
+
+    def test_logging_out_without_a_session_is_fine(self, client):
+        assert client.post("/auth/logout").status_code == 200
+
+    def test_the_cookie_is_removed_with_the_same_security_flags_it_was_set_with(self, client):
+        response = client.post("/auth/logout", headers={"X-Forwarded-Proto": "https"})
+
+        assert "secure" in response.headers["set-cookie"].lower()
 
 
 class TestValidate:

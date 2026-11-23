@@ -9,7 +9,8 @@ import { renderWithProviders } from "./test/render";
 vi.mock("./contexts/AuthContext", () => ({ useAuth: vi.fn() }));
 
 const checkAuth = vi.fn(async () => {});
-const loggedOut = { isAuthenticated: false, isLoading: false, serverAvailable: true, checkAuth };
+const logout = vi.fn(async () => {});
+const loggedOut = { isAuthenticated: false, isLoading: false, serverAvailable: true, checkAuth, logout };
 
 const renderLogin = (route: string) =>
   renderWithProviders(

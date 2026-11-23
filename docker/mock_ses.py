@@ -74,6 +74,7 @@ def handle_ses(form: dict[str, list[str]]) -> tuple[int, str]:
         "to": recipients,
         "subject": form.get("Message.Subject.Data", [""])[0],
         "body": form.get("Message.Body.Text.Data", [""])[0],
+        "html": form.get("Message.Body.Html.Data", [""])[0],
     }
     with lock:
         messages.append(message)
@@ -109,15 +110,27 @@ def render_inbox() -> str:
 
     cards = []
     for message in shown:
-        body = URL_PATTERN.sub(
-            lambda found: f'<a href="{found.group(0)}">{found.group(0)}</a>', html.escape(message["body"].strip())
-        )
+        if message.get("html"):
+            # The HTML version, like a mail client shows it. The text version stays one click away.
+            body = (
+                f'<iframe class="preview" sandbox srcdoc="{html.escape(message["html"], quote=True)}"></iframe>'
+                "<details><summary>Plain text version</summary><pre>"
+                + URL_PATTERN.sub(
+                    lambda found: f'<a href="{found.group(0)}">{found.group(0)}</a>',
+                    html.escape(message["body"].strip()),
+                )
+                + "</pre></details>"
+            )
+        else:
+            body = "<pre>" + URL_PATTERN.sub(
+                lambda found: f'<a href="{found.group(0)}">{found.group(0)}</a>', html.escape(message["body"].strip())
+            ) + "</pre>"
         cards.append(
             '<div class="mail">'
             f"<h3>{html.escape(message['subject'])}</h3>"
             f'<div class="meta">To: {html.escape(", ".join(message["to"]))} &middot; '
             f'From: {html.escape(message["from"])} &middot; {message["received"]}</div>'
-            f"<pre>{body}</pre></div>"
+            f"{body}</div>"
         )
     inbox = "".join(cards) or "<p>No mail yet. Request a login link in one of the portals.</p>"
 
@@ -135,6 +148,8 @@ def render_inbox() -> str:
  .mail h3 {{ margin: 0 0 .2rem; }}
  .meta {{ color: #666; font-size: .85rem; }}
  pre {{ white-space: pre-wrap; font-family: inherit; }}
+ .preview {{ width: 100%; height: 520px; border: 1px solid #ddd; border-radius: 6px; margin-top: .6rem; }}
+ summary {{ cursor: pointer; color: #666; font-size: .85rem; margin-top: .4rem; }}
  form {{ display: inline; }}
 </style></head><body>
 <h1>Mock mail inbox</h1>

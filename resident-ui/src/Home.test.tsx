@@ -2,6 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Home from "./Home";
+import { useAuth } from "./contexts/AuthContext";
 import { json, mockFetch, requests } from "./test/mockFetch";
 import { renderWithProviders } from "./test/render";
 
@@ -33,8 +34,14 @@ const stack = (extra: Parameters<typeof mockFetch>[0] = {}) =>
     ...extra,
   });
 
+vi.mock("./contexts/AuthContext", () => ({ useAuth: vi.fn() }));
+
+const logout = vi.fn(async () => {});
+
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
+  logout.mockClear();
+  vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isLoading: false, serverAvailable: true, checkAuth: async () => {}, logout });
 });
 
 describe("Home (the resident portal)", () => {
@@ -125,6 +132,25 @@ describe("Home (the resident portal)", () => {
     expect(requests(fetchMock).filter((request) => request.startsWith("POST"))).toEqual([expect.stringMatching(/\/cards\/add_card\/CP1$/)]);
     await waitFor(() => expect(screen.queryByText("Refused at CP1")).not.toBeInTheDocument());
     expect(requests(fetchMock).filter((request) => request.includes("/cards/my_cards"))).toHaveLength(2);
+  });
+
+  it("logs the resident out with the button in the header", async () => {
+    stack();
+    renderWithProviders(<Home />);
+
+    await userEvent.click(screen.getByRole("button", { name: /log out/i }));
+
+    expect(logout).toHaveBeenCalledOnce();
+  });
+
+  it("tells the resident when logging out fails", async () => {
+    stack();
+    logout.mockRejectedValueOnce(new Error("Logout failed: 500"));
+    renderWithProviders(<Home />);
+
+    await userEvent.click(screen.getByRole("button", { name: /log out/i }));
+
+    expect(await screen.findByText("Failed to log out")).toBeInTheDocument();
   });
 
   it("tells the resident when the sessions cannot be loaded", async () => {

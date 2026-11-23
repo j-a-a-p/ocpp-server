@@ -22,7 +22,7 @@ class SESEmailSender:
             endpoint_url=SES_ENDPOINT_URL  # None means the real AWS endpoint
         )
 
-    def send_email(self, sender, recipient, subject, body):
+    def send_email(self, sender, recipient, subject, body, html_body=None):
         """
         Sends an email using AWS SES.
 
@@ -31,6 +31,7 @@ class SESEmailSender:
         recipient (str): Recipient email address.
         subject (str): Email subject.
         body (str): Email body (plain text).
+        html_body (str, optional): HTML version of the body, shown by clients that support it.
         
         Returns:
         dict: AWS SES response
@@ -39,13 +40,16 @@ class SESEmailSender:
         Exception: If email sending fails
         """
         try:
-            logger.info(f"Sending invitation email to {recipient}")
+            logger.info(f"Sending email to {recipient}")
+            message_body = {"Text": {"Data": body, "Charset": "UTF-8"}}
+            if html_body:
+                message_body["Html"] = {"Data": html_body, "Charset": "UTF-8"}
             response = self.ses_client.send_email(
                 Source=sender,
                 Destination={"ToAddresses": [recipient]},
                 Message={
-                    "Subject": {"Data": subject},
-                    "Body": {"Text": {"Data": body}},
+                    "Subject": {"Data": subject, "Charset": "UTF-8"},
+                    "Body": message_body,
                 }
             )
             logger.info(f"Email sent successfully to {recipient}")

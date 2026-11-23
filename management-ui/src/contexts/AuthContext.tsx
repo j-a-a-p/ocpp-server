@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { isAuthenticated, AuthResult } from '../utils/auth';
+import { isAuthenticated, logout as logoutRequest, AuthResult } from '../utils/auth';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   serverAvailable: boolean;
   checkAuth: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -51,11 +52,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, [serverAvailable]);
 
+  const logout = async () => {
+    await logoutRequest();
+    setAuthenticated(false);
+  };
+
   const value: AuthContextType = {
     isAuthenticated: authenticated,
     isLoading: loading,
     serverAvailable,
     checkAuth,
+    logout,
   };
 
   return (

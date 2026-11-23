@@ -80,8 +80,8 @@ def outbox(monkeypatch):
     sent = []
 
     class FakeSender:
-        def send_email(self, sender, recipient, subject, body):
-            sent.append({"sender": sender, "recipient": recipient, "subject": subject, "body": body})
+        def send_email(self, sender, recipient, subject, body, html_body=None):
+            sent.append({"sender": sender, "recipient": recipient, "subject": subject, "body": body, "html": html_body})
 
     monkeypatch.setattr(invite, "SESEmailSender", FakeSender)
     monkeypatch.setattr(invite, "INVITE_URL", INVITE_URL)

@@ -36,7 +36,7 @@ Everything is published on `localhost` only, so nothing is reachable from other 
 | Mock inbox, with quick login for the users | http://localhost:8025 |
 | Resident portal | http://localhost:8180/resident-ui/ |
 | Management portal | http://localhost:8180/management-ui/ |
-| Live meter dashboard (the page at `/` in production) | http://localhost:8180/ |
+| Website (the page at `/` in production) | http://localhost:8180/ |
 | API (as the UIs call it) | http://localhost:8180/api/ , the schema is at http://localhost:8180/api/openapi.json |
 | Charger WebSocket (as a real charger would connect) | `ws://localhost:8180/ws/<station id>`, subprotocol `ocpp1.6` |
 | Charger simulator control page | http://localhost:8190 |
@@ -113,7 +113,7 @@ StartTransaction, MeterValues every few seconds and StopTransaction.
   short on a time axis.
 - **By hand.** http://localhost:8190 shows the stations. Click a button to tap a card, tap an unknown card,
   or stop a session.
-- **Live data.** While a station charges, the meter dashboard, the *Charger Status* in the management portal and
+- **Live data.** While a station charges, the *Charger Status* in the management portal and
   the *Station Status* in the resident portal show it.
 
 Settings for the chargers (environment variables, in the shell or a `.env` file):
@@ -183,7 +183,7 @@ cd resident-ui && npm test                             # resident UI (Vitest)
 | `init` | runs once: Flyway migrations and the seed, then stops |
 | `cloud-api` | the cloud API, port 8000 inside Docker |
 | `station-controller` | the OCPP server, port 9000 inside Docker |
-| `web` | nginx: the UIs, `/api`, `/ws` and the meter dashboard |
+| `web` | nginx: the UIs, `/api`, `/ws` and the website |
 | `mock-ses` | mock email server and inbox |
 | `chargers` | simulated charging stations |
 

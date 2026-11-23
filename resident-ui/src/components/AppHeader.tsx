@@ -1,6 +1,7 @@
 import { Flex, Typography } from "antd";
 import BrandMark from "./BrandMark";
 import ThemeToggle from "./ThemeToggle";
+import LogoutButton from "./LogoutButton";
 
 const { Text } = Typography;
 
@@ -17,6 +18,7 @@ const AppHeader: React.FC = () => (
         </Text>
       </Flex>
       <ThemeToggle />
+      <LogoutButton />
     </div>
   </header>
 );

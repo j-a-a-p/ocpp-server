@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import { json, mockFetch } from "./test/mockFetch";
+import { json, mockFetch, requests } from "./test/mockFetch";
 import { ThemeProvider } from "./theme/ThemeProvider";
 
 // Everything below the router is real: auth check, layout, navigation and the lazily loaded pages.
@@ -109,6 +109,44 @@ describe("management App", () => {
     expect(screen.queryByText("Welcome")).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("you@example.com")).not.toBeInTheDocument();
     expect(window.location.pathname).toBe("/management-ui");
+  });
+
+  it("logs out with the button in the header and asks to sign in again", async () => {
+    let signedIn = true;
+    const fetchMock = stack(json({}));
+    const answer = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("/auth/validate")) return new Response("", { status: signedIn ? 200 : 401 });
+      if (url.includes("/auth/logout")) {
+        signedIn = false;
+        return json({ message: "Logged out" });
+      }
+      return answer(input, init);
+    });
+    open("/");
+    await waitFor(() => expect(pageTitle()).toBe("Dashboard"));
+
+    await userEvent.click(screen.getByRole("button", { name: /log out/i }));
+
+    expect(await screen.findByText("Welcome")).toBeInTheDocument();
+    expect(requests(fetchMock)).toEqual(expect.arrayContaining([expect.stringMatching(/^POST .*\/auth\/logout$/)]));
+    expect(document.querySelector(".app-sider")).toBeNull();
+  });
+
+  it("stays signed in and says so when logging out fails", async () => {
+    const fetchMock = stack(json({}));
+    const answer = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (input, init) =>
+      String(input).includes("/auth/logout") ? new Response("", { status: 500 }) : answer(input, init)
+    );
+    open("/");
+    await waitFor(() => expect(pageTitle()).toBe("Dashboard"));
+
+    await userEvent.click(screen.getByRole("button", { name: /log out/i }));
+
+    expect(await screen.findByText("Failed to log out")).toBeInTheDocument();
+    expect(pageTitle()).toBe("Dashboard");
   });
 
   it("opens a page directly from its address", async () => {

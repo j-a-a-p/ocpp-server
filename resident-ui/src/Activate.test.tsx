@@ -9,6 +9,7 @@ import { renderWithProviders } from "./test/render";
 vi.mock("./contexts/AuthContext", () => ({ useAuth: vi.fn() }));
 
 const checkAuth = vi.fn(async () => {});
+const logout = vi.fn(async () => {});
 
 const renderActivate = (route: string) =>
   renderWithProviders(
@@ -21,7 +22,7 @@ const renderActivate = (route: string) =>
 
 beforeEach(() => {
   checkAuth.mockClear();
-  vi.mocked(useAuth).mockReturnValue({ isAuthenticated: false, isLoading: false, serverAvailable: true, checkAuth });
+  vi.mocked(useAuth).mockReturnValue({ isAuthenticated: false, isLoading: false, serverAvailable: true, checkAuth, logout });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 

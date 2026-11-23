@@ -64,11 +64,21 @@ class TestInviting:
         assert outbox[0]["recipient"] == "dave@example.com"
         assert f"{INVITE_URL}/activate?token={resident.invite_token}" in outbox[0]["body"]
 
-    def test_invitation_is_valid_for_180_days(self, user, db):
+    def test_the_invitation_has_a_styled_html_version_next_to_the_text(self, user, db, outbox):
+        user.post("/residents/", json={"full_name": "Dave Dee", "email": "dave@example.com"})
+
+        resident = db.query(Resident).filter_by(email="dave@example.com").one()
+        html = outbox[0]["html"]
+        assert f'href="{INVITE_URL}/activate?token={resident.invite_token}"' in html
+        assert "Activate my account" in html and "#0d9488" in html
+
+    def test_invitation_is_valid_for_30_days(self, user, db, outbox):
         user.post("/residents/", json={"full_name": "Dave Dee", "email": "dave@example.com"})
 
         expires = db.query(Resident).filter_by(email="dave@example.com").one().invite_expires_at
-        assert timedelta(days=179) < expires - datetime.utcnow() <= timedelta(days=180)
+        assert timedelta(days=29) < expires - datetime.utcnow() <= timedelta(days=30)
+        assert "This invitation expires in 30 days." in outbox[0]["body"]
+        assert "This invitation expires in 30 days." in outbox[0]["html"]
 
     def test_email_must_be_unique(self, user, outbox):
         first = user.post("/residents/", json={"full_name": "Dave", "email": "dave@example.com"})

@@ -131,6 +131,17 @@ def login_resident(token: str, request: Request, response: Response, db: Session
         logger.error(f"Error in login_resident: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@router.post("/logout")
+def logout(request: Request, response: Response):
+    """Log out: remove the auth cookie. It is httponly, so only the server can do this."""
+    response.delete_cookie(
+        key="auth_token",
+        httponly=True,
+        secure=request_is_https(request),
+        samesite="lax",
+    )
+    return {"message": "Logged out"}
+
 @router.get("/validate")
 def validate_token(resident: Resident = Depends(get_authenticated_active_resident)):
     """Validate the auth token and return resident info."""

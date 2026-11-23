@@ -5,6 +5,7 @@ import { MenuOutlined } from "@ant-design/icons";
 import { navItems } from "./navigation";
 import BrandMark from "./components/BrandMark";
 import ThemeToggle from "./components/ThemeToggle";
+import LogoutButton from "./components/LogoutButton";
 
 const { Sider } = Layout;
 const { Text, Title } = Typography;
@@ -72,6 +73,7 @@ const AppLayout: React.FC = () => {
             {current.title}
           </Title>
           <ThemeToggle />
+          <LogoutButton />
         </header>
         <main className="page-container wide">
           <Suspense

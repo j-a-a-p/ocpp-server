@@ -24,18 +24,15 @@ Severity: **High** (fix soon, real impact), **Medium** (fix when you touch that 
 - [ ] **S5 (Medium) `/meter_values.json` and `.csv` are public.** Served from the web root without a login
   (`infra/web/.htaccess`, nginx in Docker). Shows live power use of the building.
   Fix: serve behind the auth cookie, or accept it and document that it is public on purpose.
-- [ ] **S6 (Medium) No logout.** There is no logout endpoint or button. The cookie is `HttpOnly`, so the UI cannot
-  clear it, and a token stays valid for 180 days (`JWT_EXPIRATION_DAYS`). Stolen cookie = 6 months of access.
-  Fix: `POST /auth/logout` that deletes the cookie; shorten the token life; optionally a `token_version` on the
-  resident so "log out everywhere" works.
+- [ ] **S6 (Medium) Logging out does not revoke the token.** Logging out (see Done) removes the cookie from the
+  browser, but a token stays valid for 180 days (`JWT_EXPIRATION_DAYS`). Stolen cookie = 6 months of access.
+  Fix: shorten the token life; optionally a `token_version` on the resident so "log out everywhere" works.
 - [ ] **S7 (Medium) Email enumeration through behaviour.** An unknown address answers fast with success; a known one
   sends a mail and, when SES fails, answers 500. The cooldown also answers differently in timing. Measuring that
   reveals who is registered. Fix: always answer 200, send the mail in a background task.
 - [ ] **S8 (Medium) Login and invitation tokens are stored in plain text** (`residents.login_token`,
   `invite_token`). Anyone who reads the database (or a backup) can log in as a resident with an unused link.
   Fix: store a SHA-256 hash and compare hashes.
-- [ ] **S9 (Medium) Invitations are valid for 180 days** (`INVITE_EXPIRATION_DAYS`). Login links last 1 hour.
-  Fix: 7 days is plenty.
 - [ ] **S10 (Medium) Services run as `ubuntu`, which has passwordless sudo.** A bug in the API or station controller
   is root on the machine. Fix: a dedicated `ocpp` user and systemd hardening (`NoNewPrivileges`, `ProtectSystem=strict`,
   `PrivateTmp`, `ReadWritePaths` for the data directory) in `infra/create-*-service.sh`.
@@ -67,7 +64,7 @@ Severity: **High** (fix soon, real impact), **Medium** (fix when you touch that 
 - [x] **B1 (High) `on_start_transaction` crashes when the database write fails.** (fixed, see Done) `transaction` is not defined if
   `create_transaction` raises (the `except` only logs), so the next line raises `UnboundLocalError` and the charger
   gets an error instead of an answer. (`station-controller/charge_point.py`)
-- [ ] **B2 (Medium) A resident cannot get a new invitation for 180 days.** `send_invitation` refuses while the old
+- [ ] **B2 (Medium) A resident cannot get a new invitation for up to 30 days.** `send_invitation` refuses while the old
   invitation has not expired. If the mail was lost, there is no way to resend until it expires. Fix: allow a resend
   and replace the token (after the 1-minute cooldown like login mails).
 - [ ] **B3 (Medium) Invitation mail failure is hidden.** `POST /residents` returns success when the mail could not be
@@ -136,6 +133,8 @@ version: **hold** until the toolchain (Vite, `typescript-eslint`) supports it.
   constant time, and refused when not set. `deploy-hetzner.sh` generates it. Redeploy needed on the live server.
 - [x] Login cookie: `Secure` when the request came over HTTPS, `SameSite=Lax` on both login cookies.
 - [x] Login mails: at most one per minute per address (stops mailbox flooding).
+- [x] Invitations are valid for 30 days instead of 180 (`INVITE_EXPIRATION_DAYS`). Invitations sent before this change keep their old expiry date.
+- [x] Logout: `POST /auth/logout` removes the `HttpOnly` cookie, with a *Log out* button in the header of both portals.
 - [x] Apache: HSTS, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`.
 - [x] Login page: the "close this page" button was removed (browsers do not allow it).
 - [x] Python dependencies updated to the versions in the table above (D1), no known vulnerabilities left.

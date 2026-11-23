@@ -47,4 +47,4 @@ API_KEY = config.get("Cloud", "API_KEY", fallback=None)
 JWT_EXPIRATION_DAYS = 180
 
 INVITE_URL = config.get("ResidentUI", "INVITE_URL", fallback=None)
-INVITE_EXPIRATION_DAYS = 180
+INVITE_EXPIRATION_DAYS = 30

@@ -44,7 +44,7 @@ The flow parameter is included in the email links to ensure users are directed t
    - Validated on every protected request
 
 3. **Invitation Tokens**: Used for account activation
-   - 180-day expiration
+   - 30-day expiration
    - Single-use for account activation
 
 #### Authentication Check Pattern
@@ -106,7 +106,7 @@ Different email subjects and content for each flow to provide clear context to u
 
 - **Login Tokens**: 1-hour expiration for email links
 - **Auth Tokens**: 180-day expiration (JWT)
-- **Invitation Tokens**: 180-day expiration for account activation
+- **Invitation Tokens**: 30-day expiration for account activation
 
 ### Cookie Security
 

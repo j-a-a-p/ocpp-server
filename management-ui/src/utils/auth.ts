@@ -65,4 +65,15 @@ export const setAuthToken = (token: string): void => {
 
 export const removeAuthToken = (): void => {
   document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-}; 
+};
+
+/** Ends the session. The auth cookie is httponly, so only the server can remove it. */
+export const logout = async (): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(`Logout failed: ${response.status}`);
+  }
+};
