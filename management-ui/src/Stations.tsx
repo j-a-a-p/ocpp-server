@@ -2,11 +2,9 @@ import { useEffect, useState } from "react";
 import { Alert, Card, Col, Empty, Flex, Row, Segmented, Spin, Table, Tag, theme } from "antd";
 import type { TableColumnsType } from "antd";
 import { ClockCircleOutlined, DisconnectOutlined, WifiOutlined } from "@ant-design/icons";
-import dayjs from "dayjs";
 import StatTile from "./components/StatTile";
 import StationTimeline from "./components/StationTimeline";
 import { getStations, Station, StationOverview } from "./services/stationService";
-import { formatDuration, parseUtc } from "./utils/dates";
 import { formatInteger, formatNumber } from "./utils/format";
 
 const RANGES = [
@@ -17,6 +15,9 @@ const RANGES = [
 
 // The stations send a heartbeat every 30 seconds, so this is quick enough to see one drop out.
 const REFRESH_MS = 15_000;
+
+// The deploy script opens a websocket under this id. It is not a charging station.
+const HIDDEN_STATION_IDS = new Set(["deploy-healthcheck"]);
 
 const Stations: React.FC = () => {
   const { token } = theme.useToken();
@@ -67,10 +68,10 @@ const Stations: React.FC = () => {
 
   // The answer for another window is on its way after a change of the range.
   const switching = overview.window_hours !== hours;
-  const now = parseUtc(overview.generated_at).getTime();
-  const secondsSince = (value: string) => (now - parseUtc(value).getTime()) / 1000;
-  const offline = overview.stations.length - overview.online_count;
-  const uptimes = overview.stations.flatMap((station) => (station.uptime_percent === null ? [] : [station.uptime_percent]));
+  const stations = overview.stations.filter((station) => !HIDDEN_STATION_IDS.has(station.station_id));
+  const online = stations.filter((station) => station.online).length;
+  const offline = stations.length - online;
+  const uptimes = stations.flatMap((station) => (station.uptime_percent === null ? [] : [station.uptime_percent]));
   const averageUptime = uptimes.length ? uptimes.reduce((sum, uptime) => sum + uptime, 0) / uptimes.length : null;
 
   const columns: TableColumnsType<Station> = [
@@ -79,14 +80,6 @@ const Stations: React.FC = () => {
       title: "Status",
       key: "status",
       render: (_, station) => (station.online ? <Tag color="success">Online</Tag> : <Tag color="error">Offline</Tag>),
-    },
-    {
-      title: "Since",
-      key: "since",
-      render: (_, station) =>
-        station.online && station.connected_since
-          ? `Online for ${formatDuration(secondsSince(station.connected_since))}`
-          : `Last seen ${formatDuration(secondsSince(station.last_seen))} ago (${dayjs(parseUtc(station.last_seen)).format("D MMM HH:mm")})`,
     },
     {
       title: "Uptime",
@@ -112,8 +105,7 @@ const Stations: React.FC = () => {
         <Col xs={24} md={8}>
           <StatTile
             title="Online now"
-            value={overview.online_count}
-            suffix={`of ${overview.stations.length}`}
+            value={online}
             icon={<WifiOutlined />}
             color={token.colorSuccess}
             background={token.colorSuccessBg}
@@ -138,7 +130,7 @@ const Stations: React.FC = () => {
         </Col>
       </Row>
 
-      {overview.stations.length === 0 ? (
+      {stations.length === 0 ? (
         <Card>
           <Empty description="No charging station has connected yet" />
         </Card>
@@ -149,7 +141,7 @@ const Stations: React.FC = () => {
               rowKey="station_id"
               size="small"
               columns={columns}
-              dataSource={overview.stations}
+              dataSource={stations}
               pagination={false}
               loading={switching}
               scroll={{ x: "max-content" }}
@@ -161,7 +153,7 @@ const Stations: React.FC = () => {
             loading={switching}
             extra={<Segmented options={RANGES} value={hours} onChange={(value) => setHours(Number(value))} />}
           >
-            <StationTimeline stations={overview.stations} windowStart={overview.window_start} windowEnd={overview.generated_at} />
+            <StationTimeline stations={stations} windowStart={overview.window_start} windowEnd={overview.generated_at} />
           </Card>
         </>
       )}

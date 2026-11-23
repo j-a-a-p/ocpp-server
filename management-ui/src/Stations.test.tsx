@@ -11,7 +11,8 @@ const overview: StationOverview = {
   generated_at: "2026-11-22T12:00:00Z",
   window_start: "2026-11-21T12:00:00Z",
   window_hours: 24,
-  online_count: 2,
+  // Includes the deploy probe, which the page hides, so this is not the number shown.
+  online_count: 3,
   stations: [
     {
       station_id: "CP1", online: true, connected_since: "2026-11-22T09:00:00Z", last_seen: "2026-11-22T11:59:50Z",
@@ -30,6 +31,11 @@ const overview: StationOverview = {
       station_id: "CP3", online: true, connected_since: "2026-11-22T11:59:30Z", last_seen: "2026-11-22T11:59:55Z",
       first_seen: "2026-11-22T11:59:30Z", uptime_percent: null, connections: 1,
       online_periods: [{ start: "2026-11-22T11:59:30Z", end: "2026-11-22T12:00:00Z" }],
+    },
+    {
+      station_id: "deploy-healthcheck", online: true, connected_since: "2026-11-22T11:00:00Z", last_seen: "2026-11-22T11:59:59Z",
+      first_seen: "2026-11-22T11:00:00Z", uptime_percent: 100, connections: 40,
+      online_periods: [{ start: "2026-11-22T11:00:00Z", end: "2026-11-22T12:00:00Z" }],
     },
   ],
 };
@@ -56,31 +62,30 @@ describe("Stations", () => {
 
     renderWithProviders(<Stations />);
 
-    expect(await tile("Online now")).toHaveTextContent(/2\s*of 3/);
+    expect(await tile("Online now")).toHaveTextContent("2");
     expect(await tile("Offline")).toHaveTextContent("1");
-    // CP3 has no uptime yet and is left out of the average: (90 + 50) / 2.
+    // CP3 has no uptime yet and the deploy probe is hidden, so the average is (90 + 50) / 2.
     expect(await tile("Average uptime (24 hours)")).toHaveTextContent("70.0%");
   });
 
-  it("lists every station with its status, how long it has been online and its uptime", async () => {
+  it("lists every charging station with its status and its uptime", async () => {
     mockFetch({ "GET /stations/": json(overview) });
 
     renderWithProviders(<Stations />);
 
     const cp1 = await row("CP1");
     expect(cp1.getByText("Online")).toBeInTheDocument();
-    expect(cp1.getByText("Online for 3 h")).toBeInTheDocument();
     expect(cp1.getByText("90.0%")).toBeInTheDocument();
     expect(cp1.getByText("3")).toBeInTheDocument();
 
     const cp2 = await row("CP2");
     expect(cp2.getByText("Offline")).toBeInTheDocument();
-    expect(cp2.getByText(/^Last seen 30 min ago/)).toBeInTheDocument();
     expect(cp2.getByText("50.0%")).toBeInTheDocument();
 
     const cp3 = await row("CP3");
-    expect(cp3.getByText("Online for less than a minute")).toBeInTheDocument();
     expect(cp3.getByText("-")).toBeInTheDocument();
+    expect(screen.queryByText("Since")).not.toBeInTheDocument();
+    expect(screen.queryByText("deploy-healthcheck")).not.toBeInTheDocument();
   });
 
   it("draws the online periods on a timeline of the window", async () => {
@@ -120,7 +125,8 @@ describe("Stations", () => {
     renderWithProviders(<Stations />);
 
     expect(await screen.findByText("No charging station has connected yet")).toBeInTheDocument();
-    expect(await tile("Online now")).toHaveTextContent(/0\s*of 0/);
+    expect(await tile("Online now")).toHaveTextContent("0");
+    expect(await tile("Offline")).toHaveTextContent("0");
     expect(await tile("Average uptime (24 hours)")).toHaveTextContent("-");
     expect(screen.queryByText("Online timeline")).not.toBeInTheDocument();
   });
@@ -148,6 +154,6 @@ describe("Stations", () => {
 
     expect(calls).toBe(2);
     expect(await screen.findByText("The stations could not be loaded. Trying again...")).toBeInTheDocument();
-    expect((await row("CP1")).getByText("Online for 3 h")).toBeInTheDocument();
+    expect((await row("CP1")).getByText("90.0%")).toBeInTheDocument();
   });
 });
