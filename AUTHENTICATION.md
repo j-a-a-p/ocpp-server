@@ -26,6 +26,27 @@ The system supports two authentication flows:
 - **`management`**: Directs users to the management portal
 
 The flow parameter is included in the email links to ensure users are directed to the correct interface.
+The `management` flow is only mailed to accounts with the `manager` role (the answer is the same for everybody,
+so it does not reveal who exists), and `GET /auth/validate?flow=management` answers 403 without that role.
+
+### 3. Roles
+
+An account has one or more roles, stored as a comma separated list in `residents.roles` (for example `manager,resident`).
+The known roles are in the `Role` enum in `cloud-api/models.py`.
+
+| Role | What it allows |
+| --- | --- |
+| `manager` | The management portal: residents, cards of everybody, all charges, power logs, stations, tariffs and profiles. Can invite people and edit their roles and address. |
+| `resident` | Charging: own cards, own charges. Has an address (street, number, optional suffix, zip code, city). Can invite household members. |
+
+- A manager who is not a resident cannot charge: their cards are refused at the station.
+- A **household member** is a resident that was invited by another resident (`household_head_id`). They live at the
+  address of that resident, can charge with their own cards, and cannot invite anyone or become a manager.
+- Invitations: a manager invites with `POST /residents/` (roles, and the address for a resident). A resident invites
+  a household member with `POST /residents/household-members`, the address always comes from the resident.
+- `GET /residents/address-options` lists the distinct addresses in use for the drop downs of the invitation form.
+- The last active manager cannot lose the `manager` role (`PUT /residents/{id}` answers 409).
+- Routes check roles with `require_manager` / `require_resident` in `cloud-api/dependencies.py`.
 
 ## Authentication Mechanics
 

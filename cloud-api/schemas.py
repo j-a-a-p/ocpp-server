@@ -1,19 +1,64 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import datetime, date
 from typing import Optional, List
+from models import Role, parse_roles
 
-class ResidentBase(BaseModel):
-    full_name: str
+class ResidentFields(BaseModel):
+    """What a manager enters about an account. A resident needs an address, a manager who is not a resident does not."""
+    full_name: str = Field(min_length=1)
+    roles: List[Role] = Field(min_length=1)
+    street_name: Optional[str] = None
+    house_number: Optional[str] = None
+    house_number_suffix: Optional[str] = None
+    zip_code: Optional[str] = None
+    city: Optional[str] = None
+
+    @model_validator(mode="after")
+    def residents_need_an_address(self):
+        filled = all((value or "").strip() for value in (self.street_name, self.house_number, self.zip_code, self.city))
+        if Role.RESIDENT in self.roles and not filled:
+            raise ValueError("A resident needs a street name, a house number, a zip code and a city")
+        return self
+
+class ResidentCreate(ResidentFields):
     email: str
 
-class ResidentResponse(ResidentBase):
+class ResidentUpdate(ResidentFields):
+    pass
+
+class HouseholdMemberCreate(BaseModel):
+    full_name: str = Field(min_length=1)
+    email: str
+
+class ResidentResponse(BaseModel):
     id: int
+    full_name: str
+    email: str
     status: str
+    roles: List[str] = []
+    street_name: Optional[str] = None
+    house_number: Optional[str] = None
+    house_number_suffix: Optional[str] = None
+    zip_code: Optional[str] = None
+    city: Optional[str] = None
+    household_head_id: Optional[int] = None
     invite_expires_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
 
+    @field_validator("roles", mode="before")
+    @classmethod
+    def roles_from_the_stored_value(cls, value):
+        return parse_roles(value) if isinstance(value, str) else value
+
     class Config:
         from_attributes = True
+
+class AddressOption(BaseModel):
+    street_name: str
+    house_number: Optional[str] = None
+    house_number_suffix: Optional[str] = None
+    zip_code: Optional[str] = None
+    city: Optional[str] = None
 
 class CardBase(BaseModel):
     rfid: str

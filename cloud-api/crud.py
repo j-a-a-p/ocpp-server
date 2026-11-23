@@ -1,10 +1,14 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
-from models import Resident, ResidentStatus, Card, RefusedCard, ChargingCost, ChargingProfile, ProfileType, ProfileStatus
-from schemas import ResidentBase, CardBase, ChargingCostBase, ChargingProfileCreate, ChargingProfileUpdate
+from models import Resident, ResidentStatus, Role, Card, RefusedCard, ChargingCost, ChargingProfile, ProfileType, ProfileStatus
+from schemas import CardBase, ChargingCostBase, ChargingProfileCreate, ChargingProfileUpdate
 from tariff import tariff_at, to_local
 from datetime import datetime, date
 from typing import List, Optional
+
+# An address: (street name, house number, house number suffix, zip code, city). The suffix is optional.
+Address = tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]
+EMPTY_ADDRESS: Address = (None, None, None, None, None)
 
 def get_residents(db: Session, skip: int = 0, limit: int = 100):
     # Only return non-deleted residents
@@ -18,19 +22,89 @@ def get_resident_by_email(db: Session, email: str):
     # Get resident by email address
     return db.query(Resident).filter(Resident.email == email).first()
 
-def create_invited_resident(db: Session, resident: ResidentBase, invite_token: str, expires_at: datetime):
-
+def create_invited_resident(
+    db: Session,
+    full_name: str,
+    email: str,
+    roles,
+    invite_token: str,
+    expires_at: datetime,
+    address: Optional[Address] = None,
+    household_head_id: Optional[int] = None,
+):
     db_resident = Resident(
-        full_name=resident.full_name,
-        email=resident.email,
+        full_name=full_name,
+        email=email,
         status=ResidentStatus.INVITED,
         invite_token=invite_token,
-        invite_expires_at=expires_at
+        invite_expires_at=expires_at,
+        household_head_id=household_head_id,
     )
+    db_resident.set_roles(roles)
+    if address:
+        db_resident.set_address(address)
     db.add(db_resident)
     db.commit()
     db.refresh(db_resident)
     return db_resident
+
+
+def _clean_address_value(value: Optional[str]) -> Optional[str]:
+    """Trimmed, with single spaces. Empty becomes None."""
+    return " ".join((value or "").split()) or None
+
+
+def _stored_spelling(db: Session, column, value: Optional[str]) -> Optional[str]:
+    """The spelling that is already in the database for this value, ignoring case. Otherwise the value itself."""
+    value = _clean_address_value(value)
+    if value is None:
+        return None
+    for (stored,) in db.query(column).filter(column.isnot(None)).distinct():
+        if stored.casefold() == value.casefold():
+            return stored
+    return value
+
+
+def normalize_address(
+    db: Session,
+    street_name: Optional[str],
+    house_number: Optional[str],
+    house_number_suffix: Optional[str],
+    zip_code: Optional[str],
+    city: Optional[str],
+) -> Address:
+    """Clean an address entered by hand and reuse the spelling that is already used, so that 'hoofdstraat' and
+    'Hoofdstraat' do not become two different streets."""
+    return (
+        _stored_spelling(db, Resident.street_name, street_name),
+        _stored_spelling(db, Resident.house_number, house_number),
+        _stored_spelling(db, Resident.house_number_suffix, house_number_suffix),
+        _stored_spelling(db, Resident.zip_code, zip_code),
+        _stored_spelling(db, Resident.city, city),
+    )
+
+
+def get_address_options(db: Session):
+    """The distinct addresses that are in use, for the drop downs of the invite form."""
+    return (
+        db.query(Resident.street_name, Resident.house_number, Resident.house_number_suffix, Resident.zip_code, Resident.city)
+        .filter(Resident.street_name.isnot(None))
+        .distinct()
+        .order_by(Resident.street_name, Resident.house_number, Resident.house_number_suffix, Resident.zip_code, Resident.city)
+        .all()
+    )
+
+
+def count_other_active_managers(db: Session, resident_id: int) -> int:
+    return (
+        db.query(Resident)
+        .filter(Resident.id != resident_id, Resident.status == ResidentStatus.ACTIVE, Resident.has_role_sql(Role.MANAGER))
+        .count()
+    )
+
+
+def get_household_members(db: Session, head_id: int):
+    return db.query(Resident).filter(Resident.household_head_id == head_id).order_by(Resident.full_name).all()
 
 def update_resident(db: Session, resident_id: int, updates: dict):
     resident = db.query(Resident).filter(Resident.id == resident_id).first()

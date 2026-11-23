@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Cookie, Depends
 from sqlalchemy.orm import Session
 from schemas import ChargingCostResponse, ActiveChargingCostResponse, ChargingCostCreate
 from crud import get_charging_costs, get_active_charging_cost, create_charging_cost
-from dependencies import get_db_dependency, get_authenticated_active_resident
+from dependencies import get_db_dependency, get_authenticated_active_resident, require_manager
 from models import Resident
 from tariff import tariff_at
 from datetime import datetime, timezone
@@ -18,7 +18,7 @@ def read_charging_costs(
     skip: int = 0, 
     limit: int = 100, 
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """Get all charging costs. Requires cookie-based authentication for management access."""
     return get_charging_costs(db, skip=skip, limit=limit)
@@ -45,7 +45,7 @@ def read_active_charging_cost(
 def create_new_charging_cost(
     charging_cost: ChargingCostCreate, 
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """Create a new charging cost. Requires cookie-based authentication for management access."""
     try:

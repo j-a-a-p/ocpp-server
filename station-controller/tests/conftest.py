@@ -70,7 +70,7 @@ def add_card(db, rfid: str, resident: Resident) -> None:
 @pytest.fixture
 def resident_with_card(db):
     """An active resident with the card 04AABBCC."""
-    resident = Resident(email="anna@example.com", full_name="Anna", status=ResidentStatus.ACTIVE)
+    resident = Resident(email="anna@example.com", full_name="Anna", status=ResidentStatus.ACTIVE, roles="resident")
     db.add(resident)
     db.commit()
     add_card(db, "04AABBCC", resident)

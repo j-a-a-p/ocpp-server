@@ -2,7 +2,7 @@
 from datetime import timedelta
 
 import constants
-from models import Card, RefusedCard
+from models import Card, RefusedCard, ResidentStatus
 
 
 class TestAccess:
@@ -12,6 +12,36 @@ class TestAccess:
         assert client.get("/cards/refused").status_code == 401
         assert client.post("/cards/add_card/CP1").status_code == 401
         assert client.put("/cards/04AABBCC/name", json={"name": "x"}).status_code == 401
+
+
+class TestRoles:
+    """Managing cards is for managers. Only a resident can charge, so only a resident has cards of their own."""
+
+    def test_listing_and_registering_cards_is_for_managers(self, login_as, make_resident):
+        only_resident = login_as(make_resident(email="anna@example.com", roles="resident"))
+
+        assert only_resident.get("/cards/").status_code == 403
+        assert only_resident.post("/cards/", json={"rfid": "04AABBCC", "name": "x", "resident_id": 1}).status_code == 403
+
+    def test_a_manager_who_is_not_a_resident_cannot_add_a_card_or_rename_one(self, login_as, make_resident, make_refused_card):
+        boss = login_as(make_resident(email="boss@example.com", roles="manager"))
+        make_refused_card("AAAA0001", station_id="CP1")
+
+        assert boss.post("/cards/add_card/CP1").status_code == 403
+        assert boss.put("/cards/AAAA0001/name", json={"name": "x"}).status_code == 403
+
+    def test_a_manager_who_is_not_a_resident_has_no_cards(self, login_as, make_resident):
+        boss = login_as(make_resident(email="boss@example.com", roles="manager"))
+
+        assert boss.get("/cards/my_cards").json() == {"cards": []}
+
+    def test_a_resident_who_is_not_a_manager_adds_and_renames_their_own_cards(self, login_as, make_resident, make_refused_card):
+        anna = login_as(make_resident(email="anna@example.com", roles="resident"))
+        make_refused_card("AAAA0001", station_id="CP1")
+
+        assert anna.post("/cards/add_card/CP1").status_code == 200
+        assert anna.put("/cards/AAAA0001/name", json={"name": "Tesla"}).status_code == 200
+        assert anna.get("/cards/my_cards").json()["cards"][0]["name"] == "Tesla"
 
 
 class TestRegistering:
@@ -115,6 +145,30 @@ class TestStationAuthentication:
 
         assert response.status_code == 200
         assert response.json() == {"resident_id": me.id}
+
+    def test_the_card_of_a_manager_who_is_not_a_resident_is_refused(self, client, api_key_headers, make_resident, make_card, db):
+        make_card(make_resident(email="boss@example.com", roles="manager"), "04AABBCC")
+
+        response = client.get("/cards/authenticate/04AABBCC", params={"station_id": "CP1"}, headers=api_key_headers)
+
+        assert response.status_code == 404
+        assert db.query(RefusedCard).count() == 0  # the card is known, so it cannot be claimed as new
+
+    def test_the_card_of_a_resident_who_has_not_activated_yet_is_refused(self, client, api_key_headers, make_resident, make_card):
+        invited = make_resident(email="new@example.com", roles="resident", status=ResidentStatus.INVITED)
+        make_card(invited, "04AABBCC")
+
+        response = client.get("/cards/authenticate/04AABBCC", params={"station_id": "CP1"}, headers=api_key_headers)
+
+        assert response.status_code == 404
+
+    def test_the_card_of_a_household_member_is_accepted(self, client, api_key_headers, me, make_resident, make_card):
+        member = make_resident(email="member@example.com", roles="resident", household_head_id=me.id)
+        make_card(member, "04AABBCC")
+
+        response = client.get("/cards/authenticate/04AABBCC", params={"station_id": "CP1"}, headers=api_key_headers)
+
+        assert response.json() == {"resident_id": member.id}
 
     def test_unknown_card_is_refused_and_remembered(self, client, api_key_headers, db):
         response = client.get("/cards/authenticate/DEADBEEF", params={"station_id": "CP1"}, headers=api_key_headers)

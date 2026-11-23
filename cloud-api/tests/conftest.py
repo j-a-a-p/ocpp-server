@@ -108,8 +108,9 @@ def api_key_headers():
 
 @pytest.fixture
 def make_resident(db):
-    def make(email="resident@example.com", full_name="Test Resident", status=ResidentStatus.ACTIVE, **extra) -> Resident:
-        resident = Resident(email=email, full_name=full_name, status=status, **extra)
+    def make(email="resident@example.com", full_name="Test Resident", status=ResidentStatus.ACTIVE, roles="manager,resident", **extra) -> Resident:
+        """By default a manager who is also a resident, like every account that existed before roles."""
+        resident = Resident(email=email, full_name=full_name, status=status, roles=roles, **extra)
         db.add(resident)
         db.commit()
         db.refresh(resident)

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from dependencies import get_db_dependency, get_authenticated_active_resident
+from dependencies import get_db_dependency, require_manager
 from models import Resident
 from schemas import StationOverviewResponse
 from station_status import calculate_station_overview
@@ -14,7 +14,7 @@ MAX_WINDOW_HOURS = 24 * 31
 def get_stations(
     hours: int = Query(24, ge=1, le=MAX_WINDOW_HOURS, description="The length of the window to show, in hours"),
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """
     The charging stations that ever connected: whether they are online now, and when they were online

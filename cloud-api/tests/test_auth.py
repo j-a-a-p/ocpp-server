@@ -36,6 +36,24 @@ class TestRequestAccess:
         assert "https://charge.example.test/management-ui/login?token=" + token in outbox[0]["body"]
         assert "Management" in outbox[0]["subject"]
 
+    def test_the_management_portal_is_only_mailed_to_managers(self, client, db, make_resident, outbox):
+        resident = make_resident(email="anna@example.com", roles="resident")
+
+        response = client.post("/auth/request-access", params={"email": "anna@example.com", "flow": "management"})
+
+        # The same answer as for an unknown address, so it does not tell who exists.
+        assert response.status_code == 200
+        assert response.json()["message"] == "If your email is registered, you will receive a login link shortly."
+        assert outbox == []
+        assert stored_login_token(db, resident) is None
+
+    def test_a_manager_who_is_not_a_resident_can_use_the_resident_portal_link(self, client, make_resident, outbox):
+        make_resident(email="boss@example.com", roles="manager")
+
+        client.post("/auth/request-access", params={"email": "boss@example.com"})
+
+        assert len(outbox) == 1
+
     def test_the_mail_has_a_styled_html_version_next_to_the_text(self, client, db, make_resident, outbox):
         resident = make_resident(email="anna@example.com")
 
@@ -137,7 +155,27 @@ class TestLogin:
         assert validated.json() == {
             "resident_id": resident.id, "email": resident.email,
             "full_name": resident.full_name, "status": "active",
+            "roles": ["manager", "resident"], "household_head_id": None,
+            "street_name": None, "house_number": None, "house_number_suffix": None,
+            "zip_code": None, "city": None,
         }
+
+    def test_validating_for_the_management_portal_needs_the_manager_role(self, login_as, make_resident):
+        only_resident = login_as(make_resident(email="anna@example.com", roles="resident"))
+        manager = login_as(make_resident(email="boss@example.com", roles="manager"))
+
+        assert only_resident.get("/auth/validate", params={"flow": "management"}).status_code == 403
+        assert only_resident.get("/auth/validate").status_code == 200
+        assert manager.get("/auth/validate", params={"flow": "management"}).status_code == 200
+
+    def test_validate_returns_the_roles_and_the_address(self, login_as, make_resident):
+        head = make_resident(email="anna@example.com", roles="resident", street_name="Hoofdstraat", house_number="12", house_number_suffix="A")
+        member = make_resident(email="bob@example.com", roles="resident", household_head_id=head.id)
+
+        body = login_as(member).get("/auth/validate").json()
+
+        assert body["roles"] == ["resident"]
+        assert body["household_head_id"] == head.id
 
     def test_the_cookie_is_secure_when_the_browser_used_https(self, client, db, make_resident):
         token = self.request_link(client, db, make_resident())

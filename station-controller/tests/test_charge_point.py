@@ -72,6 +72,30 @@ class TestAuthorize:
 
         assert status_of(await cp.on_authorize(id_tag="04112233")) == "Invalid"
 
+    async def test_card_of_a_manager_who_is_not_a_resident_is_invalid(self, cp, db):
+        manager = Resident(email="boss@example.com", full_name="Boss", status=ResidentStatus.ACTIVE, roles="manager")
+        db.add(manager)
+        db.commit()
+        add_card(db, "04112233", manager)
+
+        assert status_of(await cp.on_authorize(id_tag="04112233")) == "Invalid"
+
+    async def test_card_of_a_manager_who_is_also_a_resident_is_accepted(self, cp, db):
+        both = Resident(email="both@example.com", full_name="Both", status=ResidentStatus.ACTIVE, roles="manager,resident")
+        db.add(both)
+        db.commit()
+        add_card(db, "04112233", both)
+
+        assert status_of(await cp.on_authorize(id_tag="04112233")) == "Accepted"
+
+    async def test_a_role_that_only_contains_the_word_resident_does_not_count(self, cp, db):
+        other = Resident(email="other@example.com", full_name="Other", status=ResidentStatus.ACTIVE, roles="non_resident")
+        db.add(other)
+        db.commit()
+        add_card(db, "04112233", other)
+
+        assert status_of(await cp.on_authorize(id_tag="04112233")) == "Invalid"
+
     async def test_unknown_card_is_remembered_with_the_station(self, cp, db):
         await cp.on_authorize(id_tag="DEADBEEF")
 

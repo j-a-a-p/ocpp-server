@@ -12,7 +12,7 @@ const checkAuth = vi.fn(async () => {});
 const logout = vi.fn(async () => {});
 
 const auth = (state: Partial<ReturnType<typeof useAuth>>) =>
-  vi.mocked(useAuth).mockReturnValue({ isAuthenticated: false, isLoading: false, serverAvailable: true, checkAuth, logout, ...state });
+  vi.mocked(useAuth).mockReturnValue({ isAuthenticated: false, isLoading: false, serverAvailable: true, noAccess: false, checkAuth, logout, ...state });
 
 const renderRoute = () =>
   renderWithProviders(
@@ -32,6 +32,17 @@ describe("ProtectedRoute", () => {
     renderRoute();
 
     expect(screen.getByText("Secret page")).toBeInTheDocument();
+  });
+
+  it("says there is no access to someone who is signed in without the manager role", async () => {
+    auth({ noAccess: true });
+
+    renderRoute();
+
+    expect(screen.getByText("No access")).toBeInTheDocument();
+    expect(screen.queryByText("Secret page")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /log out/i }));
+    expect(logout).toHaveBeenCalled();
   });
 
   it("shows nothing but a spinner while it checks the login", () => {

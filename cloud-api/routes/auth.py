@@ -4,7 +4,7 @@ from dependencies import get_db_dependency, get_authenticated_active_resident
 from crud import get_resident_by_email, update_resident
 from invite import generate_invitation_token, send_login_email, generate_auth_token, verify_auth_token
 from datetime import datetime, timedelta
-from models import ResidentStatus, Resident
+from models import ResidentStatus, Resident, Role
 from constants import JWT_EXPIRATION_DAYS
 from security import request_is_https
 import logging
@@ -45,6 +45,14 @@ def request_access(email: str, flow: str = Query("resident", description="Flow t
                 "message": "If your email is registered, you will receive a login link shortly."
             }
         
+        # The management portal is for managers only. Do not reveal whether the account exists.
+        if flow == "management" and not resident.has_role(Role.MANAGER):
+            logger.info(f"Management login request for {email}, who is not a manager")
+            return {
+                "success": True,
+                "message": "If your email is registered, you will receive a login link shortly."
+            }
+
         # A link was mailed a moment ago: it is still valid, do not mail another one.
         if (resident.login_token and resident.login_expires_at
                 and resident.login_expires_at > datetime.utcnow() + LOGIN_LINK_VALID - LOGIN_LINK_COOLDOWN):
@@ -143,11 +151,23 @@ def logout(request: Request, response: Response):
     return {"message": "Logged out"}
 
 @router.get("/validate")
-def validate_token(resident: Resident = Depends(get_authenticated_active_resident)):
+def validate_token(
+    flow: str = Query("resident", description="Portal that asks: resident or management. The management portal needs the manager role."),
+    resident: Resident = Depends(get_authenticated_active_resident),
+):
     """Validate the auth token and return resident info."""
+    if flow == "management" and not resident.has_role(Role.MANAGER):
+        raise HTTPException(status_code=403, detail="This requires the manager role")
     return {
         "resident_id": resident.id,
         "email": resident.email,
         "full_name": resident.full_name,
-        "status": resident.status.value
+        "status": resident.status.value,
+        "roles": resident.role_names,
+        "household_head_id": resident.household_head_id,
+        "street_name": resident.street_name,
+        "house_number": resident.house_number,
+        "house_number_suffix": resident.house_number_suffix,
+        "zip_code": resident.zip_code,
+        "city": resident.city,
     } 

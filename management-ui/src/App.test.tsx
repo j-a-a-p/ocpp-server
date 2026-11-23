@@ -46,6 +46,16 @@ describe("management App", () => {
     expect(screen.queryByText("Charger")).not.toBeInTheDocument();
   });
 
+  it("asks for the manager role of the signed in account and says there is no access without it", async () => {
+    const fetchMock = stack(json({ detail: "This requires the manager role" }, 403));
+
+    open("/residents");
+
+    expect(await screen.findByText("No access")).toBeInTheDocument();
+    expect(screen.queryByText("Welcome")).not.toBeInTheDocument();
+    expect(requests(fetchMock)).toEqual(expect.arrayContaining([expect.stringMatching(/\/auth\/validate\?flow=management$/)]));
+  });
+
   it("says so when the server is unavailable", async () => {
     stack(new Response("", { status: 503 }));
 

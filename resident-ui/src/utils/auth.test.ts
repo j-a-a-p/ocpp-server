@@ -16,6 +16,22 @@ describe("isAuthenticated", () => {
     expect(await isAuthenticated()).toEqual({ isAuthenticated: true, serverAvailable: true });
   });
 
+  it("returns the signed in account with its roles and address", async () => {
+    mockFetch({
+      "GET /auth/validate": json({
+        resident_id: 1, email: "anna@example.com", full_name: "Anna", status: "active",
+        roles: ["resident"], household_head_id: 4, street_name: "Hoofdstraat", house_number: "12", house_number_suffix: null,
+        zip_code: "3511 AB", city: "Utrecht",
+      }),
+    });
+
+    expect(await isAuthenticated()).toMatchObject({
+      isAuthenticated: true,
+      serverAvailable: true,
+      user: { roles: ["resident"], household_head_id: 4, street_name: "Hoofdstraat", house_number: "12", house_number_suffix: null, zip_code: "3511 AB", city: "Utrecht" },
+    });
+  });
+
   it("is false but available on a 401", async () => {
     mockFetch({ "GET /auth/validate": json({ detail: "Missing auth token" }, 401) });
 

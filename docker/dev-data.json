@@ -9,6 +9,8 @@
     {
       "full_name": "Alice Anderson",
       "email": "alice@example.com",
+      "roles": ["manager", "resident"],
+      "address": { "street_name": "Hoofdstraat", "house_number": "12", "zip_code": "3511 AB", "city": "Utrecht" },
       "cards": [
         { "rfid": "04A1B2C3D4E5F6", "name": "Alice - Tesla Model 3" }
       ]
@@ -16,6 +18,9 @@
     {
       "full_name": "Bob Brown",
       "email": "bob@example.com",
+      "roles": ["resident"],
+      "address": { "street_name": "Hoofdstraat", "house_number": "12", "zip_code": "3511 AB", "city": "Utrecht" },
+      "household_head": "alice@example.com",
       "cards": [
         { "rfid": "04B1B2C3D4E5F7", "name": "Bob - Renault Zoe" }
       ]
@@ -23,10 +28,18 @@
     {
       "full_name": "Carol Clark",
       "email": "carol@example.com",
+      "roles": ["resident"],
+      "address": { "street_name": "Kerkstraat", "house_number": "3", "house_number_suffix": "A", "zip_code": "3512 CD", "city": "Utrecht" },
       "cards": [
         { "rfid": "04C1B2C3D4E5F8", "name": "Carol - Nissan Leaf" },
         { "rfid": "04C1B2C3D4E5F9", "name": "Carol - Visitor card" }
       ]
+    },
+    {
+      "full_name": "Dave Dunn",
+      "email": "dave@example.com",
+      "roles": ["manager"],
+      "cards": []
     }
   ],
   "stations": [

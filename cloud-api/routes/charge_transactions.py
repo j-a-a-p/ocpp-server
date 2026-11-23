@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session, selectinload
 from typing import List
 from schemas import ChargeTransactionResponse
 from models import ChargeTransaction, Card, PowerLog, Resident
-from dependencies import get_db_dependency, get_authenticated_active_resident
+from dependencies import get_db_dependency, get_authenticated_active_resident, require_manager
 from security import verify_api_key
 
 from crud import ChargingCostLookup, calculate_power_log_costs, total_power_log_cost
@@ -119,7 +119,7 @@ def get_my_transactions(
 @router.get("/all")
 def get_all_charge_transactions(
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """
     Get all charge transactions with the resident, the card and the cost of each charge.
