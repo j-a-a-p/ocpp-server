@@ -22,6 +22,24 @@
    GET https://apt.aircokopen.nu/api/residents/123
    ```
 
+   *Note: the residents endpoints below need the `manager` role, except the household member endpoints and activation.*
+
+   **Invite** (manager): `POST /residents/` with
+   ```json
+   { "full_name": "Anna", "email": "anna@example.com", "roles": ["resident"],
+     "street_name": "Hoofdstraat", "house_number": "12", "house_number_suffix": "A",
+     "zip_code": "3511 AB", "city": "Utrecht" }
+   ```
+   A resident needs `street_name`, `house_number`, `zip_code` and `city`. The suffix is optional. A manager who is not a resident needs no address.
+
+   **Edit** (manager): `PUT /residents/{resident_id}` with `full_name`, `roles` and the address. Answers 409 when it would remove the
+   last active manager, or the resident role of someone who still has household members.
+
+   **Address options** (manager): `GET /residents/address-options` returns the distinct addresses in use.
+
+   **Household members** (resident): `GET /residents/household-members` and `POST /residents/household-members` with
+   `{ "full_name": "Bob", "email": "bob@example.com" }`. The member gets the address of the resident who invites.
+
 3. **Activate resident account with token**
    ```
    GET https://apt.aircokopen.nu/api/residents/activate/{token}
@@ -114,6 +132,13 @@ fetch('https://apt.aircokopen.nu/api/cards/refused', {
   "full_name": "John Doe",
   "email": "john@example.com",
   "status": "active",
+  "roles": ["manager", "resident"],
+  "street_name": "Hoofdstraat",
+  "house_number": "12",
+  "house_number_suffix": null,
+  "zip_code": "3511 AB",
+  "city": "Utrecht",
+  "household_head_id": null,
   "invite_expires_at": null
 }
 ```

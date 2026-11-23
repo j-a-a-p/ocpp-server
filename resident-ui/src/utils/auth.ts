@@ -14,11 +14,47 @@ export const getAuthToken = (): string | null => {
   return null;
 };
 
+/** The signed in account, as /auth/validate returns it. */
+export interface AuthUser {
+  resident_id: number;
+  email: string;
+  full_name: string;
+  roles: string[];
+  /** Set for a household member: the resident who invited them. */
+  household_head_id: number | null;
+  street_name: string | null;
+  house_number: string | null;
+  house_number_suffix: string | null;
+  zip_code: string | null;
+  city: string | null;
+}
+
 export interface AuthResult {
   isAuthenticated: boolean;
   serverAvailable: boolean;
+  user?: AuthUser;
   error?: string;
 }
+
+const readUser = async (response: Response): Promise<AuthUser | undefined> => {
+  try {
+    const data = await response.json();
+    if (Array.isArray(data?.roles)) {
+      return {
+        ...data,
+        household_head_id: data.household_head_id ?? null,
+        street_name: data.street_name ?? null,
+        house_number: data.house_number ?? null,
+        house_number_suffix: data.house_number_suffix ?? null,
+        zip_code: data.zip_code ?? null,
+        city: data.city ?? null,
+      };
+    }
+  } catch {
+    // No readable account: the caller is signed in, just without details.
+  }
+  return undefined;
+};
 
 export const isAuthenticated = async (): Promise<AuthResult> => {
   try {
@@ -28,7 +64,8 @@ export const isAuthenticated = async (): Promise<AuthResult> => {
     });
     
     if (response.ok) {
-      return { isAuthenticated: true, serverAvailable: true };
+      const user = await readUser(response);
+      return user ? { isAuthenticated: true, serverAvailable: true, user } : { isAuthenticated: true, serverAvailable: true };
     } else if (response.status === 401) {
       return { isAuthenticated: false, serverAvailable: true };
     } else if (response.status >= 500) {

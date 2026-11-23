@@ -35,14 +35,25 @@ def seed_residents(cur: sqlite3.Cursor, data: dict) -> list[tuple[str, str]]:
     """Returns (rfid, name) of every card of the seeded residents."""
     cards = []
     for resident in data["residents"]:
+        address = resident.get("address", {})
         cur.execute(
-            "INSERT OR IGNORE INTO residents (full_name, email, status) VALUES (?, ?, 'ACTIVE')",
-            (resident["full_name"], resident["email"]),
+            "INSERT OR IGNORE INTO residents (full_name, email, status, roles, street_name, house_number, house_number_suffix, zip_code, city)"
+            " VALUES (?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ?)",
+            (
+                resident["full_name"], resident["email"], ",".join(sorted(resident["roles"])),
+                address.get("street_name"), address.get("house_number"), address.get("house_number_suffix"),
+                address.get("zip_code"), address.get("city"),
+            ),
         )
         resident_id = cur.execute(
             "SELECT id FROM residents WHERE email = ?", (resident["email"],)
         ).fetchone()[0]
-        for card in resident["cards"]:
+        if "household_head" in resident:  # a household member: the resident who invited them is listed earlier
+            cur.execute(
+                "UPDATE residents SET household_head_id = (SELECT id FROM residents WHERE email = ?) WHERE id = ?",
+                (resident["household_head"], resident_id),
+            )
+        for card in resident.get("cards", []):
             rfid = card["rfid"].strip().upper()
             cur.execute(
                 "INSERT OR IGNORE INTO cards (rfid, name, resident_id) VALUES (?, ?, ?)",

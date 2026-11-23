@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from typing import List
-from dependencies import get_db_dependency, get_authenticated_active_resident
+from dependencies import get_db_dependency, require_manager
 from models import PowerLog, Resident
 from power_log_analytics import calculate_analytics
 from schemas import PowerLogAnalyticsResponse, PowerLogResponse
@@ -13,7 +13,7 @@ def get_power_logs(
     skip: int = 0,
     limit: int = 1000,
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """
     Get PowerLog data with pagination.
@@ -36,7 +36,7 @@ def get_power_logs(
 @router.get("/analytics", response_model=PowerLogAnalyticsResponse)
 def get_power_log_analytics(
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """
     The current year, the last twelve months and the energy per hour of the day of the last three years.

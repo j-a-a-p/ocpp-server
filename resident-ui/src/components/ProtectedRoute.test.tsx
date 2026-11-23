@@ -12,7 +12,7 @@ const checkAuth = vi.fn(async () => {});
 const logout = vi.fn(async () => {});
 
 const auth = (state: Partial<ReturnType<typeof useAuth>>) =>
-  vi.mocked(useAuth).mockReturnValue({ isAuthenticated: false, isLoading: false, serverAvailable: true, checkAuth, logout, ...state });
+  vi.mocked(useAuth).mockReturnValue({ isAuthenticated: false, isLoading: false, serverAvailable: true, user: null, checkAuth, logout, ...state });
 
 const renderRoute = () =>
   renderWithProviders(

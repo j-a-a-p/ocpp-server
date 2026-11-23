@@ -52,14 +52,15 @@ The login links in the emails follow `WEB_PORT` automatically.
 
 ## The users
 
-| User | Email | Cards |
-| --- | --- | --- |
-| Alice Anderson | alice@example.com | `04A1B2C3D4E5F6` (Tesla Model 3) |
-| Bob Brown | bob@example.com | `04B1B2C3D4E5F7` (Renault Zoe) |
-| Carol Clark | carol@example.com | `04C1B2C3D4E5F8` (Nissan Leaf), `04C1B2C3D4E5F9` (visitor card) |
+| User | Email | Roles | Address | Cards |
+| --- | --- | --- | --- | --- |
+| Alice Anderson | alice@example.com | manager, resident | Hoofdstraat 12, 3511 AB Utrecht | `04A1B2C3D4E5F6` (Tesla Model 3) |
+| Bob Brown | bob@example.com | resident (household member of Alice) | Hoofdstraat 12, 3511 AB Utrecht | `04B1B2C3D4E5F7` (Renault Zoe) |
+| Carol Clark | carol@example.com | resident | Kerkstraat 3 A, 3512 CD Utrecht | `04C1B2C3D4E5F8` (Nissan Leaf), `04C1B2C3D4E5F9` (visitor card) |
+| Dave Dunn | dave@example.com | manager only | none | none (a manager who is not a resident cannot charge) |
 
-The application has no separate administrator role: every active user can open both the resident portal
-and the management portal, exactly as in production.
+Only managers can open the management portal (others see "No access", and the management login email is not
+sent to them). Residents can invite their household members in the resident portal, who live at the same address.
 
 There are two ways to log in:
 

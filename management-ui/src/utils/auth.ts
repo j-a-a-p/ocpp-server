@@ -17,18 +17,22 @@ export const getAuthToken = (): string | null => {
 export interface AuthResult {
   isAuthenticated: boolean;
   serverAvailable: boolean;
+  /** Signed in, but the account does not have the manager role. */
+  noAccess?: boolean;
   error?: string;
 }
 
 export const isAuthenticated = async (): Promise<AuthResult> => {
   try {
-    const response = await fetch(`${API_BASE_URL}/auth/validate`, {
+    const response = await fetch(`${API_BASE_URL}/auth/validate?flow=management`, {
       method: 'GET',
       credentials: 'include', // This will send the httponly cookie
     });
     
     if (response.ok) {
       return { isAuthenticated: true, serverAvailable: true };
+    } else if (response.status === 403) {
+      return { isAuthenticated: false, serverAvailable: true, noAccess: true };
     } else if (response.status === 401) {
       return { isAuthenticated: false, serverAvailable: true };
     } else if (response.status >= 500) {

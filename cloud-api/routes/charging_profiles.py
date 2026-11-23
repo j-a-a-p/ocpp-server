@@ -4,7 +4,7 @@ from typing import List
 import crud
 from schemas import ChargingProfileResponse, ChargingProfileCreate, ChargingProfileUpdate
 from models import ProfileType, ProfileStatus, Resident
-from dependencies import get_db_dependency, get_authenticated_active_resident
+from dependencies import get_db_dependency, require_manager
 
 router = APIRouter()
 
@@ -13,7 +13,7 @@ def get_charging_profiles(
     skip: int = 0, 
     limit: int = 100, 
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """Get all charging profiles. Requires cookie-based authentication for management access."""
     profiles = crud.get_charging_profiles(db, skip=skip, limit=limit)
@@ -23,7 +23,7 @@ def get_charging_profiles(
 def get_charging_profile(
     profile_id: int, 
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """Get a specific charging profile by ID. Requires cookie-based authentication for management access."""
     profile = crud.get_charging_profile(db, profile_id=profile_id)
@@ -35,7 +35,7 @@ def get_charging_profile(
 def create_charging_profile(
     profile: ChargingProfileCreate, 
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """Create a new charging profile. Requires cookie-based authentication for management access."""
     # Validate profile type
@@ -55,7 +55,7 @@ def update_charging_profile(
     profile_id: int, 
     profile: ChargingProfileUpdate, 
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """Update a charging profile. Requires cookie-based authentication for management access."""
     # Validate profile type if provided
@@ -81,7 +81,7 @@ def update_charging_profile(
 def inactivate_charging_profile(
     profile_id: int, 
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """Inactivate a charging profile. Requires cookie-based authentication for management access."""
     profile = crud.inactivate_charging_profile(db=db, profile_id=profile_id)
@@ -93,7 +93,7 @@ def inactivate_charging_profile(
 def reactivate_charging_profile(
     profile_id: int, 
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """Reactivate a charging profile. Requires cookie-based authentication for management access."""
     profile = crud.reactivate_charging_profile(db=db, profile_id=profile_id)
@@ -103,7 +103,7 @@ def reactivate_charging_profile(
 
 @router.get("/types/available")
 def get_available_profile_types(
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """Get available profile types. Requires cookie-based authentication for management access."""
     return {

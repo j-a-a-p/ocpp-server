@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { App, Col, Row } from "antd";
+import { Alert, App, Col, Row } from "antd";
+import { useAuth } from "./contexts/AuthContext";
+import { getHouseholdMembers, inviteHouseholdMember, type HouseholdMember } from "./services/householdService";
+import { formatAddress } from "./utils/address";
+import HouseholdMembersCard from "./components/HouseholdMembersCard";
 import { calculateMonthlyEnergyStats, getAllCurrentResidentTransactions, type ChargeTransaction } from "./services/chargeTransactionService";
 import { addCard, getMyCards, getRefusedCards, updateCardName, type Card as CardType, type RefusedCard } from "./services/cardService";
 import { chargingCostService, type Tariff } from "./services/chargingCostService";
@@ -14,6 +18,15 @@ import RefusedCardsCard from "./components/RefusedCardsCard";
 
 const Home: React.FC = () => {
   const { message } = App.useApp();
+  const { user } = useAuth();
+  // Only a resident can charge. A manager who is not a resident only has the management portal.
+  // (The API enforces this too, this only decides what is shown.)
+  const isResident = user ? user.roles.includes("resident") : true;
+  // A household member cannot invite other household members.
+  const canInviteHousehold = isResident && user !== null && user.household_head_id === null;
+  const address = user ? formatAddress(user) : null;
+  const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
+  const [householdLoading, setHouseholdLoading] = useState(true);
   const station = useStationStatus();
   const [transactions, setTransactions] = useState<ChargeTransaction[]>([]);
   const [transactionsLoading, setTransactionsLoading] = useState(true);
@@ -64,12 +77,40 @@ const Home: React.FC = () => {
     }
   }, []);
 
+  const loadHouseholdMembers = useCallback(async () => {
+    try {
+      setHouseholdMembers(await getHouseholdMembers());
+    } catch (error) {
+      console.error("Error fetching household members:", error);
+      message.error("Failed to load your household members");
+    } finally {
+      setHouseholdLoading(false);
+    }
+  }, [message]);
+
   useEffect(() => {
+    if (!isResident) return;
     loadTransactions();
     loadCards();
     loadRefusedCards();
     loadRate();
-  }, [loadTransactions, loadCards, loadRefusedCards, loadRate]);
+  }, [isResident, loadTransactions, loadCards, loadRefusedCards, loadRate]);
+
+  useEffect(() => {
+    if (canInviteHousehold) loadHouseholdMembers();
+  }, [canInviteHousehold, loadHouseholdMembers]);
+
+  const handleInviteHouseholdMember = async (member: { full_name: string; email: string }) => {
+    try {
+      await inviteHouseholdMember(member);
+      message.success("Invitation sent");
+      loadHouseholdMembers();
+      return true;
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "Failed to invite household member");
+      return false;
+    }
+  };
 
   const handleAddCard = async (stationId: string) => {
     try {
@@ -94,6 +135,27 @@ const Home: React.FC = () => {
     }
   };
 
+  if (!isResident) {
+    return (
+      <>
+        <AppHeader />
+        <main className="page-container">
+          <Alert
+            type="info"
+            showIcon
+            message="Your account cannot charge"
+            description={
+              <>
+                Your account is a manager account without charging. You can manage the chargers in the{" "}
+                <a href="/management-ui/">management portal</a>.
+              </>
+            }
+          />
+        </main>
+      </>
+    );
+  }
+
   return (
     <>
       <AppHeader />
@@ -117,6 +179,16 @@ const Home: React.FC = () => {
           <Col xs={24} lg={12}>
             <RefusedCardsCard refusedCards={refusedCards} onAdd={handleAddCard} />
           </Col>
+          {canInviteHousehold && (
+            <Col span={24}>
+              <HouseholdMembersCard
+                members={householdMembers}
+                loading={householdLoading}
+                address={address}
+                onInvite={handleInviteHouseholdMember}
+              />
+            </Col>
+          )}
         </Row>
       </main>
     </>

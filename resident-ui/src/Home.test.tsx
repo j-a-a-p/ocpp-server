@@ -5,6 +5,7 @@ import Home from "./Home";
 import { useAuth } from "./contexts/AuthContext";
 import { json, mockFetch, requests } from "./test/mockFetch";
 import { renderWithProviders } from "./test/render";
+import type { AuthUser } from "./utils/auth";
 
 const log = (id: number, energy_kwh: number, delta_power_cost: number) => ({
   id, charge_transaction_id: 1, power_kw: 7, energy_kwh, created: "2026-11-15T10:30:00", delta_power_cost, kwh_rate: 0.3,
@@ -38,10 +39,18 @@ vi.mock("./contexts/AuthContext", () => ({ useAuth: vi.fn() }));
 
 const logout = vi.fn(async () => {});
 
+const resident: AuthUser = {
+  resident_id: 1, email: "anna@example.com", full_name: "Anna", roles: ["resident"], household_head_id: null,
+  street_name: "Hoofdstraat", house_number: "12", house_number_suffix: "A", zip_code: "3511 AB", city: "Utrecht",
+};
+
+const signedInAs = (user: AuthUser | null) =>
+  vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isLoading: false, serverAvailable: true, user, checkAuth: async () => {}, logout });
+
 beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   logout.mockClear();
-  vi.mocked(useAuth).mockReturnValue({ isAuthenticated: true, isLoading: false, serverAvailable: true, checkAuth: async () => {}, logout });
+  signedInAs(resident);
 });
 
 describe("Home (the resident portal)", () => {
@@ -132,6 +141,95 @@ describe("Home (the resident portal)", () => {
     expect(requests(fetchMock).filter((request) => request.startsWith("POST"))).toEqual([expect.stringMatching(/\/cards\/add_card\/CP1$/)]);
     await waitFor(() => expect(screen.queryByText("Refused at CP1")).not.toBeInTheDocument());
     expect(requests(fetchMock).filter((request) => request.includes("/cards/my_cards"))).toHaveLength(2);
+  });
+
+  describe("household members", () => {
+    const members = [{ id: 7, full_name: "Bob Brown", email: "bob@example.com", status: "invited", street_name: "Hoofdstraat", house_number: "12", house_number_suffix: "A", zip_code: "3511 AB", city: "Utrecht" }];
+
+    it("lists the household members of a resident", async () => {
+      stack({ "GET /residents/household-members": json(members) });
+
+      renderWithProviders(<Home />);
+
+      const card = (await screen.findByText("Household members")).closest(".ant-card") as HTMLElement;
+      expect(await within(card).findByText("Bob Brown")).toBeInTheDocument();
+      expect(within(card).getByText("bob@example.com")).toBeInTheDocument();
+      expect(within(card).getByText("Invited")).toBeInTheDocument();
+    });
+
+    it("invites a household member without asking for an address, which is the address of the resident", async () => {
+      let list: typeof members = [];
+      const fetchMock = stack({
+        "GET /residents/household-members": () => json(list),
+        "POST /residents/household-members": (_url, init) => {
+          list = members;
+          return json({ ...members[0], ...JSON.parse(String(init?.body)) });
+        },
+      });
+      renderWithProviders(<Home />);
+
+      await userEvent.click(await screen.findByRole("button", { name: /invite/i }));
+      expect(screen.getByText("(Hoofdstraat 12 A, 3511 AB Utrecht)")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Street name")).not.toBeInTheDocument();
+      await userEvent.type(screen.getByLabelText("Full name"), "Bob Brown");
+      await userEvent.type(screen.getByLabelText("Email"), "bob@example.com");
+      await userEvent.click(screen.getByRole("button", { name: /send invitation/i }));
+
+      expect(await screen.findByText("Invitation sent")).toBeInTheDocument();
+      expect(await screen.findByText("bob@example.com", { selector: ".ant-typography" })).toBeInTheDocument();
+      const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!;
+      expect(JSON.parse(String(post[1]?.body))).toEqual({ full_name: "Bob Brown", email: "bob@example.com" });
+    });
+
+    it("shows the reason when the invitation is refused and keeps the form open", async () => {
+      stack({
+        "GET /residents/household-members": json([]),
+        "POST /residents/household-members": json({ detail: "Resident with this email already exists" }, 400),
+      });
+      renderWithProviders(<Home />);
+
+      await userEvent.click(await screen.findByRole("button", { name: /invite/i }));
+      await userEvent.type(screen.getByLabelText("Full name"), "Bob Brown");
+      await userEvent.type(screen.getByLabelText("Email"), "bob@example.com");
+      await userEvent.click(screen.getByRole("button", { name: /send invitation/i }));
+
+      expect(await screen.findByText("Resident with this email already exists")).toBeInTheDocument();
+      expect(screen.getByLabelText("Full name")).toHaveValue("Bob Brown");
+    });
+
+    it("cannot invite while the address of the resident is not known", async () => {
+      signedInAs({ ...resident, street_name: null, house_number: null, house_number_suffix: null, zip_code: null, city: null });
+      stack({ "GET /residents/household-members": json([]) });
+
+      renderWithProviders(<Home />);
+
+      expect(await screen.findByText(/address is not known yet/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /invite/i })).toBeDisabled();
+    });
+
+    it("is not offered to a household member, who cannot invite anyone", async () => {
+      signedInAs({ ...resident, household_head_id: 3 });
+      const fetchMock = stack();
+
+      renderWithProviders(<Home />);
+
+      await screen.findByText("My cards");
+      expect(screen.queryByText("Household members")).not.toBeInTheDocument();
+      expect(requests(fetchMock).filter((request) => request.includes("household-members"))).toEqual([]);
+    });
+  });
+
+  it("tells a manager who is not a resident that the account cannot charge, instead of showing the charging pages", async () => {
+    signedInAs({ ...resident, roles: ["manager"] });
+    const fetchMock = stack();
+
+    renderWithProviders(<Home />);
+
+    expect(await screen.findByText("Your account cannot charge")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "management portal" })).toHaveAttribute("href", "/management-ui/");
+    expect(screen.queryByText("My cards")).not.toBeInTheDocument();
+    // Only the station status file, which is not an API call.
+    expect(requests(fetchMock).filter((request) => !request.includes("meter_values.json"))).toEqual([]);
   });
 
   it("logs the resident out with the button in the header", async () => {

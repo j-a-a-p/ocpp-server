@@ -11,10 +11,12 @@ Severity: **High** (fix soon, real impact), **Medium** (fix when you touch that 
   charger can start transactions, fill the refused-cards list and push meter values.
   Fix: HTTP Basic auth per charger (OCPP 1.6 security profile 1 or 2), checked in
   `station-controller/main.py` (`process_request`) or in Apache. Needs the chargers to be configured with the credentials.
-- [ ] **S2 (High) Every resident is an admin.** The management endpoints only check "logged in and active":
+- [x] **S2 (High) Every resident is an admin.** (fixed: roles, see below) The management endpoints only checked "logged in and active":
   `GET/POST /residents`, `POST /residents/{id}/send-invitation`, `POST /charging-costs`, all `/charging-profiles`
-  routes, `/charge-transactions/all` and `/power-logs`. The "management" portal is only a different login link.
-  Fix: add a role to `residents` (Flyway migration), and a dependency `get_authenticated_admin` for those routes.
+  routes, `/charge-transactions/all` and `/power-logs`. The "management" portal was only a different login link.
+  Fixed with a `roles` column on `residents` (migration V17) and the dependency `require_manager` on those routes.
+  A management login link is only mailed to managers. Everybody that existed before the migration is a manager and
+  a resident. The last active manager cannot lose the role (`PUT /residents/{id}` answers 409).
 - [x] **S3 (High) `StartTransaction` accepts any `idTag`.** (fixed: card checked again, see Done) `charge_point.py` returns `accepted` without checking the
   card. Together with S1, a charger can start a session on any resident's card and they pay for it.
   Fix: check `rfid_manager.is_authorized` in `on_start_transaction`, return `invalid` otherwise.

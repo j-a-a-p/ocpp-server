@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Float, literal
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -20,8 +20,15 @@ class Resident(Base):
     invite_expires_at = Column(DateTime, nullable=True)
     login_token = Column(String, unique=True, nullable=True)
     login_expires_at = Column(DateTime, nullable=True)
-    
+    # Comma separated role names, written by the cloud API. Only accounts with the "resident" role may charge.
+    roles = Column(String, nullable=False, default="", server_default="")
+
     cards = relationship("Card", back_populates="resident")
+
+    @classmethod
+    def has_role_sql(cls, role: str):
+        """SQL condition: the account has this role. Matches whole role names, not parts of them."""
+        return (literal(",") + cls.roles + literal(",")).like(f"%,{role},%")
 
 class Card(Base):
     __tablename__ = "cards"

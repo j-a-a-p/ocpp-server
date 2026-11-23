@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Float, Date, Numeric
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Float, Date, Numeric, literal
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -9,6 +9,26 @@ import enum
 class ResidentStatus(enum.Enum):
     INVITED = "invited"
     ACTIVE = "active"
+
+class Role(str, enum.Enum):
+    """What an account may do. An account has one or more roles, stored as a comma separated list.
+
+    MANAGER:  use the management portal and invite people.
+    RESIDENT: has an address, can charge and can invite household members.
+    """
+    MANAGER = "manager"
+    RESIDENT = "resident"
+
+
+def parse_roles(value: str | None) -> list[str]:
+    """The role names in a stored roles value, e.g. 'manager,resident' -> ['manager', 'resident']."""
+    return [name for name in (value or "").split(",") if name]
+
+
+def format_roles(roles) -> str:
+    """The value to store for some roles: validated, without duplicates, sorted, no spaces."""
+    return ",".join(sorted({Role(role).value for role in roles}))
+
 
 class ProfileType(enum.Enum):
     MAX_CURRENT = "max_current"
@@ -40,8 +60,43 @@ class Resident(Base):
     invite_expires_at = Column(DateTime, nullable=True)
     login_token = Column(String, unique=True, nullable=True)
     login_expires_at = Column(DateTime, nullable=True)
-    
+    # Comma separated role names, see Role. Use has_role / set_roles, and has_role_sql in queries.
+    roles = Column(String, nullable=False, default="", server_default="")
+    street_name = Column(String, nullable=True)
+    house_number = Column(String, nullable=True)
+    house_number_suffix = Column(String, nullable=True)
+    zip_code = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    # Set for a household member: the resident who invited them. They live at the address of that resident.
+    household_head_id = Column(Integer, ForeignKey("residents.id"), nullable=True)
+
     cards = relationship("Card", back_populates="resident")
+
+    @property
+    def role_names(self) -> list[str]:
+        return parse_roles(self.roles)
+
+    def has_role(self, role: Role) -> bool:
+        return role.value in self.role_names
+
+    def set_roles(self, roles) -> None:
+        self.roles = format_roles(roles)
+
+    def set_address(self, address) -> None:
+        """address is (street name, house number, suffix, zip code, city)."""
+        self.street_name, self.house_number, self.house_number_suffix, self.zip_code, self.city = address
+
+    def address_of(self):
+        return (self.street_name, self.house_number, self.house_number_suffix, self.zip_code, self.city)
+
+    @property
+    def is_household_member(self) -> bool:
+        return self.household_head_id is not None
+
+    @classmethod
+    def has_role_sql(cls, role: Role):
+        """SQL condition: the account has this role. Matches whole role names, not parts of them."""
+        return (literal(",") + cls.roles + literal(",")).like(f"%,{role.value},%")
 
 class Card(Base):
     __tablename__ = "cards"

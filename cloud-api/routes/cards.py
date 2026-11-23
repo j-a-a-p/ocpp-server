@@ -2,9 +2,9 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Security, Depends
 from sqlalchemy.orm import Session
 from schemas import CardResponse, CardBase, CardUpdate
-from models import Card, RefusedCard, Resident
+from models import Card, RefusedCard, Resident, ResidentStatus, Role
 from crud import get_cards, create_card, log_refused_card, update_card_name
-from dependencies import get_db_dependency, get_authenticated_active_resident
+from dependencies import get_db_dependency, get_authenticated_active_resident, require_manager, require_resident
 from security import verify_api_key
 
 router = APIRouter(prefix="/cards", tags=["cards"])
@@ -14,7 +14,7 @@ def read_cards(
     skip: int = 0, 
     limit: int = 100, 
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """Get all cards. Requires cookie-based authentication for management access."""
     return get_cards(db, skip=skip, limit=limit)
@@ -23,7 +23,7 @@ def read_cards(
 def create_new_card(
     card: CardBase, 
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_manager)
 ):
     """Create a new card. Requires cookie-based authentication for management access."""
     return create_card(db, card)
@@ -42,10 +42,15 @@ def authenticate_card(
         log_refused_card(db, rfid, station_id)
         raise HTTPException(status_code=404, detail="Card not found")
 
+    # Only an active account with the resident role may charge. The card is known, so it is not logged as refused.
+    owner = card.resident
+    if owner is None or owner.status != ResidentStatus.ACTIVE or not owner.has_role(Role.RESIDENT):
+        raise HTTPException(status_code=404, detail="Card not found")
+
     return {"resident_id": card.resident_id}
 
 @router.post("/add_card/{station_id}", response_model=CardResponse)
-def add_card(station_id: str, db: Session = Depends(get_db_dependency), _: Resident = Depends(get_authenticated_active_resident)):
+def add_card(station_id: str, db: Session = Depends(get_db_dependency), _: Resident = Depends(require_resident)):
     """ Finds the latest RefusedCard within 5 minutes and registers a new card for the given resident_id. """
 
     latest_refused_card_by_station = (
@@ -104,7 +109,7 @@ def update_card_name_endpoint(
     rfid: str,
     card_update: CardUpdate,
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(get_authenticated_active_resident)
+    _: Resident = Depends(require_resident)
 ):
     """Update the name of a card. Only the card owner can update it."""
     # Check if the card exists and belongs to the authenticated resident

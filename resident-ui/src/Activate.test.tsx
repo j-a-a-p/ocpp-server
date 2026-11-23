@@ -22,7 +22,7 @@ const renderActivate = (route: string) =>
 
 beforeEach(() => {
   checkAuth.mockClear();
-  vi.mocked(useAuth).mockReturnValue({ isAuthenticated: false, isLoading: false, serverAvailable: true, checkAuth, logout });
+  vi.mocked(useAuth).mockReturnValue({ isAuthenticated: false, isLoading: false, serverAvailable: true, user: null, checkAuth, logout });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 

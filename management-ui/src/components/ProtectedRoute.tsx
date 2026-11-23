@@ -4,13 +4,14 @@ import { MailOutlined } from '@ant-design/icons';
 import { useAuth } from '../contexts/AuthContext';
 import AuthLayout from './AuthLayout';
 import AuthPopup from './AuthPopup';
+import LogoutButton from './LogoutButton';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const { isAuthenticated, isLoading, serverAvailable, checkAuth } = useAuth();
+  const { isAuthenticated, isLoading, serverAvailable, noAccess, checkAuth } = useAuth();
   const [showAuthPopup, setShowAuthPopup] = useState(false);
   const [popupManuallyClosed, setPopupManuallyClosed] = useState(false);
   const [mailSentTo, setMailSentTo] = useState<string | null>(null);
@@ -65,6 +66,19 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
               Retry connection
             </Button>
           }
+        />
+      </AuthLayout>
+    );
+  }
+
+  if (noAccess) {
+    return (
+      <AuthLayout>
+        <Result
+          status="403"
+          title="No access"
+          subTitle="You are signed in, but your account is not a manager. Ask a manager to give you access."
+          extra={<LogoutButton />}
         />
       </AuthLayout>
     );

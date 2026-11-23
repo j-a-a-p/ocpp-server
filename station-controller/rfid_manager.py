@@ -6,6 +6,8 @@ from refused_card_service import RefusedCardService
 
 logging.basicConfig(level=logging.INFO)
 
+RESIDENT_ROLE = "resident"
+
 class RFIDManager:
     """ Manages the RFID authentication process. """
 
@@ -21,10 +23,12 @@ class RFIDManager:
         
         try:
             db = SessionLocal()
-            # Check if the card exists and is associated with an active resident
+            # Check if the card exists and is associated with an active account that has the resident role
+            # (a manager who is not a resident cannot charge)
             card = db.query(Card).join(Resident).filter(
                 Card.rfid == rfid_tag,
-                Resident.status == ResidentStatus.ACTIVE
+                Resident.status == ResidentStatus.ACTIVE,
+                Resident.has_role_sql(RESIDENT_ROLE)
             ).first()
             
             if card:
