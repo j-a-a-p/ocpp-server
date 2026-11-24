@@ -58,6 +58,7 @@ const MyCardsCard: React.FC<MyCardsCardProps> = ({ cards, loading, onRename }) =
                   {card.rfid}
                 </Text>
               </Flex>
+              {card.enabled === false && <Tag color="error">Disabled by a manager</Tag>}
             </Flex>
           ))}
         </Flex>

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Float, literal
+from sqlalchemy import Boolean, Column, Integer, String, ForeignKey, DateTime, Enum, Float, literal
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -36,6 +36,8 @@ class Card(Base):
     #TODO at some point you want to add a tenant id to this key
     rfid = Column(String, primary_key=True, index=True)  # Using RFID as primary key
     resident_id = Column(Integer, ForeignKey("residents.id", ondelete="RESTRICT"))
+    # A manager can switch a card off: it stays registered but cannot start a charge.
+    enabled = Column(Boolean, nullable=False, default=True, server_default="1")
     
     resident = relationship("Resident", back_populates="cards")
     charge_transactions = relationship("ChargeTransaction", back_populates="card")

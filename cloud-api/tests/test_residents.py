@@ -152,16 +152,99 @@ class TestInviting:
         assert reload(db, resident.id).invite_token != "old"
         assert len(outbox) == 1
 
-    def test_no_second_invitation_while_one_is_valid(self, user, make_resident, outbox):
+    def test_an_invitation_can_be_sent_again_while_the_first_is_still_valid(self, user, db, make_resident, outbox):
         resident = make_resident(
-            email="dave@example.com", status=ResidentStatus.INVITED,
+            email="dave@example.com", status=ResidentStatus.INVITED, roles="resident",
             invite_token="current", invite_expires_at=datetime.utcnow() + timedelta(days=1),
         )
 
         response = user.post(f"/residents/{resident.id}/send-invitation")
 
+        assert response.status_code == 200
+        stored = reload(db, resident.id)
+        # The link of the first mail no longer works, the new one lasts the full 30 days.
+        assert stored.invite_token not in (None, "current")
+        assert timedelta(days=29) < stored.invite_expires_at - datetime.utcnow() <= timedelta(days=30)
+        assert [mail["recipient"] for mail in outbox] == ["dave@example.com"]
+        assert f"{INVITE_URL}/activate?token={stored.invite_token}" in outbox[0]["body"]
+
+    def test_the_second_invitation_follows_the_roles_too(self, user, make_resident, outbox):
+        resident = make_resident(email="eve@example.com", status=ResidentStatus.INVITED, roles="manager")
+
+        user.post(f"/residents/{resident.id}/send-invitation")
+
+        assert "management portal" in outbox[0]["subject"]
+        assert "Resident portal" not in outbox[0]["body"]
+
+    def test_an_account_that_is_active_is_not_invited_again(self, user, make_resident, outbox):
+        resident = make_resident(email="dave@example.com", status=ResidentStatus.ACTIVE)
+
+        response = user.post(f"/residents/{resident.id}/send-invitation")
+
         assert response.status_code == 400
         assert outbox == []
+
+    def test_when_the_mail_fails_the_second_invitation_reports_it(self, user, make_resident, monkeypatch):
+        class BrokenSender:
+            def send_email(self, **_):
+                raise RuntimeError("SES is down")
+
+        monkeypatch.setattr(invite, "SESEmailSender", BrokenSender)
+        resident = make_resident(email="dave@example.com", status=ResidentStatus.INVITED)
+
+        assert user.post(f"/residents/{resident.id}/send-invitation").status_code == 500
+
+
+class TestInvitationMailFollowsTheRoles:
+    """The mail tells the invitee about the portals of their own roles, and links to those only."""
+
+    def invited_mail(self, user, outbox, roles):
+        assert user.post("/residents/", json=new_resident(roles=roles)).status_code == 200
+        return outbox[0]
+
+    def test_a_manager_is_invited_to_the_management_portal_not_as_a_resident(self, user, outbox):
+        mail = self.invited_mail(user, outbox, ["manager"])
+
+        assert mail["subject"] == "You are invited to the Charger management portal"
+        for text in (mail["body"], mail["html"]):
+            assert "https://charge.example.test/management-ui/" in text
+            assert "Resident portal" not in text
+            assert "charging cards" not in text
+        assert "manage residents" in mail["body"]
+        assert "Management portal" in mail["html"]
+
+    def test_a_resident_is_invited_to_the_resident_portal_not_to_management(self, user, outbox):
+        mail = self.invited_mail(user, outbox, ["resident"])
+
+        assert mail["subject"] == "You are invited to the Charger resident portal"
+        for text in (mail["body"], mail["html"]):
+            assert "Resident portal" in text
+            assert "management-ui" not in text
+        assert "charging cards" in mail["body"]
+
+    def test_someone_who_is_both_gets_both_portals(self, user, outbox):
+        mail = self.invited_mail(user, outbox, ["manager", "resident"])
+
+        assert mail["subject"] == "You are invited to Charger"
+        for text in (mail["body"], mail["html"]):
+            assert "https://charge.example.test/resident-ui/" in text and "Resident portal" in text
+            assert "https://charge.example.test/management-ui/" in text and "Management portal" in text
+        assert "charging cards" in mail["body"] and "manage residents" in mail["body"]
+
+    def test_everybody_activates_through_the_same_link(self, user, db, outbox):
+        mail = self.invited_mail(user, outbox, ["manager"])
+
+        token = db.query(Resident).filter_by(email="dave@example.com").one().invite_token
+        assert f"{INVITE_URL}/activate?token={token}" in mail["body"]
+        assert f'href="{INVITE_URL}/activate?token={token}"' in mail["html"]
+
+    def test_a_household_member_is_invited_to_the_resident_portal(self, login_as, make_resident, outbox):
+        head = make_resident(email="head@example.com", roles="resident", **HOME)
+        client = login_as(head)
+
+        client.post("/residents/household-members", json={"full_name": "Kid", "email": "kid@example.com"})
+
+        assert outbox[0]["subject"] == "You are invited to the Charger resident portal"
 
     def test_invitation_for_an_unknown_resident(self, user):
         assert user.post("/residents/9999/send-invitation").status_code == 404
@@ -552,6 +635,14 @@ class TestActivation:
         assert activated.invite_token is None
         cookie = response.headers["set-cookie"]
         assert "auth_token=" in cookie and "HttpOnly" in cookie and "Secure" in cookie
+
+    def test_the_answer_tells_the_roles_so_the_portal_can_choose_where_to_go(self, client, make_resident):
+        make_resident(
+            email="eve@example.com", status=ResidentStatus.INVITED, roles="manager",
+            invite_token="manager-token", invite_expires_at=datetime.utcnow() + timedelta(days=1),
+        )
+
+        assert client.post("/residents/activate/manager-token").json()["roles"] == ["manager"]
 
     def test_token_works_only_once(self, client, make_resident):
         self.invited(make_resident)

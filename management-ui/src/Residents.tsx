@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { App, AutoComplete, Avatar, Button, Card, Checkbox, Flex, Form, Input, Modal, Table, Tag, theme, Typography } from "antd";
+import { App, AutoComplete, Avatar, Button, Card, Checkbox, Flex, Form, Input, Modal, Switch, Table, Tag, theme, Typography } from "antd";
 import type { Key } from "react";
-import { EditOutlined, HomeOutlined, UserAddOutlined } from "@ant-design/icons";
+import { CreditCardOutlined, EditOutlined, HomeOutlined, SendOutlined, UserAddOutlined } from "@ant-design/icons";
 import { API_BASE_URL } from "./config";
 import { addressSuggestions, groupByAddress, type Address } from "./utils/address";
 import { formatInteger } from "./utils/format";
@@ -15,6 +15,14 @@ interface Resident extends Address {
   status: string;
   roles: string[];
   household_head_id: number | null;
+}
+
+/** A charging card. A card that is off stays registered but cannot start a charge. */
+interface ChargeCard {
+  rfid: string;
+  name: string;
+  resident_id: number;
+  enabled: boolean;
 }
 
 /** The roles an account can have. A new role only needs an entry here (and in the API). */
@@ -68,10 +76,17 @@ const Residents: React.FC = () => {
   const { message } = App.useApp();
   const { token } = theme.useToken();
   const [residents, setResidents] = useState<Resident[]>([]);
+  const [cards, setCards] = useState<ChargeCard[]>([]);
+  // The resident whose cards are shown in the dialog
+  const [cardsOfResident, setCardsOfResident] = useState<Resident | null>(null);
+  // The card that is being switched on or off
+  const [switchingRfid, setSwitchingRfid] = useState<string | null>(null);
   const [addressOptions, setAddressOptions] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  // The resident whose invitation is being sent again
+  const [reinvitingId, setReinvitingId] = useState<number | null>(null);
   const [editingResident, setEditingResident] = useState<Resident | null>(null);
   const [statusFilter, setStatusFilter] = useState<(Key | boolean)[] | null>(null);
   const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(new Set());
@@ -106,10 +121,21 @@ const Residents: React.FC = () => {
     }
   }, []);
 
+  const fetchCards = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/cards/?limit=10000`, { credentials: "include" });
+      if (response.ok) setCards(await response.json());
+    } catch (error) {
+      console.error("Failed to load the cards:", error);
+      message.error("Failed to load the cards.");
+    }
+  }, [message]);
+
   useEffect(() => {
     fetchResidents();
     fetchAddressOptions();
-  }, [fetchResidents, fetchAddressOptions]);
+    fetchCards();
+  }, [fetchResidents, fetchAddressOptions, fetchCards]);
 
   const showModal = (resident: Resident | null = null) => {
     setEditingResident(resident);
@@ -185,6 +211,68 @@ const Residents: React.FC = () => {
     }
   };
 
+  const switchCard = async (card: ChargeCard, enabled: boolean) => {
+    setSwitchingRfid(card.rfid);
+    try {
+      const response = await fetch(`${API_BASE_URL}/cards/${encodeURIComponent(card.rfid)}/enabled`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ enabled }),
+      });
+      if (response.ok) {
+        setCards((current) => current.map((other) => (other.rfid === card.rfid ? { ...other, enabled } : other)));
+        message.success(`Card ${card.name} ${enabled ? "enabled" : "disabled"}`);
+      } else {
+        try {
+          const errorData = await response.json();
+          message.error(typeof errorData.detail === "string" ? errorData.detail : "Failed to change the card.");
+        } catch {
+          message.error("Failed to change the card.");
+        }
+      }
+    } catch (error) {
+      console.error("Error changing the card:", error);
+      message.error("An error occurred while changing the card.");
+    } finally {
+      setSwitchingRfid(null);
+    }
+  };
+
+  const cardsOf = (resident: Resident) =>
+    cards.filter((card) => card.resident_id === resident.id).sort((a, b) => a.name.localeCompare(b.name));
+
+  const cardsLabel = (list: ChargeCard[]) => {
+    const off = list.filter((card) => !card.enabled).length;
+    const count = list.length === 1 ? "1 card" : `${formatInteger(list.length)} cards`;
+    return off > 0 ? `${count}, ${off} disabled` : count;
+  };
+
+  const reinvite = async (resident: Resident) => {
+    setReinvitingId(resident.id);
+    try {
+      const response = await fetch(`${API_BASE_URL}/residents/${resident.id}/send-invitation`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (response.ok) {
+        message.success(`Invitation sent to ${resident.email}`);
+      } else {
+        try {
+          const errorData = await response.json();
+          message.error(typeof errorData.detail === "string" ? errorData.detail : "Failed to send the invitation.");
+        } catch {
+          message.error("Failed to send the invitation.");
+        }
+      }
+    } catch (error) {
+      console.error("Error sending the invitation:", error);
+      message.error("An error occurred while sending the invitation.");
+    } finally {
+      setReinvitingId(null);
+    }
+  };
+
   const rows: Row[] = useMemo(() => {
     const shown = statusFilter?.length ? residents.filter((resident) => statusFilter.includes(resident.status.toUpperCase())) : residents;
     return groupByAddress(shown).map((group) => ({
@@ -252,6 +340,18 @@ const Residents: React.FC = () => {
                     <Text type="secondary" style={{ fontSize: 12 }}>
                       {record.email}
                     </Text>
+                    {cardsOf(record).length > 0 && (
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<CreditCardOutlined />}
+                        aria-label={cardsLabel(cardsOf(record))}
+                        onClick={() => setCardsOfResident(record)}
+                        style={{ padding: 0, height: "auto", fontSize: 12, justifyContent: "flex-start" }}
+                      >
+                        {cardsLabel(cardsOf(record))}
+                      </Button>
+                    )}
                   </Flex>
                 </Flex>
               ),
@@ -289,13 +389,59 @@ const Residents: React.FC = () => {
             onCell: hiddenCell,
             render: (_: unknown, record) =>
               record.isGroup ? null : (
-                <Button type="text" icon={<EditOutlined />} onClick={() => showModal(record)}>
-                  Edit
-                </Button>
+                <Flex gap={4} justify="flex-end">
+                  {record.status.toUpperCase() === "INVITED" && (
+                    <Button
+                      type="text"
+                      icon={<SendOutlined />}
+                      loading={reinvitingId === record.id}
+                      aria-label={`Send the invitation again to ${record.full_name}`}
+                      onClick={() => reinvite(record)}
+                    >
+                      Re-invite
+                    </Button>
+                  )}
+                  <Button type="text" icon={<EditOutlined />} onClick={() => showModal(record)}>
+                    Edit
+                  </Button>
+                </Flex>
               ),
           },
         ]}
       />
+      <Modal
+        title={cardsOfResident ? `Cards of ${cardsOfResident.full_name}` : "Cards"}
+        open={cardsOfResident !== null}
+        onCancel={() => setCardsOfResident(null)}
+        footer={null}
+        destroyOnHidden
+      >
+        <Typography.Paragraph type="secondary">
+          A card that is disabled stays registered but cannot start a charge. A charge that is running is not stopped.
+        </Typography.Paragraph>
+        <Flex vertical gap={12}>
+          {(cardsOfResident ? cardsOf(cardsOfResident) : []).map((card) => (
+            <Flex key={card.rfid} align="center" gap={12}>
+              <CreditCardOutlined style={{ fontSize: 18, color: card.enabled ? token.colorPrimary : token.colorTextQuaternary }} />
+              <Flex vertical style={{ flex: 1, minWidth: 0 }}>
+                <Text strong delete={!card.enabled}>
+                  {card.name}
+                </Text>
+                <Text type="secondary" style={{ fontSize: 12, fontFamily: token.fontFamilyCode }}>
+                  {card.rfid}
+                </Text>
+              </Flex>
+              {!card.enabled && <Tag color="error">Disabled</Tag>}
+              <Switch
+                checked={card.enabled}
+                loading={switchingRfid === card.rfid}
+                aria-label={`Card ${card.name} enabled`}
+                onChange={(checked) => switchCard(card, checked)}
+              />
+            </Flex>
+          ))}
+        </Flex>
+      </Modal>
       <Modal
         title={editingResident ? "Edit resident" : "Add resident"}
         open={isModalOpen}

@@ -1,4 +1,5 @@
 import type { ChargeTransaction } from "../services/chargeTransactionService";
+import { addressKey, addressLabel } from "./address";
 import { parseUtc } from "./dates";
 
 export interface ReportSession {
@@ -8,6 +9,8 @@ export interface ReportSession {
   ended: Date | null;
   station: string;
   card: string;
+  /** Who charged: more than one person can live at the address. */
+  resident: string;
   energy: number;
   cost: number;
 }
@@ -21,11 +24,15 @@ export interface ReportMonth {
 }
 
 export interface YearlyReport {
-  resident_name: string;
+  /** The address the report is about, as shown. */
+  address: string;
+  address_key: string;
+  /** Everybody who charged there that year, in order of name. */
+  residents: string[];
   year: number;
   generated: Date;
   total_energy: number;
-  /** What the resident has to pay for the year. */
+  /** What the address has to pay for the year. */
   total_cost: number;
   /** Oldest first. */
   sessions: ReportSession[];
@@ -39,20 +46,20 @@ const MONTH_NAMES = [
 ];
 
 /**
- * Everything one resident charged in one year. It follows the same rules as the yearly summaries on the
- * Charges page (a charge that delivered no energy does not count, the year is the year the charge started),
+ * Everything charged at one address in one year, by everybody living there. It follows the same rules as the yearly
+ * summaries on the Charges page (a charge that delivered no energy does not count, the year is the year the charge started),
  * so the totals of the report are the totals of that table.
  */
 export const buildYearlyReport = (
   transactions: ChargeTransaction[],
-  resident_name: string,
+  address_key: string,
   year: number,
   generated: Date = new Date()
 ): YearlyReport => {
   const sessions: ReportSession[] = transactions
     .filter(
       (transaction) =>
-        transaction.resident_name === resident_name &&
+        addressKey(transaction) === address_key &&
         transaction.final_energy_kwh > 0 &&
         parseUtc(transaction.created).getFullYear() === year
     )
@@ -62,6 +69,7 @@ export const buildYearlyReport = (
       ended: transaction.ended ? parseUtc(transaction.ended) : null,
       station: transaction.station_id,
       card: transaction.card_name || transaction.rfid,
+      resident: transaction.resident_name,
       energy: transaction.final_energy_kwh,
       cost: transaction.total_cost || 0,
     }))
@@ -77,8 +85,12 @@ export const buildYearlyReport = (
     months.set(month, entry);
   }
 
+  const sample = transactions.find((transaction) => addressKey(transaction) === address_key);
+
   return {
-    resident_name,
+    address: addressLabel(sample ?? {}),
+    address_key,
+    residents: [...new Set(sessions.map((session) => session.resident))].sort((a, b) => a.localeCompare(b)),
     year,
     generated,
     total_energy: sessions.reduce((sum, session) => sum + session.energy, 0),

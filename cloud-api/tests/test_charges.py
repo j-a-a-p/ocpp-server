@@ -76,6 +76,29 @@ class TestAllTransactionsForManagement:
         assert round(charges[0]["total_cost"], 4) == 1.20
         assert "power_logs" not in charges[0]
 
+    def test_a_charge_carries_the_address_of_its_resident_for_grouping(
+        self, user, make_card, make_transaction, make_resident
+    ):
+        anna = make_resident(
+            email="anna@example.com", roles="resident", street_name="Hoofdstraat", house_number="12",
+            house_number_suffix="A", zip_code="3511 AB", city="Utrecht",
+        )
+        make_transaction(make_card(anna), [(0, 7.0, 1.0)])
+
+        charge = user.get("/charge-transactions/all").json()[0]
+
+        assert {key: charge[key] for key in ("street_name", "house_number", "house_number_suffix", "zip_code", "city")} == {
+            "street_name": "Hoofdstraat", "house_number": "12", "house_number_suffix": "A",
+            "zip_code": "3511 AB", "city": "Utrecht",
+        }
+
+    def test_a_resident_without_an_address_has_empty_address_fields(self, user, me, make_card, make_transaction):
+        make_transaction(make_card(me), [(0, 7.0, 1.0)])
+
+        charge = user.get("/charge-transactions/all").json()[0]
+
+        assert charge["street_name"] is None and charge["house_number"] is None
+
     def test_the_cost_follows_the_tariff_and_ignores_a_meter_that_goes_backwards(self, user, me, make_card, make_transaction):
         # 20:50 and 20:55 Dutch time are normaal, 21:10 and 21:20 are dal. The drop from 4.0 to 3.5 costs nothing.
         evening = datetime(2026, 11, 2, 19, 50)

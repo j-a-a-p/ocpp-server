@@ -35,6 +35,13 @@
    **Edit** (manager): `PUT /residents/{resident_id}` with `full_name`, `roles` and the address. Answers 409 when it would remove the
    last active manager, or the resident role of someone who still has household members.
 
+   **Invite again** (manager): `POST /residents/{resident_id}/send-invitation` mails a new invitation to an account that has not
+   activated yet, also while the previous one is valid (its link stops working). Answers 400 for an account that is active.
+
+   **The invitation mail follows the roles**: a resident gets the resident portal, a manager the management portal, someone with both
+   gets both. Everybody activates through the same link; activating answers `{ "message": ..., "roles": [...] }` so the portal can
+   send a manager who cannot charge on to the management portal.
+
    **Address options** (manager): `GET /residents/address-options` returns the distinct addresses in use.
 
    **Household members** (resident): `GET /residents/household-members` and `POST /residents/household-members` with
@@ -67,7 +74,14 @@
    ```
    GET https://apt.aircokopen.nu/api/cards/refused
    ```
-   *Note: This endpoint requires authentication via cookie*
+   *Note: This endpoint requires authentication via cookie. Cards that are registered already are left out.*
+
+7. **Switch a card off or on** (manager)
+   ```
+   PUT https://apt.aircokopen.nu/api/cards/{rfid}/enabled   { "enabled": false }
+   ```
+   A card that is off stays registered but cannot start a charge: the station refuses it and it is not remembered as a new
+   card. Cards carry an `enabled` flag in every card response. Only managers can switch a card on again, not its owner.
 
 ## Example Usage with curl
 

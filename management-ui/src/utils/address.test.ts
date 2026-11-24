@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressSuggestions, formatAddress, groupByAddress } from "./address";
+import { addressKey, addressLabel, addressSuggestions, formatAddress, groupByAddress, NO_ADDRESS } from "./address";
 
 const at = (
   street_name: string | null,
@@ -13,6 +13,24 @@ describe("formatAddress", () => {
   it("joins street, number and suffix", () => {
     expect(formatAddress(at("Hoofdstraat", "12", "A"))).toBe("Hoofdstraat 12 A");
     expect(formatAddress(at("Hoofdstraat", "12"))).toBe("Hoofdstraat 12");
+  });
+});
+
+describe("addressKey and addressLabel", () => {
+  it("is the same for spellings that differ in case or spaces, and for another zip code or city", () => {
+    expect(addressKey(at(" hoofdstraat ", "12", "a", "1111 AA", "X"))).toBe(addressKey(at("Hoofdstraat", "12", "A", "2222 BB", "Y")));
+  });
+
+  it("tells apart another number or suffix", () => {
+    expect(addressKey(at("Hoofdstraat", "12"))).not.toBe(addressKey(at("Hoofdstraat", "12", "A")));
+    expect(addressKey(at("Hoofdstraat", "12"))).not.toBe(addressKey(at("Hoofdstraat", "14")));
+  });
+
+  it("is one shared key for everybody without an address", () => {
+    expect(addressKey(at(null))).toBe(NO_ADDRESS);
+    expect(addressKey({})).toBe(NO_ADDRESS);
+    expect(addressLabel(at(null))).toBe("No address");
+    expect(addressLabel(at("Hoofdstraat", "12", "A"))).toBe("Hoofdstraat 12 A");
   });
 });
 

@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, Security, Depends
 from sqlalchemy.orm import Session
-from schemas import CardResponse, CardBase, CardUpdate
+from schemas import CardResponse, CardBase, CardUpdate, CardEnabledUpdate
 from models import Card, RefusedCard, Resident, ResidentStatus, Role
 from crud import get_cards, create_card, log_refused_card, update_card_name
 from dependencies import get_db_dependency, get_authenticated_active_resident, require_manager, require_resident
@@ -42,9 +42,10 @@ def authenticate_card(
         log_refused_card(db, rfid, station_id)
         raise HTTPException(status_code=404, detail="Card not found")
 
-    # Only an active account with the resident role may charge. The card is known, so it is not logged as refused.
+    # Only an active account with the resident role may charge, with a card that is not switched off.
+    # The card is known, so it is not logged as refused.
     owner = card.resident
-    if owner is None or owner.status != ResidentStatus.ACTIVE or not owner.has_role(Role.RESIDENT):
+    if not card.enabled or owner is None or owner.status != ResidentStatus.ACTIVE or not owner.has_role(Role.RESIDENT):
         raise HTTPException(status_code=404, detail="Card not found")
 
     return {"resident_id": card.resident_id}
@@ -61,6 +62,9 @@ def add_card(station_id: str, db: Session = Depends(get_db_dependency), _: Resid
     )
     if not latest_refused_card_by_station:
         raise HTTPException(status_code=404, detail="No recent refused card found")
+    if db.query(Card).filter(Card.rfid == latest_refused_card_by_station.rfid).first():
+        # Refused because it is switched off, or its owner cannot charge: it is registered already.
+        raise HTTPException(status_code=409, detail="This card is already registered")
 
     new_card = Card(rfid=latest_refused_card_by_station.rfid, name=latest_refused_card_by_station.rfid, resident_id=_.id)
     db.add(new_card)
@@ -94,6 +98,8 @@ def list_refused_cards(
     refused_cards = (
         db.query(RefusedCard)
         .filter(RefusedCard.created >= five_minutes_ago)
+        # A card that is registered cannot be added again, whatever the reason it was refused (for example switched off).
+        .filter(RefusedCard.rfid.not_in(db.query(Card.rfid)))
         .order_by(RefusedCard.created.desc())
         .distinct(RefusedCard.rfid)
         .all()
@@ -103,6 +109,24 @@ def list_refused_cards(
         raise HTTPException(status_code=404, detail="No refused cards found")
     
     return {"refused_cards": refused_cards}
+
+@router.put("/{rfid}/enabled", response_model=CardResponse)
+def update_card_enabled_endpoint(
+    rfid: str,
+    update: CardEnabledUpdate,
+    db: Session = Depends(get_db_dependency),
+    _: Resident = Depends(require_manager)
+):
+    """Switch a card off or on again, for example when it was lost. A card that is off cannot start a charge.
+    Only managers can do this: the owner of a card cannot switch it back on. Requires the manager role."""
+    card = db.query(Card).filter(Card.rfid == rfid).first()
+    if not card:
+        raise HTTPException(status_code=404, detail="Card not found")
+
+    card.enabled = update.enabled
+    db.commit()
+    db.refresh(card)
+    return card
 
 @router.put("/{rfid}/name", response_model=CardResponse)
 def update_card_name_endpoint(

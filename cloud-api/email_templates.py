@@ -4,8 +4,10 @@ Mail clients are far more limited than browsers, so the HTML uses tables and inl
 version next to it for clients that do not show HTML.
 """
 from html import escape
+from typing import Sequence
 
 PRODUCT_NAME = "Charger"
+PORTAL_LINKS_TITLE = "After activating, you can sign in here at any time:"
 
 # The palette of the portals (see theme/ThemeProvider.tsx in both UIs).
 PRIMARY = "#0d9488"
@@ -35,24 +37,53 @@ def render_action_email(
     button_label: str,
     link: str,
     note: str,
+    portal_links: Sequence[tuple[str, str]] = (),
 ) -> tuple[str, str]:
-    """An email with one call to action. Returns the plain text and the HTML version."""
+    """An email with one call to action. Returns the plain text and the HTML version.
+
+    portal_links are (name, url) pairs of the portals to sign in to later, listed under the button.
+    """
     return (
-        _plain_text(portal, heading, paragraphs, button_label, link, note),
-        _html(portal, heading, paragraphs, button_label, link, note),
+        _plain_text(portal, heading, paragraphs, button_label, link, note, portal_links),
+        _html(portal, heading, paragraphs, button_label, link, note, portal_links),
     )
 
 
-def _plain_text(portal: str, heading: str, paragraphs: list[str], button_label: str, link: str, note: str) -> str:
+def _plain_text(
+    portal: str, heading: str, paragraphs: list[str], button_label: str, link: str, note: str,
+    portal_links: Sequence[tuple[str, str]],
+) -> str:
     lines = [f"{PRODUCT_NAME} | {portal}", "", heading, ""]
     for paragraph in paragraphs:
         lines += [paragraph, ""]
-    lines += [f"{button_label}:", link, "", note, "", "If you did not expect this email, you can ignore it."]
+    lines += [f"{button_label}:", link, "", note, ""]
+    if portal_links:
+        lines += [PORTAL_LINKS_TITLE]
+        lines += [f"- {name}: {url}" for name, url in portal_links]
+        lines += [""]
+    lines += ["If you did not expect this email, you can ignore it."]
     return "\n".join(lines) + "\n"
 
 
-def _html(portal: str, heading: str, paragraphs: list[str], button_label: str, link: str, note: str) -> str:
+def _portal_links_html(portal_links: Sequence[tuple[str, str]]) -> str:
+    if not portal_links:
+        return ""
+    items = "".join(
+        f'<li style="margin:0 0 4px;"><a href="{escape(url, quote=True)}" style="color:{PRIMARY};text-decoration:none;font-weight:600;">{escape(name)}</a></li>'
+        for name, url in portal_links
+    )
+    return (
+        f'<p class="muted" style="margin:0 0 8px;font-size:13px;line-height:20px;color:{TEXT_SECONDARY};">{escape(PORTAL_LINKS_TITLE)}</p>'
+        f'<ul style="margin:0 0 20px;padding-left:20px;font-size:14px;line-height:22px;">{items}</ul>'
+    )
+
+
+def _html(
+    portal: str, heading: str, paragraphs: list[str], button_label: str, link: str, note: str,
+    portal_links: Sequence[tuple[str, str]],
+) -> str:
     safe_link = escape(link, quote=True)
+    portal_links_html = _portal_links_html(portal_links)
     body = "".join(
         f'<p class="text" style="margin:0 0 16px;font-size:15px;line-height:24px;color:{TEXT};">{escape(paragraph)}</p>'
         for paragraph in paragraphs
@@ -112,6 +143,7 @@ def _html(portal: str, heading: str, paragraphs: list[str], button_label: str, l
               </tr>
             </table>
             <p class="muted" style="margin:0 0 20px;font-size:13px;line-height:20px;color:{TEXT_SECONDARY};">{escape(note)}</p>
+            {portal_links_html}
             <table role="presentation" class="divider" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid {BORDER};">
               <tr>
                 <td style="padding-top:20px;">

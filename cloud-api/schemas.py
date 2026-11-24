@@ -66,11 +66,16 @@ class CardBase(BaseModel):
     resident_id: int
 
 class CardResponse(CardBase):
+    enabled: bool = True
+
     class Config:
         from_attributes = True
 
 class CardUpdate(BaseModel):
     name: str
+
+class CardEnabledUpdate(BaseModel):
+    enabled: bool
 
 class RefusedCardBase(BaseModel):
     rfid: str

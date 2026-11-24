@@ -30,8 +30,15 @@ const addressOptions = [
   { street_name: "Kerkstraat", house_number: "3", house_number_suffix: null, zip_code: "3512 CD", city: "Utrecht" },
 ];
 
-const routes = (list: unknown = residents) => ({
+const cards = [
+  { rfid: "04AABBCC", name: "Tesla", resident_id: 1, enabled: true },
+  { rfid: "04DDEEFF", name: "Old fob", resident_id: 1, enabled: false },
+  { rfid: "04112233", name: "Golf", resident_id: 2, enabled: true },
+];
+
+const routes = (list: unknown = residents, cardList: unknown = cards) => ({
   "GET /residents/address-options": json(addressOptions),
+  "GET /cards/": () => json(cardList),
   "GET /residents/": () => json(list),
 });
 
@@ -252,6 +259,118 @@ describe("Residents", () => {
       zip_code: "3511 AB",
       city: "Utrecht",
     });
+  });
+
+  it("shows how many cards each resident has below their name, and how many are disabled", async () => {
+    mockFetch(routes());
+
+    renderWithProviders(<Residents />);
+
+    const anna = (await screen.findByText("Anna Anderson")).closest("tr") as HTMLElement;
+    expect(await within(anna).findByRole("button", { name: /2 cards, 1 disabled/ })).toBeInTheDocument();
+    const bob = screen.getByText("Bob Brown").closest("tr") as HTMLElement;
+    expect(within(bob).getByRole("button", { name: /1 card$/ })).toBeInTheDocument();
+    // The cards themselves are in the dialog, not in the list.
+    expect(screen.queryByText("Tesla")).not.toBeInTheDocument();
+  });
+
+  it("shows nothing for a resident who has no cards", async () => {
+    mockFetch(routes(residents, []));
+
+    renderWithProviders(<Residents />);
+
+    const anna = (await screen.findByText("Anna Anderson")).closest("tr") as HTMLElement;
+    expect(within(anna).queryByRole("button", { name: /card/ })).not.toBeInTheDocument();
+  });
+
+  const openCardsOfAnna = async () => {
+    const anna = (await screen.findByText("Anna Anderson")).closest("tr") as HTMLElement;
+    await userEvent.click(await within(anna).findByRole("button", { name: /2 cards/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Cards of Anna Anderson")).toBeInTheDocument();
+    return dialog;
+  };
+
+  it("opens the cards of the resident in a dialog, with the disabled one marked", async () => {
+    mockFetch(routes());
+    renderWithProviders(<Residents />);
+
+    const dialog = await openCardsOfAnna();
+
+    expect(within(dialog).getByText("Tesla")).toBeInTheDocument();
+    expect(within(dialog).getByText("04AABBCC")).toBeInTheDocument();
+    expect(within(dialog).getByText("Old fob")).toBeInTheDocument();
+    expect(within(dialog).getByText("Disabled")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Golf")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("switch", { name: "Card Tesla enabled" })).toBeChecked();
+    expect(within(dialog).getByRole("switch", { name: "Card Old fob enabled" })).not.toBeChecked();
+  });
+
+  it("lets a manager disable a card in the dialog", async () => {
+    const fetchMock = mockFetch({ ...routes(), "PUT /cards/04AABBCC/enabled": json({ rfid: "04AABBCC", enabled: false }) });
+    renderWithProviders(<Residents />);
+    const dialog = await openCardsOfAnna();
+
+    await userEvent.click(within(dialog).getByRole("switch", { name: "Card Tesla enabled" }));
+
+    expect(await screen.findByText("Card Tesla disabled")).toBeInTheDocument();
+    expect(lastBody(fetchMock, "PUT")).toEqual({ enabled: false });
+    expect(within(dialog).getByRole("switch", { name: "Card Tesla enabled" })).not.toBeChecked();
+    expect(within(dialog).getAllByText("Disabled")).toHaveLength(2);
+    // The count in the list follows.
+    expect(screen.getByRole("button", { name: /2 cards, 2 disabled/ })).toBeInTheDocument();
+  });
+
+  it("lets a manager enable a card again", async () => {
+    const fetchMock = mockFetch({ ...routes(), "PUT /cards/04DDEEFF/enabled": json({ rfid: "04DDEEFF", enabled: true }) });
+    renderWithProviders(<Residents />);
+    const dialog = await openCardsOfAnna();
+
+    await userEvent.click(within(dialog).getByRole("switch", { name: "Card Old fob enabled" }));
+
+    expect(await screen.findByText("Card Old fob enabled")).toBeInTheDocument();
+    expect(lastBody(fetchMock, "PUT")).toEqual({ enabled: true });
+    expect(within(dialog).queryByText("Disabled")).not.toBeInTheDocument();
+  });
+
+  it("leaves the card as it was and says why when the change is refused", async () => {
+    mockFetch({ ...routes(), "PUT /cards/04AABBCC/enabled": json({ detail: "Card not found" }, 404) });
+    renderWithProviders(<Residents />);
+    const dialog = await openCardsOfAnna();
+
+    await userEvent.click(within(dialog).getByRole("switch", { name: "Card Tesla enabled" }));
+
+    expect(await screen.findByText("Card not found")).toBeInTheDocument();
+    expect(within(dialog).getByRole("switch", { name: "Card Tesla enabled" })).toBeChecked();
+  });
+  it("sends the invitation again to someone who has not activated yet", async () => {    const fetchMock = mockFetch({ ...routes(), "POST /residents/2/send-invitation": json({ id: 2 }) });
+    renderWithProviders(<Residents />);
+    const bob = (await screen.findByText("Bob Brown")).closest("tr") as HTMLElement;
+
+    await userEvent.click(within(bob).getByRole("button", { name: "Send the invitation again to Bob Brown" }));
+
+    expect(await screen.findByText("Invitation sent to bob@example.com")).toBeInTheDocument();
+    expect(requests(fetchMock)).toContainEqual(expect.stringMatching(/^POST .*\/residents\/2\/send-invitation$/));
+  });
+
+  it("offers no new invitation to an account that is active already", async () => {
+    mockFetch(routes());
+    renderWithProviders(<Residents />);
+
+    const anna = (await screen.findByText("Anna Anderson")).closest("tr") as HTMLElement;
+
+    expect(within(anna).queryByRole("button", { name: /send the invitation again/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /send the invitation again/i })).toHaveLength(1);
+  });
+
+  it("shows the reason when the invitation cannot be sent again", async () => {
+    mockFetch({ ...routes(), "POST /residents/2/send-invitation": json({ detail: "Failed to send invitation email. Please try again." }, 500) });
+    renderWithProviders(<Residents />);
+    await screen.findByText("Bob Brown");
+
+    await userEvent.click(screen.getByRole("button", { name: "Send the invitation again to Bob Brown" }));
+
+    expect(await screen.findByText("Failed to send invitation email. Please try again.")).toBeInTheDocument();
   });
 
   it("tells the user when the residents cannot be loaded", async () => {

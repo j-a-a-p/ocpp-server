@@ -6,7 +6,7 @@ import pytest
 import charge_point
 from charge_point import ChargePoint
 from conftest import add_card
-from models import ChargeTransaction, PowerLog, RefusedCard, Resident, ResidentStatus
+from models import Card, ChargeTransaction, PowerLog, RefusedCard, Resident, ResidentStatus
 
 
 def status_of(result) -> str:
@@ -87,6 +87,28 @@ class TestAuthorize:
         add_card(db, "04112233", both)
 
         assert status_of(await cp.on_authorize(id_tag="04112233")) == "Accepted"
+
+    async def test_a_card_that_a_manager_switched_off_is_invalid(self, cp, db, resident_with_card):
+        db.query(Card).filter_by(rfid="04AABBCC").update({"enabled": False})
+        db.commit()
+
+        assert status_of(await cp.on_authorize(id_tag="04AABBCC")) == "Invalid"
+
+    async def test_a_card_that_is_switched_off_cannot_start_a_charge(self, cp, db, resident_with_card):
+        db.query(Card).filter_by(rfid="04AABBCC").update({"enabled": False})
+        db.commit()
+
+        result = await cp.on_start_transaction(connector_id=1, id_tag="04AABBCC", meter_start=0, timestamp="t")
+
+        assert status_of(result) == "Invalid"
+        assert db.query(ChargeTransaction).count() == 0
+
+    async def test_the_other_cards_of_the_same_resident_keep_working(self, cp, db, resident_with_card):
+        add_card(db, "04DDEEFF", db.query(Resident).first())
+        db.query(Card).filter_by(rfid="04AABBCC").update({"enabled": False})
+        db.commit()
+
+        assert status_of(await cp.on_authorize(id_tag="04DDEEFF")) == "Accepted"
 
     async def test_a_role_that_only_contains_the_word_resident_does_not_count(self, cp, db):
         other = Resident(email="other@example.com", full_name="Other", status=ResidentStatus.ACTIVE, roles="non_resident")

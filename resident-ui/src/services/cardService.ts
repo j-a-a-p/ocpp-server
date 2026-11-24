@@ -4,6 +4,8 @@ export interface Card {
   rfid: string;
   name: string;
   resident_id: number;
+  /** A manager can switch a card off: it cannot start a charge until it is switched on again. */
+  enabled?: boolean;
 }
 
 export interface CardUpdate {

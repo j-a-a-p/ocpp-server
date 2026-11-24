@@ -23,10 +23,11 @@ class RFIDManager:
         
         try:
             db = SessionLocal()
-            # Check if the card exists and is associated with an active account that has the resident role
-            # (a manager who is not a resident cannot charge)
+            # Check if the card exists, is not switched off and is associated with an active account that has
+            # the resident role (a manager who is not a resident cannot charge)
             card = db.query(Card).join(Resident).filter(
                 Card.rfid == rfid_tag,
+                Card.enabled.is_(True),
                 Resident.status == ResidentStatus.ACTIVE,
                 Resident.has_role_sql(RESIDENT_ROLE)
             ).first()

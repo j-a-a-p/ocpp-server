@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Activate from "./Activate";
@@ -36,6 +36,26 @@ describe("Activate page (the link in the welcome mail)", () => {
     expect(screen.getByText("Account activated")).toBeInTheDocument();
     expect(requests(fetchMock)).toEqual([expect.stringMatching(/^POST .*\/residents\/activate\/tok$/)]);
     expect(checkAuth).toHaveBeenCalledOnce();
+  });
+
+  it("sends a manager who cannot charge to the management portal instead of the resident app", async () => {
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    mockFetch({ "POST /residents/activate/tok": json({ message: "Activated", roles: ["manager"] }) });
+
+    renderActivate("/activate?token=tok");
+
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/management-ui/"));
+    expect(screen.queryByText("The app")).not.toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps someone who is a resident too in the resident app", async () => {
+    mockFetch({ "POST /residents/activate/tok": json({ message: "Activated", roles: ["manager", "resident"] }) });
+
+    renderActivate("/activate?token=tok");
+
+    expect(await screen.findByText("The app")).toBeInTheDocument();
   });
 
   it("shows why the link was refused", async () => {

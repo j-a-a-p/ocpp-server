@@ -1,6 +1,8 @@
 import { API_BASE_URL } from '../config';
+import type { Address } from '../utils/address';
 
-export interface ChargeTransaction {
+/** The address the resident of the card lives at: the Charges page groups the charges by it. */
+export interface ChargeTransaction extends Partial<Address> {
   id: number;
   station_id: string;
   rfid: string;
@@ -14,19 +16,27 @@ export interface ChargeTransaction {
   total_cost: number;
 }
 
+/** What is charged at one address in one month. */
 export interface MonthlyData {
   year: number;
   month: number;
   month_display: string;
-  resident_name: string;
+  /** See addressKey: identifies the address. */
+  address_key: string;
+  address: string;
+  /** Who charged there, in order of name. */
+  residents: string[];
   total_energy: number;
   transaction_count: number;
   total_cost: number;
 }
 
+/** What is charged at one address in one year. */
 export interface YearlySummary {
   year: number;
-  resident_name: string;
+  address_key: string;
+  address: string;
+  residents: string[];
   total_energy: number;
   transaction_count: number;
   total_cost: number;

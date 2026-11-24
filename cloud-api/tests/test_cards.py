@@ -12,6 +12,7 @@ class TestAccess:
         assert client.get("/cards/refused").status_code == 401
         assert client.post("/cards/add_card/CP1").status_code == 401
         assert client.put("/cards/04AABBCC/name", json={"name": "x"}).status_code == 401
+        assert client.put("/cards/04AABBCC/enabled", json={"enabled": False}).status_code == 401
 
 
 class TestRoles:
@@ -49,7 +50,7 @@ class TestRegistering:
         response = user.post("/cards/", json={"rfid": "04AABBCC", "name": "Tesla", "resident_id": me.id})
 
         assert response.status_code == 200
-        assert response.json() == {"rfid": "04AABBCC", "name": "Tesla", "resident_id": me.id}
+        assert response.json() == {"rfid": "04AABBCC", "name": "Tesla", "resident_id": me.id, "enabled": True}
         assert db.get(Card, "04AABBCC").name == "Tesla"
 
     def test_list_cards(self, user, me, make_card, make_resident):
@@ -123,7 +124,7 @@ class TestRefusedCards:
         response = user.post("/cards/add_card/CP1")
 
         assert response.status_code == 200
-        assert response.json() == {"rfid": "AAAA0002", "name": "AAAA0002", "resident_id": me.id}
+        assert response.json() == {"rfid": "AAAA0002", "name": "AAAA0002", "resident_id": me.id, "enabled": True}
         db.expire_all()
         assert db.get(Card, "AAAA0002").resident_id == me.id
         assert db.get(RefusedCard, refused_id) is None
@@ -192,3 +193,75 @@ class TestStationAuthentication:
         response = client.get("/cards/authenticate/04AABBCC", params={"station_id": "CP1"}, headers={"X-API-Key": "your-secure-api-key"})
 
         assert response.status_code == 403
+
+class TestSwitchingCardsOff:
+    """A manager can switch a card off, for example a lost one. It stays registered but cannot charge."""
+
+    def test_cards_are_on_when_registered(self, user, me, make_card):
+        make_card(me, "04AABBCC")
+
+        assert user.get("/cards/").json()[0]["enabled"] is True
+        assert user.get("/cards/my_cards").json()["cards"][0]["enabled"] is True
+
+    def test_a_manager_switches_a_card_off_and_on_again(self, user, me, make_card, db):
+        make_card(me, "04AABBCC")
+
+        off = user.put("/cards/04AABBCC/enabled", json={"enabled": False})
+        assert (off.status_code, off.json()["enabled"]) == (200, False)
+        assert db.get(Card, "04AABBCC").enabled is False
+        assert user.get("/cards/").json()[0]["enabled"] is False
+
+        on = user.put("/cards/04AABBCC/enabled", json={"enabled": True})
+        assert on.json()["enabled"] is True
+        db.expire_all()
+        assert db.get(Card, "04AABBCC").enabled is True
+
+    def test_it_is_for_managers_only_so_the_owner_cannot_switch_the_card_back_on(self, login_as, make_resident, make_card):
+        owner = make_resident(email="anna@example.com", roles="resident")
+        make_card(owner, "04AABBCC")
+
+        assert login_as(owner).put("/cards/04AABBCC/enabled", json={"enabled": True}).status_code == 403
+
+    def test_unknown_card(self, user):
+        assert user.put("/cards/NOPE/enabled", json={"enabled": False}).status_code == 404
+
+    def test_the_station_refuses_a_card_that_is_off_without_remembering_it_as_new(
+        self, user, client, api_key_headers, me, make_card, db
+    ):
+        make_card(me, "04AABBCC")
+        user.put("/cards/04AABBCC/enabled", json={"enabled": False})
+
+        response = client.get("/cards/authenticate/04AABBCC", params={"station_id": "CP1"}, headers=api_key_headers)
+
+        assert response.status_code == 404
+        assert db.query(RefusedCard).count() == 0
+
+    def test_the_station_accepts_the_card_again_when_it_is_switched_on(self, user, client, api_key_headers, me, make_card):
+        make_card(me, "04AABBCC")
+        user.put("/cards/04AABBCC/enabled", json={"enabled": False})
+        user.put("/cards/04AABBCC/enabled", json={"enabled": True})
+
+        response = client.get("/cards/authenticate/04AABBCC", params={"station_id": "CP1"}, headers=api_key_headers)
+
+        assert response.json() == {"resident_id": me.id}
+
+    def test_other_cards_of_the_resident_keep_working(self, user, client, api_key_headers, me, make_card):
+        make_card(me, "04AABBCC")
+        make_card(me, "04DDEEFF")
+        user.put("/cards/04AABBCC/enabled", json={"enabled": False})
+
+        other = client.get("/cards/authenticate/04DDEEFF", params={"station_id": "CP1"}, headers=api_key_headers)
+
+        assert other.status_code == 200
+
+    def test_a_registered_card_is_not_offered_as_a_refused_card_to_add(self, user, me, make_card, make_refused_card):
+        make_card(me, "04AABBCC")
+        make_refused_card("04AABBCC", station_id="CP1")
+
+        assert user.get("/cards/refused").status_code == 404
+
+    def test_a_registered_card_cannot_be_added_again(self, user, me, make_card, make_refused_card):
+        make_card(me, "04AABBCC")
+        make_refused_card("04AABBCC", station_id="CP1")
+
+        assert user.post("/cards/add_card/CP1").status_code == 409

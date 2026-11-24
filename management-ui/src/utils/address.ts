@@ -7,8 +7,25 @@ export interface Address {
 }
 
 /** "Hoofdstraat 12 A". The zip code and the city are left out: they hardly tell addresses apart in the grouped view. */
-export const formatAddress = ({ street_name, house_number, house_number_suffix }: Address): string =>
+export const formatAddress = ({ street_name, house_number, house_number_suffix }: Partial<Address>): string =>
   [street_name, [house_number, house_number_suffix].filter(Boolean).join(" ")].filter(Boolean).join(" ");
+
+/** The key of the empty address, shared by everybody without one. */
+export const NO_ADDRESS = "";
+
+export const NO_ADDRESS_LABEL = "No address";
+
+/**
+ * What makes two addresses the same one: street, house number and suffix, ignoring case and spaces around them.
+ * Zip code and city are left out, like in the grouped views. Everybody without a street has the key NO_ADDRESS.
+ */
+export const addressKey = ({ street_name, house_number, house_number_suffix }: Partial<Address>): string =>
+  street_name
+    ? [street_name, house_number, house_number_suffix].map((part) => (part ?? "").trim().toLowerCase()).join("|")
+    : NO_ADDRESS;
+
+/** The address to show in a grouped view. */
+export const addressLabel = (address: Partial<Address>): string => (addressKey(address) === NO_ADDRESS ? NO_ADDRESS_LABEL : formatAddress(address));
 
 const same = (a: string | null | undefined, b: string | null | undefined) =>
   (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
@@ -58,8 +75,6 @@ export interface AddressGroup<T> {
   members: T[];
 }
 
-const NO_ADDRESS = "";
-
 /**
  * Groups accounts by address. The addresses are in the order street name, house number (numerically) and suffix,
  * the accounts without an address come last. Within an address the resident who invited a household comes first,
@@ -68,9 +83,7 @@ const NO_ADDRESS = "";
 export const groupByAddress = <T extends HouseholdFields>(residents: T[]): AddressGroup<T>[] => {
   const groups = new Map<string, { sample: T; members: T[] }>();
   for (const resident of residents) {
-    const key = resident.street_name
-      ? [resident.street_name, resident.house_number, resident.house_number_suffix].map((part) => (part ?? "").trim().toLowerCase()).join("|")
-      : NO_ADDRESS;
+    const key = addressKey(resident);
     const group = groups.get(key);
     if (group) group.members.push(resident);
     else groups.set(key, { sample: resident, members: [resident] });

@@ -29,7 +29,7 @@ def _invite(db: Session, email: str, full_name: str, roles, address=None, househ
     )
 
     try:
-        send_invitation_email(email, invite_token)
+        send_invitation_email(email, invite_token, new_resident.role_names)
         logger.info(f"Invitation email sent to {email}")
     except Exception as e:
         logger.error(f"Failed to send invitation email to {email}: {str(e)}")
@@ -159,28 +159,23 @@ def send_invitation(
     db: Session = Depends(get_db_dependency),
     _: Resident = Depends(require_manager)
 ):
-    """Send invitation email to a resident. Requires the manager role."""
-    # Get the resident
+    """Send the invitation again, also while the previous one is still valid (it was lost, or ended up in the
+    spam folder). The link of the previous mail stops working. Requires the manager role."""
     resident = get_resident(db, resident_id)
     if not resident:
         raise HTTPException(status_code=404, detail="Resident not found")
-    
-    # Check if resident already has an active invitation
-    if resident.invite_token and resident.invite_expires_at and resident.invite_expires_at > datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Resident already has an active invitation")
-    
-    # Generate new invitation token
+
+    if resident.status != ResidentStatus.INVITED:
+        raise HTTPException(status_code=400, detail="This account is already active, there is nothing to invite")
+
     invite_token, expires_at = generate_invitation_token()
-    
-    # Update resident with new invitation token
     resident = update_resident(db, resident_id, {
         "invite_token": invite_token,
         "invite_expires_at": expires_at
     })
-    
-    # Send invitation email
+
     try:
-        send_invitation_email(resident.email, invite_token)
+        send_invitation_email(resident.email, invite_token, resident.role_names)
         logger.info(f"Invitation email sent to {resident.email}")
     except Exception as e:
         logger.error(f"Failed to send invitation email to {resident.email}: {str(e)}")
@@ -218,4 +213,5 @@ def activate_resident(token: str, response: Response, db: Session = Depends(get_
         max_age=JWT_EXPIRATION_DAYS * 24 * 60 * 60
     )
     
-    return {"message": "Account activated successfully"}
+    # The roles tell the portal where to send the new account: a manager who cannot charge has nothing to do in the resident portal.
+    return {"message": "Account activated successfully", "roles": resident.role_names}
