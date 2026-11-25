@@ -9,7 +9,7 @@ export interface ReportSession {
   ended: Date | null;
   station: string;
   card: string;
-  /** Who charged: more than one person can live at the address. */
+  /** Who charged: more than one person can live in the household. */
   resident: string;
   energy: number;
   cost: number;
@@ -27,12 +27,19 @@ export interface YearlyReport {
   /** The address the report is about, as shown. */
   address: string;
   address_key: string;
-  /** Everybody who charged there that year, in order of name. */
+  household_id?: number | null;
+  /** The main member who receives invoices and updates. */
+  main_resident?: string | null;
+  main_resident_email?: string | null;
+  /** Residency period clipped to the report year (YYYY-MM-DD), when partial year. */
+  period_start?: string;
+  period_end?: string;
+  /** Everybody who charged in this household that year, in order of name. */
   residents: string[];
   year: number;
   generated: Date;
   total_energy: number;
-  /** What the address has to pay for the year. */
+  /** What the household has to pay for the year. */
   total_cost: number;
   /** Oldest first. */
   sessions: ReportSession[];
@@ -46,20 +53,40 @@ const MONTH_NAMES = [
 ];
 
 /**
- * Everything charged at one address in one year, by everybody living there. It follows the same rules as the yearly
+ * Grouping key for billing: splits consecutive households at the same address by household_id,
+ * falling back to addressKey when no household_id is present.
+ */
+export const billingGroupKey = (transaction: Pick<ChargeTransaction, "household_id" | "street_name" | "house_number" | "house_number_suffix">): string =>
+  transaction.household_id != null ? `household:${transaction.household_id}` : addressKey(transaction);
+
+const clipPeriodToYear = (year: number, startDate?: string | null, endDate?: string | null) => {
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
+  const period_start = startDate && startDate > yearStart ? startDate : yearStart;
+  const period_end = endDate && endDate < yearEnd ? endDate : yearEnd;
+  return { period_start, period_end };
+};
+
+/**
+ * Everything charged by one household (or address) in one year. Follows the same rules as the yearly
  * summaries on the Charges page (a charge that delivered no energy does not count, the year is the year the charge started),
- * so the totals of the report are the totals of that table.
+ * so the totals of the report match the totals of that table.
  */
 export const buildYearlyReport = (
   transactions: ChargeTransaction[],
-  address_key: string,
+  group_key: string,
   year: number,
   generated: Date = new Date()
 ): YearlyReport => {
-  const sessions: ReportSession[] = transactions
+  const matches = (transaction: ChargeTransaction) =>
+    group_key.startsWith("household:")
+      ? billingGroupKey(transaction) === group_key
+      : addressKey(transaction) === group_key;
+
+  const matching = transactions.filter(matches);
+  const sessions: ReportSession[] = matching
     .filter(
       (transaction) =>
-        addressKey(transaction) === address_key &&
         transaction.final_energy_kwh > 0 &&
         parseUtc(transaction.created).getFullYear() === year
     )
@@ -85,11 +112,17 @@ export const buildYearlyReport = (
     months.set(month, entry);
   }
 
-  const sample = transactions.find((transaction) => addressKey(transaction) === address_key);
+  const sample = matching[0];
+  const { period_start, period_end } = clipPeriodToYear(year, sample?.residency_start_date, sample?.residency_end_date);
 
   return {
     address: addressLabel(sample ?? {}),
-    address_key,
+    address_key: sample ? addressKey(sample) : group_key,
+    household_id: sample?.household_id ?? null,
+    main_resident: sample?.main_resident_name ?? null,
+    main_resident_email: sample?.main_resident_email ?? null,
+    period_start,
+    period_end,
     residents: [...new Set(sessions.map((session) => session.resident))].sort((a, b) => a.localeCompare(b)),
     year,
     generated,

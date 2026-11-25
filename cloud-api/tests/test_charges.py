@@ -80,10 +80,12 @@ class TestAllTransactionsForManagement:
         self, user, make_card, make_transaction, make_resident
     ):
         anna = make_resident(
-            email="anna@example.com", roles="resident", street_name="Hoofdstraat", house_number="12",
+            email="anna@example.com", full_name="Anna Head", roles="resident", street_name="Hoofdstraat", house_number="12",
             house_number_suffix="A", zip_code="3511 AB", city="Utrecht",
+            residency_start_date=datetime(2026, 1, 1).date(), residency_end_date=datetime(2026, 6, 30).date(),
         )
-        make_transaction(make_card(anna), [(0, 7.0, 1.0)])
+        bob = make_resident(email="bob@example.com", full_name="Bob Member", roles="resident", household_head_id=anna.id)
+        make_transaction(make_card(bob), [(0, 7.0, 1.0)])
 
         charge = user.get("/charge-transactions/all").json()[0]
 
@@ -91,6 +93,11 @@ class TestAllTransactionsForManagement:
             "street_name": "Hoofdstraat", "house_number": "12", "house_number_suffix": "A",
             "zip_code": "3511 AB", "city": "Utrecht",
         }
+        assert charge["household_id"] == anna.household_id
+        assert charge["main_resident_name"] == "Anna Head"
+        assert charge["main_resident_email"] == "anna@example.com"
+        assert charge["residency_start_date"] == "2026-01-01"
+        assert charge["residency_end_date"] == "2026-06-30"
 
     def test_a_resident_without_an_address_has_empty_address_fields(self, user, me, make_card, make_transaction):
         make_transaction(make_card(me), [(0, 7.0, 1.0)])

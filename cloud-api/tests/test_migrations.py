@@ -62,6 +62,40 @@ def test_v18_adds_an_empty_zip_code_and_city(tmp_path):
     assert connection.execute("SELECT zip_code, city FROM residents").fetchall() == [(None, None)]
 
 
+def test_v20_migrates_existing_residents_and_household_members_to_households(tmp_path):
+    connection = database_before(tmp_path, 20)
+    connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute(
+        "INSERT INTO residents (id, full_name, email, status, roles, street_name, house_number, house_number_suffix, zip_code, city, household_head_id)"
+        " VALUES (1, 'Anna', 'anna@example.com', 'ACTIVE', 'manager,resident', 'Hoofdstraat', '12', 'A', '3511 AB', 'Utrecht', NULL)"
+    )
+    connection.execute(
+        "INSERT INTO residents (id, full_name, email, status, roles, street_name, house_number, house_number_suffix, zip_code, city, household_head_id)"
+        " VALUES (2, 'Bob', 'bob@example.com', 'ACTIVE', 'resident', 'Hoofdstraat', '12', 'A', '3511 AB', 'Utrecht', 1)"
+    )
+    connection.execute(
+        "INSERT INTO residents (id, full_name, email, status, roles)"
+        " VALUES (3, 'Boss', 'boss@example.com', 'ACTIVE', 'manager')"
+    )
+
+    connection.executescript((MIGRATIONS / "V20__add_households.sql").read_text())
+
+    households = connection.execute(
+        "SELECT id, street_name, house_number, house_number_suffix, zip_code, city, start_date, end_date FROM households"
+    ).fetchall()
+    assert households == [(1, "Hoofdstraat", "12", "A", "3511 AB", "Utrecht", None, None)]
+
+    residents = connection.execute(
+        "SELECT id, household_id, is_main_member FROM residents ORDER BY id"
+    ).fetchall()
+    assert residents == [(1, 1, 1), (2, 1, 0), (3, None, 0)]
+
+    # Partial unique index enforces at most one main member per household.
+    import pytest
+    with pytest.raises(sqlite3.IntegrityError):
+        connection.execute("UPDATE residents SET is_main_member = 1 WHERE id = 2")
+
+
 def test_v11_counts_the_steps_upwards_and_ignores_drops(tmp_path):
     connection = database_before(tmp_path, 11)
     add_session(connection, 1, [1.0, 2.5, 4.0, 0.5, 1.5], stored_total=1.5)  # counter restarted after a pause

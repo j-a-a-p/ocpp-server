@@ -1,8 +1,8 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from database import get_db
 from fastapi import Depends, HTTPException, Cookie
 from invite import verify_auth_token
-from models import Resident, ResidentStatus, Role
+from models import Household, Resident, ResidentStatus, Role
 
 get_db_dependency = get_db
 
@@ -18,7 +18,12 @@ def get_authenticated_active_resident(
     if not resident_id:
         raise HTTPException(status_code=401, detail="Invalid auth token")
     
-    resident = db.query(Resident).filter(Resident.id == resident_id).first()
+    resident = (
+        db.query(Resident)
+        .options(selectinload(Resident.household).selectinload(Household.members))
+        .filter(Resident.id == resident_id)
+        .first()
+    )
     if not resident:
         raise HTTPException(status_code=404, detail="Resident not found")
     

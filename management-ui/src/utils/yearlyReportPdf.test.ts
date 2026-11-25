@@ -85,6 +85,22 @@ describe("createYearlyReportPdf", () => {
 
     expect(doc.output()).toContain("/Title (Charging report 2026 - Hoofdstraat 12)");
   });
+
+  it("includes the main member and clipped residency period when provided", async () => {
+    const pdf = (
+      await createYearlyReportPdf(
+        report([session(1)], {
+          main_resident: "Anna Anderson",
+          main_resident_email: "anna@example.com",
+          period_start: "2026-01-01",
+          period_end: "2026-06-30",
+        }),
+      )
+    ).output();
+
+    expect(pdf).toContain("Main member: Anna Anderson \\(anna@example.com\\)");
+    expect(pdf).toContain("Period: 1 January 2026 to 30 June 2026");
+  });
 });
 
 describe("toPdfText", () => {
@@ -109,5 +125,11 @@ describe("reportFileName", () => {
 
   it("copes with an address without letters", () => {
     expect(reportFileName({ address: "李明", year: 2026 })).toBe("charging-report-2026-address.pdf");
+  });
+
+  it("appends the main member name when provided so mid-year reports have distinct file names", () => {
+    expect(reportFileName({ address: "Hoofdstraat 12", year: 2026, main_resident: "Anna Anderson" })).toBe(
+      "charging-report-2026-hoofdstraat-12-anna-anderson.pdf",
+    );
   });
 });

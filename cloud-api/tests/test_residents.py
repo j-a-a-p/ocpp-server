@@ -1,9 +1,10 @@
-"""Managing residents: inviting, activating, roles, addresses and household members."""
-from datetime import datetime, timedelta
+"""Managing residents: inviting, activating, roles, addresses, households and residency lifecycle."""
+from datetime import date, datetime, timedelta
 
 import invite
 from conftest import INVITE_URL
-from models import Resident, ResidentStatus
+from models import Household, Resident, ResidentStatus
+from tariff import local_today
 
 
 def reload(db, resident_id) -> Resident:
@@ -14,11 +15,17 @@ def reload(db, resident_id) -> Resident:
 HOME = {"street_name": "Hoofdstraat", "house_number": "12", "zip_code": "1234 AB", "city": "Utrecht"}
 
 
-def new_resident(email="dave@example.com", full_name="Dave Dee", roles=("resident",), **address) -> dict:
-    """The body of an invitation. A resident gets the address of HOME unless another one is given."""
+def new_resident(
+    email="dave@example.com",
+    full_name="Dave Dee",
+    roles=("resident",),
+    residency_start_date="2026-01-01",
+    **address,
+) -> dict:
+    """The body of an invitation. A resident gets the address of HOME and a start date unless overridden."""
     body = {"full_name": full_name, "email": email, "roles": list(roles)}
     if "resident" in roles:
-        body.update({**HOME, **address})
+        body.update({**HOME, "residency_start_date": residency_start_date, **address})
     return body
 
 
@@ -316,12 +323,24 @@ class TestRolesAndAddressOfAnInvitation:
         assert db.query(Resident).filter_by(email="dave@example.com").one().roles == "manager,resident"
 
     def test_the_spelling_of_an_existing_street_is_reused(self, user, make_resident):
-        make_resident(email="anna@example.com", roles="resident", street_name="Hoofdstraat", house_number="12", house_number_suffix="A", zip_code="1234 AB", city="Utrecht")
+        make_resident(
+            email="anna@example.com", roles="resident",
+            street_name="Hoofdstraat", house_number="12", house_number_suffix="A", zip_code="1234 AB", city="Utrecht",
+            residency_end_date=date(2025, 12, 31),
+        )
 
-        response = user.post("/residents/", json={**new_resident(), "street_name": "  hoofdstraat ", "house_number": "12", "house_number_suffix": "a", "zip_code": "1234 ab", "city": "utrecht"})
+        response = user.post("/residents/", json={
+            **new_resident(residency_start_date="2026-01-01"),
+            "street_name": "  hoofdstraat ", "house_number": "12", "house_number_suffix": "a", "zip_code": "1234 ab", "city": "utrecht",
+        })
 
         body = response.json()
         assert (body["street_name"], body["house_number"], body["house_number_suffix"], body["zip_code"], body["city"]) == ("Hoofdstraat", "12", "A", "1234 AB", "Utrecht")
+
+    def test_a_resident_needs_a_residency_start_date(self, user, outbox):
+        body = {"full_name": "A", "email": "a@example.com", "roles": ["resident"], **HOME}
+        assert user.post("/residents/", json=body).status_code == 422
+        assert outbox == []
 
     def test_a_new_street_is_stored_as_typed_with_clean_spaces(self, user):
         response = user.post("/residents/", json={**new_resident(), "street_name": "  Nieuwe   Dorpsstraat "})
@@ -333,8 +352,8 @@ class TestAddressOptions:
     def test_lists_each_address_once_in_order(self, user, make_resident):
         make_resident(email="a@example.com", roles="resident", street_name="Kerkstraat", house_number="3")
         make_resident(email="b@example.com", roles="resident", street_name="Hoofdstraat", house_number="12", house_number_suffix="A")
-        make_resident(email="c@example.com", roles="resident", street_name="Hoofdstraat", house_number="12", household_head_id=2)
-        make_resident(email="d@example.com", roles="resident", street_name="Hoofdstraat", house_number="12", household_head_id=2)
+        c = make_resident(email="c@example.com", roles="resident", street_name="Hoofdstraat", house_number="12")
+        make_resident(email="d@example.com", roles="resident", household_head_id=c.id)
         make_resident(email="e@example.com", roles="manager")  # no address
 
         options = user.get("/residents/address-options").json()
@@ -533,13 +552,18 @@ class TestHouseholdMembers:
         assert response.json()["roles"] == ["resident"]
 
     def test_a_manager_who_is_also_a_resident_can_invite_their_household(self, user, me, db):
-        me.street_name, me.house_number, me.zip_code, me.city = "Hoofdstraat", "12", "1234 AB", "Utrecht"
+        me.household.street_name = "Hoofdstraat"
+        me.household.house_number = "12"
+        me.household.zip_code = "1234 AB"
+        me.household.city = "Utrecht"
         db.commit()
 
         response = user.post("/residents/household-members", json={"full_name": "Bob", "email": "bob@example.com"})
 
         assert response.status_code == 200
         assert response.json()["household_head_id"] == me.id
+        assert response.json()["household_id"] == me.household_id
+        assert response.json()["is_main_member"] is False
 
     def test_a_manager_who_is_not_a_resident_has_no_household(self, login_as, make_resident):
         boss = login_as(make_resident(email="boss@example.com", roles="manager"))
@@ -660,3 +684,117 @@ class TestActivation:
 
         assert response.status_code == 400
         assert reload(db, resident.id).status == ResidentStatus.INVITED
+
+
+class TestResidencyLifecycle:
+    """Households, main member, termination, non-overlapping occupancies and read-only after move-out."""
+
+    def test_first_resident_at_address_is_main_member_with_start_date(self, user):
+        response = user.post("/residents/", json=new_resident(residency_start_date="2026-03-01"))
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["household_id"] is not None
+        assert body["is_main_member"] is True
+        assert body["residency_start_date"] == "2026-03-01"
+        assert body["residency_end_date"] is None
+
+    def test_cannot_add_second_active_household_at_same_address(self, user):
+        first = user.post("/residents/", json=new_resident(email="first@example.com", residency_start_date="2026-01-01"))
+        second = user.post("/residents/", json=new_resident(email="second@example.com", residency_start_date="2026-06-01"))
+
+        assert first.status_code == 200
+        assert second.status_code == 409
+        assert "Terminate the current residency first" in second.json()["detail"]
+
+    def test_manager_adds_household_member_inheriting_address_and_dates(self, user, outbox):
+        head = user.post("/residents/", json=new_resident(email="head@example.com", residency_start_date="2026-02-01")).json()
+
+        member = user.post(
+            f"/households/{head['household_id']}/members",
+            json={"full_name": "Partner", "email": "partner@example.com"},
+        )
+
+        assert member.status_code == 200
+        body = member.json()
+        assert body["household_id"] == head["household_id"]
+        assert body["is_main_member"] is False
+        assert body["household_head_id"] == head["id"]
+        assert body["street_name"] == "Hoofdstraat"
+        assert body["residency_start_date"] == "2026-02-01"
+        assert outbox[-1]["recipient"] == "partner@example.com"
+
+    def test_terminating_residency_sets_end_date_for_whole_household_and_allows_next_resident(self, user):
+        head = user.post("/residents/", json=new_resident(email="old@example.com", residency_start_date="2026-01-01")).json()
+        member = user.post(
+            f"/households/{head['household_id']}/members",
+            json={"full_name": "Partner", "email": "partner@example.com"},
+        ).json()
+
+        terminated = user.put(f"/households/{head['household_id']}/termination", json={"end_date": "2026-06-30"})
+        assert terminated.status_code == 200
+        assert {m["email"]: m["residency_end_date"] for m in terminated.json()} == {
+            "old@example.com": "2026-06-30",
+            "partner@example.com": "2026-06-30",
+        }
+
+        # Same-day or earlier start date is rejected.
+        overlap = user.post("/residents/", json=new_resident(email="new@example.com", residency_start_date="2026-06-30"))
+        assert overlap.status_code == 409
+
+        # Starting the day after end_date succeeds in a new household.
+        next_res = user.post("/residents/", json=new_resident(email="new@example.com", residency_start_date="2026-07-01"))
+        assert next_res.status_code == 200
+        body = next_res.json()
+        assert body["household_id"] != head["household_id"]
+        assert body["is_main_member"] is True
+        assert body["residency_start_date"] == "2026-07-01"
+        assert body["residency_end_date"] is None
+
+    def test_cannot_clear_or_extend_end_date_into_scheduled_next_household(self, user):
+        first = user.post("/residents/", json=new_resident(email="old@example.com", residency_start_date="2026-01-01")).json()
+        assert user.put(f"/households/{first['household_id']}/termination", json={"end_date": "2026-06-30"}).status_code == 200
+        assert user.post("/residents/", json=new_resident(email="new@example.com", residency_start_date="2026-07-01")).status_code == 200
+
+        # Cannot clear end date once a successor is scheduled.
+        assert user.put(f"/households/{first['household_id']}/termination", json={"end_date": None}).status_code == 409
+        # Cannot extend onto or past successor's start date.
+        assert user.put(f"/households/{first['household_id']}/termination", json={"end_date": "2026-07-01"}).status_code == 409
+        # Shortening is fine.
+        assert user.put(f"/households/{first['household_id']}/termination", json={"end_date": "2026-06-15"}).status_code == 200
+
+    def test_cannot_terminate_before_start_date(self, user):
+        head = user.post("/residents/", json=new_resident(email="old@example.com", residency_start_date="2026-05-01")).json()
+        response = user.put(f"/households/{head['household_id']}/termination", json={"end_date": "2026-04-30"})
+        assert response.status_code == 400
+
+    def test_manager_retains_management_access_after_residency_ends(self, login_as, make_resident):
+        yesterday = local_today() - timedelta(days=1)
+        boss = make_resident(
+            email="boss@example.com", roles="manager,resident", **HOME,
+            residency_start_date=yesterday - timedelta(days=30), residency_end_date=yesterday,
+        )
+        client = login_as(boss)
+
+        assert client.get("/residents/").status_code == 200
+        validated = client.get("/auth/validate", params={"flow": "management"}).json()
+        assert validated["residency_state"] == "ended"
+
+    def test_ended_household_cannot_invite_new_members(self, user, login_as, make_resident):
+        yesterday = local_today() - timedelta(days=1)
+        head = make_resident(
+            email="old@example.com", roles="resident", **HOME,
+            residency_start_date=yesterday - timedelta(days=30), residency_end_date=yesterday,
+        )
+
+        # Neither the resident nor a manager can add members to an ended household.
+        assert login_as(head).post("/residents/household-members", json={"full_name": "Late", "email": "late@example.com"}).status_code == 403
+        assert user.post(f"/households/{head.household_id}/members", json={"full_name": "Late", "email": "late@example.com"}).status_code == 400
+
+    def test_upcoming_main_member_can_invite_household_members_before_start_date(self, login_as, make_resident):
+        tomorrow = local_today() + timedelta(days=1)
+        head = make_resident(email="soon@example.com", roles="resident", **HOME, residency_start_date=tomorrow)
+
+        response = login_as(head).post("/residents/household-members", json={"full_name": "Partner", "email": "partner@example.com"})
+        assert response.status_code == 200
+        assert response.json()["residency_state"] == "upcoming"

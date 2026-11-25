@@ -14,7 +14,7 @@ from sqlalchemy import create_engine, text
 import charge_point
 import database
 from meter_values_manager import MeterValuesManager
-from models import Resident, ResidentStatus
+from models import Household, Resident, ResidentStatus
 
 MIGRATIONS = Path(__file__).resolve().parents[2] / "cloud-api" / "db" / "migrations"
 
@@ -69,8 +69,14 @@ def add_card(db, rfid: str, resident: Resident) -> None:
 
 @pytest.fixture
 def resident_with_card(db):
-    """An active resident with the card 04AABBCC."""
-    resident = Resident(email="anna@example.com", full_name="Anna", status=ResidentStatus.ACTIVE, roles="resident")
+    """An active resident in an open-ended household with the card 04AABBCC."""
+    household = Household(start_date=None, end_date=None)
+    db.add(household)
+    db.flush()
+    resident = Resident(
+        email="anna@example.com", full_name="Anna", status=ResidentStatus.ACTIVE,
+        roles="resident", household_id=household.id,
+    )
     db.add(resident)
     db.commit()
     add_card(db, "04AABBCC", resident)

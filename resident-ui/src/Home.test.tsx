@@ -259,4 +259,64 @@ describe("Home (the resident portal)", () => {
     expect(await screen.findByText("Failed to load your charging sessions")).toBeInTheDocument();
     expect(screen.getByText("No charging sessions yet")).toBeInTheDocument();
   });
+
+  describe("residency lifecycle states", () => {
+    it("shows a welcome landing page before the residency start date explaining the product and when charging starts", async () => {
+      signedInAs({
+        ...resident,
+        is_main_member: true,
+        residency_start_date: "2026-07-01",
+        residency_end_date: null,
+        residency_state: "upcoming",
+      });
+      const fetchMock = stack({ "GET /residents/household-members": json([]) });
+
+      renderWithProviders(<Home />);
+
+      expect(await screen.findByText("Welcome to Charger, Anna")).toBeInTheDocument();
+      expect(screen.getByText("Charging starts on 1 July 2026")).toBeInTheDocument();
+      expect(screen.getByText("1. Register your charging card")).toBeInTheDocument();
+      expect(screen.getByText("2. Charge with clear rates")).toBeInTheDocument();
+      expect(screen.getByText("3. Household & billing")).toBeInTheDocument();
+      // Main member can already invite household members ahead of move-in, but live charging endpoints are skipped.
+      expect(await screen.findByText("Household members")).toBeInTheDocument();
+      expect(screen.queryByText("My cards")).not.toBeInTheDocument();
+      expect(requests(fetchMock).filter((r) => r.includes("/charge-transactions/") || r.includes("/cards/"))).toEqual([]);
+    });
+
+    it("shows an ending notice banner when a future end date is set", async () => {
+      signedInAs({
+        ...resident,
+        residency_start_date: "2026-01-01",
+        residency_end_date: "2026-12-31",
+        residency_state: "active",
+      });
+      stack({ "GET /residents/household-members": json([]) });
+
+      renderWithProviders(<Home />);
+
+      expect(await screen.findByText("Your residency ends on 31 December 2026")).toBeInTheDocument();
+    });
+
+    it("switches to a read-only view after the residency end date, preserving history and cards without write actions", async () => {
+      signedInAs({
+        ...resident,
+        is_main_member: true,
+        residency_start_date: "2025-01-01",
+        residency_end_date: "2026-06-30",
+        residency_state: "ended",
+      });
+      const fetchMock = stack();
+
+      renderWithProviders(<Home />);
+
+      expect(await screen.findByText("Your residency ended on 30 June 2026")).toBeInTheDocument();
+      expect(await screen.findByText("19.5")).toBeInTheDocument();
+      expect(await screen.findByText("04AABBCC")).toBeInTheDocument();
+      expect(screen.queryByText("Refused at CP1")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /rename card/i })).not.toBeInTheDocument();
+      expect(screen.queryByText("Household members")).not.toBeInTheDocument();
+      expect(requests(fetchMock).filter((r) => r.includes("/cards/refused") || r.includes("household-members"))).toEqual([]);
+    });
+  });
 });

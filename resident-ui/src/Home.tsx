@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, App, Col, Row } from "antd";
+import dayjs from "dayjs";
 import { useAuth } from "./contexts/AuthContext";
 import { getHouseholdMembers, inviteHouseholdMember, type HouseholdMember } from "./services/householdService";
 import { formatAddress } from "./utils/address";
 import HouseholdMembersCard from "./components/HouseholdMembersCard";
+import UpcomingResidencyLanding from "./components/UpcomingResidencyLanding";
 import { calculateMonthlyEnergyStats, getAllCurrentResidentTransactions, type ChargeTransaction } from "./services/chargeTransactionService";
 import { addCard, getMyCards, getRefusedCards, updateCardName, type Card as CardType, type RefusedCard } from "./services/cardService";
 import { chargingCostService, type Tariff } from "./services/chargingCostService";
@@ -22,8 +24,12 @@ const Home: React.FC = () => {
   // Only a resident can charge. A manager who is not a resident only has the management portal.
   // (The API enforces this too, this only decides what is shown.)
   const isResident = user ? user.roles.includes("resident") : true;
-  // A household member cannot invite other household members.
-  const canInviteHousehold = isResident && user !== null && user.household_head_id === null;
+  const residencyState = user?.residency_state ?? null;
+  const isUpcoming = isResident && residencyState === "upcoming" && Boolean(user?.residency_start_date);
+  const isEnded = isResident && residencyState === "ended";
+  const isMainMember = user ? (user.is_main_member ?? user.household_head_id === null) : false;
+  // Only the main member of an active or upcoming household can invite household members.
+  const canInviteHousehold = isResident && user !== null && isMainMember && !isEnded;
   const address = user ? formatAddress(user) : null;
   const [householdMembers, setHouseholdMembers] = useState<HouseholdMember[]>([]);
   const [householdLoading, setHouseholdLoading] = useState(true);
@@ -89,12 +95,14 @@ const Home: React.FC = () => {
   }, [message]);
 
   useEffect(() => {
-    if (!isResident) return;
+    if (!isResident || isUpcoming) return;
     loadTransactions();
     loadCards();
-    loadRefusedCards();
-    loadRate();
-  }, [isResident, loadTransactions, loadCards, loadRefusedCards, loadRate]);
+    if (!isEnded) {
+      loadRefusedCards();
+      loadRate();
+    }
+  }, [isResident, isUpcoming, isEnded, loadTransactions, loadCards, loadRefusedCards, loadRate]);
 
   useEffect(() => {
     if (canInviteHousehold) loadHouseholdMembers();
@@ -156,15 +164,69 @@ const Home: React.FC = () => {
     );
   }
 
+  if (isUpcoming && user?.residency_start_date) {
+    return (
+      <>
+        <AppHeader />
+        <main className="page-container">
+          <Row gutter={[16, 16]}>
+            <Col span={24}>
+              <UpcomingResidencyLanding
+                fullName={user.full_name}
+                address={address}
+                startDate={user.residency_start_date}
+                isMainMember={isMainMember}
+              />
+            </Col>
+            {canInviteHousehold && (
+              <Col span={24}>
+                <HouseholdMembersCard
+                  members={householdMembers}
+                  loading={householdLoading}
+                  address={address}
+                  onInvite={handleInviteHouseholdMember}
+                />
+              </Col>
+            )}
+          </Row>
+        </main>
+      </>
+    );
+  }
+
+  const formattedEndDate = user?.residency_end_date ? dayjs(user.residency_end_date).format("D MMMM YYYY") : null;
+
   return (
     <>
       <AppHeader />
       <main className="page-container">
         <Row gutter={[16, 16]}>
-          <Col xs={24} lg={10}>
-            <StationStatusCard {...station} rate={rate} tariff={tariff} />
-          </Col>
-          <Col xs={24} lg={14}>
+          {isEnded && formattedEndDate && (
+            <Col span={24}>
+              <Alert
+                type="warning"
+                showIcon
+                message={`Your residency ended on ${formattedEndDate}`}
+                description="Charging is disabled and your account is read-only. You can still view your past charging sessions and cards."
+              />
+            </Col>
+          )}
+          {!isEnded && formattedEndDate && (
+            <Col span={24}>
+              <Alert
+                type="info"
+                showIcon
+                message={`Your residency ends on ${formattedEndDate}`}
+                description="Charging stops automatically after this date. You will still be able to sign in read-only to view your past charging sessions."
+              />
+            </Col>
+          )}
+          {!isEnded && (
+            <Col xs={24} lg={10}>
+              <StationStatusCard {...station} rate={rate} tariff={tariff} />
+            </Col>
+          )}
+          <Col xs={24} lg={isEnded ? 24 : 14}>
             <MonthlyUsageCard stats={monthlyStats} loading={transactionsLoading} />
           </Col>
           <Col span={24}>
@@ -173,12 +235,14 @@ const Home: React.FC = () => {
           <Col span={24}>
             <ChargesCard transactions={transactions} loading={transactionsLoading} />
           </Col>
-          <Col xs={24} lg={12}>
-            <MyCardsCard cards={cards} loading={cardsLoading} onRename={handleRenameCard} />
+          <Col xs={24} lg={isEnded ? 24 : 12}>
+            <MyCardsCard cards={cards} loading={cardsLoading} onRename={handleRenameCard} readOnly={isEnded} />
           </Col>
-          <Col xs={24} lg={12}>
-            <RefusedCardsCard refusedCards={refusedCards} onAdd={handleAddCard} />
-          </Col>
+          {!isEnded && (
+            <Col xs={24} lg={12}>
+              <RefusedCardsCard refusedCards={refusedCards} onAdd={handleAddCard} />
+            </Col>
+          )}
           {canInviteHousehold && (
             <Col span={24}>
               <HouseholdMembersCard

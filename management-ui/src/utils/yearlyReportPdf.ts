@@ -35,14 +35,20 @@ export const toPdfText = (text: string): string =>
     })
     .join("");
 
-export const reportFileName = (report: Pick<YearlyReport, "address" | "year">): string => {
-  const slug = report.address
+const slugify = (value: string): string =>
+  value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return `charging-report-${report.year}-${slug || "address"}.pdf`;
+
+export const reportFileName = (report: Pick<YearlyReport, "address" | "year" | "main_resident">): string => {
+  const slug = slugify(report.address) || "address";
+  const memberSlug = report.main_resident ? slugify(report.main_resident) : "";
+  return memberSlug
+    ? `charging-report-${report.year}-${slug}-${memberSlug}.pdf`
+    : `charging-report-${report.year}-${slug}.pdf`;
 };
 
 const formatDuration = (started: Date, ended: Date | null): string => {
@@ -108,14 +114,25 @@ export const createYearlyReportPdf = async (report: YearlyReport): Promise<jsPDF
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...MUTED);
-  text(`Period: 1 January ${report.year} to 31 December ${report.year}`, MARGIN, 63);
+  const periodStart = report.period_start ? dayjs(report.period_start).format("D MMMM YYYY") : `1 January ${report.year}`;
+  const periodEnd = report.period_end ? dayjs(report.period_end).format("D MMMM YYYY") : `31 December ${report.year}`;
+  text(`Period: ${periodStart} to ${periodEnd}`, MARGIN, 63);
+  let infoY = 68;
+  if (report.main_resident) {
+    const contact = report.main_resident_email
+      ? `${toPdfText(report.main_resident)} (${toPdfText(report.main_resident_email)})`
+      : toPdfText(report.main_resident);
+    text(`Main member: ${contact}`, MARGIN, infoY);
+    infoY += 5;
+  }
   const residents = report.residents.map(toPdfText);
   if (residents.length > 0) {
-    text(`${residents.length === 1 ? "Resident" : "Residents"}: ${residents.join(", ")}`, MARGIN, 68);
+    text(`${residents.length === 1 ? "Resident" : "Residents"}: ${residents.join(", ")}`, MARGIN, infoY);
+    infoY += 5;
   }
 
   // The summary: the amount to pay stands out
-  const cardTop = 75;
+  const cardTop = Math.max(75, infoY + 2);
   const cardHeight = 27;
   const amountWidth = 84;
   const smallWidth = (CONTENT_WIDTH - amountWidth - 6) / 2;

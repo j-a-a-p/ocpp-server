@@ -100,4 +100,34 @@ describe("buildYearlyReport", () => {
     expect(result.address).toBe("No address");
     expect(result.sessions).toHaveLength(2);
   });
+
+  it("splits consecutive households at the same address and clips the period to their stay", () => {
+    const split = [
+      charge(1, "Anna Anderson", "2026-03-05T12:00:00", 10, [3], {
+        household_id: 10, main_resident_name: "Anna Anderson", main_resident_email: "anna@example.com",
+        residency_start_date: "2025-05-01", residency_end_date: "2026-06-30",
+      }),
+      charge(2, "Carol Clark", "2026-08-05T12:00:00", 8, [2.4], {
+        household_id: 20, main_resident_name: "Carol Clark", main_resident_email: "carol@example.com",
+        residency_start_date: "2026-07-01", residency_end_date: null,
+      }),
+    ];
+
+    const first = buildYearlyReport(split, "household:10", 2026);
+    const second = buildYearlyReport(split, "household:20", 2026);
+
+    expect(first).toMatchObject({
+      main_resident: "Anna Anderson",
+      main_resident_email: "anna@example.com",
+      period_start: "2026-01-01",
+      period_end: "2026-06-30",
+      total_energy: 10,
+    });
+    expect(second).toMatchObject({
+      main_resident: "Carol Clark",
+      period_start: "2026-07-01",
+      period_end: "2026-12-31",
+      total_energy: 8,
+    });
+  });
 });

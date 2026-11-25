@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Security, Depends
 from sqlalchemy.orm import Session, selectinload
 from typing import List
 from schemas import ChargeTransactionResponse
-from models import ChargeTransaction, Card, PowerLog, Resident
+from models import ChargeTransaction, Card, Household, PowerLog, Resident
 from dependencies import get_db_dependency, get_authenticated_active_resident, require_manager
 from security import verify_api_key
 
@@ -129,6 +129,7 @@ def get_all_charge_transactions(
         db.query(ChargeTransaction, Card.name, Resident)
         .join(Card, ChargeTransaction.rfid == Card.rfid)
         .join(Resident, Card.resident_id == Resident.id)
+        .options(selectinload(Resident.household).selectinload(Household.members))
         .order_by(ChargeTransaction.created.desc())
         .all()
     )
@@ -144,6 +145,8 @@ def get_all_charge_transactions(
         logs = logs_by_transaction.get(transaction.id, [])
         # The moment of the last measurement: when the charge ended.
         ended = max((log.created for log in logs if log.created), default=None)
+        household = resident.household
+        main = household.main_member if household else None
         result.append({
             "id": transaction.id,
             "station_id": transaction.station_id,
@@ -152,7 +155,12 @@ def get_all_charge_transactions(
             "ended": ended.isoformat() if ended else None,
             "final_energy_kwh": float(transaction.final_energy_kwh) if transaction.final_energy_kwh else 0,
             "resident_name": resident.full_name,
-            # The address the resident lives at now: the Charges page groups the charges by it.
+            "household_id": resident.household_id,
+            "main_resident_name": main.full_name if main else resident.full_name,
+            "main_resident_email": main.email if main else resident.email,
+            "residency_start_date": household.start_date.isoformat() if household and household.start_date else None,
+            "residency_end_date": household.end_date.isoformat() if household and household.end_date else None,
+            # The household address: the Charges page groups charges per household.
             "street_name": resident.street_name,
             "house_number": resident.house_number,
             "house_number_suffix": resident.house_number_suffix,

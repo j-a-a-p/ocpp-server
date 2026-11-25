@@ -2,7 +2,7 @@ import os
 import subprocess
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import residents, cards, auth, charge_transactions, power_logs, charging_costs, charging_profiles, stations
+from routes import residents, households, cards, auth, charge_transactions, power_logs, charging_costs, charging_profiles, stations
 
 def run_flyway():
     """Run Flyway migrations before starting the app."""
@@ -18,6 +18,7 @@ run_flyway()
 
 app = FastAPI()
 app.include_router(residents.router)
+app.include_router(households.router)
 app.include_router(cards.router)
 app.include_router(auth.router)
 app.include_router(charge_transactions.router)

@@ -2,13 +2,13 @@
 
 # Replace the OCPP server VM on Hetzner Cloud and serve it over HTTPS.
 #
-# Usage: bash infra/deploy-hetzner.sh [--yes]
+# Usage: bash infra/deploy-hetzner.sh
 #
 # What a run does:
 #   1. Checks. Makes sure the floating IP exists (created only once, reused
 #      afterwards) and that the DNS A record of the domain points to it. If not,
-#      it stops here and tells you which record to create. Asks to confirm the
-#      plan (or --yes). Nothing has been changed yet.
+#      it stops here and tells you which record to create. Nothing has been
+#      changed yet.
 #   2. New VM. Creates it and installs the whole server on it while the old VM
 #      keeps serving (infra/install-server.sh install): the cloud API and the
 #      station controller as systemd services, both UIs, Flyway, a firewall and
@@ -88,7 +88,6 @@ SSH_USER="ubuntu"
 APP_LABEL="ocpp-server"
 REMOTE_DATA_DIR="/home/ubuntu/ocpp-data"
 
-ASSUME_YES=0
 LE_EMAIL=""
 KNOWN_HOSTS=""
 WORK_DIR=""
@@ -504,7 +503,7 @@ find_old_vms() {
     fi
 }
 
-confirm_plan() {
+print_plan() {
     if [ "$OLD_COUNT" -eq 0 ]; then
         return 0
     fi
@@ -520,13 +519,6 @@ confirm_plan() {
     echo "  - import the backup, move the floating IP and set up HTTPS for $DOMAIN"
     echo "  - when every check passes, DELETE the old VMs"
     echo
-    if [ "$ASSUME_YES" = 1 ]; then
-        return 0
-    fi
-    [ -t 0 ] || die "refusing to delete VMs without confirmation; run it in a terminal or pass --yes"
-    local answer
-    read -r -p "Continue? [y/N] " answer
-    [[ "$answer" =~ ^[Yy]$ ]] || die "aborted, nothing was changed"
 }
 
 ssh_vm() {
@@ -1017,9 +1009,8 @@ main() {
     local arg
     for arg in "$@"; do
         case "$arg" in
-            -y|--yes) ASSUME_YES=1 ;;
-            -h|--help) echo "Usage: bash infra/deploy-hetzner.sh [--yes]"; return 0 ;;
-            *) die "unknown argument: $arg (usage: bash infra/deploy-hetzner.sh [--yes])" ;;
+            -h|--help) echo "Usage: bash infra/deploy-hetzner.sh"; return 0 ;;
+            *) die "unknown argument: $arg (usage: bash infra/deploy-hetzner.sh)" ;;
         esac
     done
 
@@ -1059,7 +1050,7 @@ main() {
         find_latest_backup
         find_latest_le_archive
     fi
-    confirm_plan
+    print_plan
 
     # 2. The new VM with the software, while the old one keeps serving.
     create_server

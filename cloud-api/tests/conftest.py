@@ -23,7 +23,7 @@ with mock.patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0
 import constants
 import dependencies
 import invite
-from models import Card, ChargeTransaction, PowerLog, RefusedCard, Resident, ResidentStatus
+from models import Card, ChargeTransaction, Household, PowerLog, RefusedCard, Resident, ResidentStatus, parse_roles
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "db" / "migrations"
 API_KEY = "test-api-key-for-the-machine-endpoints"
@@ -108,9 +108,68 @@ def api_key_headers():
 
 @pytest.fixture
 def make_resident(db):
-    def make(email="resident@example.com", full_name="Test Resident", status=ResidentStatus.ACTIVE, roles="manager,resident", **extra) -> Resident:
+    def make(
+        email="resident@example.com",
+        full_name="Test Resident",
+        status=ResidentStatus.ACTIVE,
+        roles="manager,resident",
+        street_name=None,
+        house_number=None,
+        house_number_suffix=None,
+        zip_code=None,
+        city=None,
+        residency_start_date=None,
+        residency_end_date=None,
+        household_id=None,
+        household_head_id=None,
+        is_main_member=None,
+        **extra,
+    ) -> Resident:
         """By default a manager who is also a resident, like every account that existed before roles."""
-        resident = Resident(email=email, full_name=full_name, status=status, roles=roles, **extra)
+        if household_id is None and household_head_id is not None:
+            head = db.get(Resident, household_head_id)
+            if head and head.household_id is not None:
+                household_id = head.household_id
+            else:
+                household = Household(
+                    street_name=street_name,
+                    house_number=house_number,
+                    house_number_suffix=house_number_suffix,
+                    zip_code=zip_code,
+                    city=city,
+                    start_date=residency_start_date,
+                    end_date=residency_end_date,
+                )
+                db.add(household)
+                db.flush()
+                household_id = household.id
+            if is_main_member is None:
+                is_main_member = False
+        elif household_id is None and "resident" in parse_roles(roles):
+            household = Household(
+                street_name=street_name,
+                house_number=house_number,
+                house_number_suffix=house_number_suffix,
+                zip_code=zip_code,
+                city=city,
+                start_date=residency_start_date,
+                end_date=residency_end_date,
+            )
+            db.add(household)
+            db.flush()
+            household_id = household.id
+            if is_main_member is None:
+                is_main_member = True
+
+        resident = Resident(
+            email=email,
+            full_name=full_name,
+            status=status,
+            roles=roles,
+            household_id=household_id,
+            is_main_member=bool(is_main_member),
+            **extra,
+        )
         db.add(resident)
         db.commit()
         db.refresh(resident)

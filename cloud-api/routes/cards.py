@@ -6,6 +6,7 @@ from models import Card, RefusedCard, Resident, ResidentStatus, Role
 from crud import get_cards, create_card, log_refused_card, update_card_name
 from dependencies import get_db_dependency, get_authenticated_active_resident, require_manager, require_resident
 from security import verify_api_key
+from tariff import local_today
 
 router = APIRouter(prefix="/cards", tags=["cards"])
 
@@ -42,17 +43,22 @@ def authenticate_card(
         log_refused_card(db, rfid, station_id)
         raise HTTPException(status_code=404, detail="Card not found")
 
-    # Only an active account with the resident role may charge, with a card that is not switched off.
-    # The card is known, so it is not logged as refused.
+    # Only an active account with the resident role inside their residency window may charge,
+    # with a card that is not switched off. The card is known, so it is not logged as refused.
     owner = card.resident
-    if not card.enabled or owner is None or owner.status != ResidentStatus.ACTIVE or not owner.has_role(Role.RESIDENT):
+    if not card.enabled or owner is None or not owner.can_charge_on(local_today()):
         raise HTTPException(status_code=404, detail="Card not found")
 
     return {"resident_id": card.resident_id}
 
 @router.post("/add_card/{station_id}", response_model=CardResponse)
-def add_card(station_id: str, db: Session = Depends(get_db_dependency), _: Resident = Depends(require_resident)):
+def add_card(station_id: str, db: Session = Depends(get_db_dependency), resident: Resident = Depends(require_resident)):
     """ Finds the latest RefusedCard within 5 minutes and registers a new card for the given resident_id. """
+    state = resident.residency_state_on(local_today())
+    if state == "upcoming":
+        raise HTTPException(status_code=403, detail="Your residency has not started yet")
+    if state == "ended":
+        raise HTTPException(status_code=403, detail="Your residency has ended")
 
     latest_refused_card_by_station = (
         db.query(RefusedCard)
@@ -66,7 +72,7 @@ def add_card(station_id: str, db: Session = Depends(get_db_dependency), _: Resid
         # Refused because it is switched off, or its owner cannot charge: it is registered already.
         raise HTTPException(status_code=409, detail="This card is already registered")
 
-    new_card = Card(rfid=latest_refused_card_by_station.rfid, name=latest_refused_card_by_station.rfid, resident_id=_.id)
+    new_card = Card(rfid=latest_refused_card_by_station.rfid, name=latest_refused_card_by_station.rfid, resident_id=resident.id)
     db.add(new_card)
     
     # Delete the refused card after successfully adding it to the cards table
@@ -133,11 +139,14 @@ def update_card_name_endpoint(
     rfid: str,
     card_update: CardUpdate,
     db: Session = Depends(get_db_dependency),
-    _: Resident = Depends(require_resident)
+    resident: Resident = Depends(require_resident)
 ):
-    """Update the name of a card. Only the card owner can update it."""
+    """Update the name of a card. Only the card owner can update it, while their residency has not ended."""
+    if resident.residency_state_on(local_today()) == "ended":
+        raise HTTPException(status_code=403, detail="Your residency has ended")
+
     # Check if the card exists and belongs to the authenticated resident
-    card = db.query(Card).filter(Card.rfid == rfid, Card.resident_id == _.id).first()
+    card = db.query(Card).filter(Card.rfid == rfid, Card.resident_id == resident.id).first()
     if not card:
         raise HTTPException(status_code=404, detail="Card not found or access denied")
     

@@ -187,4 +187,45 @@ describe("Charges", () => {
 
     expect(await screen.findByText("Failed to load charge transactions.")).toBeInTheDocument();
   });
+
+  it("splits consecutive households at the same address in the same year into separate summaries and PDF reports", async () => {
+    mockFetch({
+      "GET /charge-transactions/all": json([
+        {
+          ...charge(1, "Anna Anderson", "2026-03-10T12:00:00", 10, [3]),
+          household_id: 10, main_resident_name: "Anna Anderson", main_resident_email: "anna@example.com",
+          residency_start_date: "2026-01-01", residency_end_date: "2026-06-30",
+        },
+        {
+          ...charge(2, "Bob Brown", "2026-04-12T12:00:00", 5, [1.5]),
+          household_id: 10, main_resident_name: "Anna Anderson", main_resident_email: "anna@example.com",
+          residency_start_date: "2026-01-01", residency_end_date: "2026-06-30",
+        },
+        {
+          ...charge(3, "Carol Clark", "2026-08-05T12:00:00", 8, [2.4]),
+          household_id: 20, main_resident_name: "Carol Clark", main_resident_email: "carol@example.com",
+          residency_start_date: "2026-07-01", residency_end_date: null,
+        },
+      ]),
+    });
+
+    renderWithProviders(<Charges />);
+    await screen.findAllByText("2026");
+
+    expect(rowsOf("Yearly summaries")).toHaveLength(2);
+    expect(rowsOf("Yearly summaries").map(([, , residents, energy]) => [residents, energy])).toEqual([
+      ["Anna Anderson, Bob Brown", "15.00"],
+      ["Carol Clark", "8.00"],
+    ]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Export the 2026 report of Hoofdstraat 12 (Carol Clark) as PDF" }));
+    expect(vi.mocked(downloadYearlyReportPdf).mock.calls[0][0]).toMatchObject({
+      address: "Hoofdstraat 12",
+      household_id: 20,
+      main_resident: "Carol Clark",
+      period_start: "2026-07-01",
+      period_end: "2026-12-31",
+      total_energy: 8,
+    });
+  });
 });

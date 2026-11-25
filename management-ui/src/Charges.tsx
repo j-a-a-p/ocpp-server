@@ -1,26 +1,48 @@
 import { useEffect, useState, useMemo } from "react";
-import { App, Button, Card, Flex, Grid, Table } from "antd";
+import { App, Button, Card, Flex, Grid, Table, Typography } from "antd";
 import { CalendarOutlined, FieldTimeOutlined, FilePdfOutlined } from "@ant-design/icons";
+import dayjs from "dayjs";
 import { getAllChargeTransactions, ChargeTransaction, MonthlyData, YearlySummary } from "./services/chargeTransactionService";
 import { addressKey, addressLabel, NO_ADDRESS } from "./utils/address";
 import { parseUtc } from "./utils/dates";
 import { formatEuro, formatInteger, formatNumber } from "./utils/format";
-import { buildYearlyReport } from "./utils/yearlyReport";
+import { billingGroupKey, buildYearlyReport } from "./utils/yearlyReport";
 import { downloadYearlyReportPdf } from "./utils/yearlyReportPdf";
 
+const { Text } = Typography;
+
 // The addresses in order of street and (numerically) house number, the charges without an address last.
-const compareAddresses = (a: { address_key: string; address: string }, b: { address_key: string; address: string }) => {
+// Within the same address, households are ordered by residency start date.
+const compareHouseholdAddresses = (
+  a: { address_key: string; address: string; residency_start_date?: string | null },
+  b: { address_key: string; address: string; residency_start_date?: string | null }
+) => {
   if (a.address_key === NO_ADDRESS || b.address_key === NO_ADDRESS) {
     return Number(a.address_key === NO_ADDRESS) - Number(b.address_key === NO_ADDRESS);
   }
-  return a.address.localeCompare(b.address, undefined, { numeric: true });
+  return (
+    a.address.localeCompare(b.address, undefined, { numeric: true }) ||
+    (a.residency_start_date ?? "").localeCompare(b.residency_start_date ?? "")
+  );
 };
 
-const Charges: React.FC = () => {  const { message } = App.useApp();
+const formatPeriodLabel = (year: number, startDate: string | null, endDate: string | null): string | null => {
+  const yearStart = `${year}-01-01`;
+  const yearEnd = `${year}-12-31`;
+  const clippedStart = startDate && startDate > yearStart ? startDate : null;
+  const clippedEnd = endDate && endDate < yearEnd ? endDate : null;
+  if (!clippedStart && !clippedEnd) return null;
+  const from = dayjs(clippedStart ?? yearStart).format("D MMM");
+  const to = dayjs(clippedEnd ?? yearEnd).format("D MMM");
+  return `${from} – ${to}`;
+};
+
+const Charges: React.FC = () => {
+  const { message } = App.useApp();
   const isMobile = Grid.useBreakpoint().md === false;
   const [loading, setLoading] = useState<boolean>(true);
   const [transactions, setTransactions] = useState<ChargeTransaction[]>([]);
-  // The address and year of the report that is being made
+  // The household and year of the report that is being made
   const [exporting, setExporting] = useState<string | null>(null);
 
   useEffect(() => {
@@ -33,8 +55,8 @@ const Charges: React.FC = () => {  const { message } = App.useApp();
       .finally(() => setLoading(false));
   }, [message]);
 
-  // Process raw transactions into monthly and yearly summaries per address: the people at one address share
-  // the charging and the bill.
+  // Process raw transactions into monthly and yearly summaries per household:
+  // consecutive households at the same address receive separate totals and separate PDF reports.
   const reportData = useMemo(() => {
     // Filter out failed transactions (those with 0 or null final_energy_kwh)
     const validTransactions = transactions.filter(transaction => transaction.final_energy_kwh > 0);
@@ -42,8 +64,13 @@ const Charges: React.FC = () => {  const { message } = App.useApp();
     type Group = {
       year: number;
       month: number;
+      group_key: string;
+      household_id: number | null;
       address_key: string;
       address: string;
+      main_resident: string | null;
+      residency_start_date: string | null;
+      residency_end_date: string | null;
       residents: Set<string>;
       total_energy: number;
       total_cost: number;
@@ -55,8 +82,13 @@ const Charges: React.FC = () => {  const { message } = App.useApp();
         group = {
           year,
           month,
+          group_key: billingGroupKey(transaction),
+          household_id: transaction.household_id ?? null,
           address_key: addressKey(transaction),
           address: addressLabel(transaction),
+          main_resident: transaction.main_resident_name ?? null,
+          residency_start_date: transaction.residency_start_date ?? null,
+          residency_end_date: transaction.residency_end_date ?? null,
           residents: new Set(),
           total_energy: 0,
           total_cost: 0,
@@ -76,9 +108,9 @@ const Charges: React.FC = () => {  const { message } = App.useApp();
       const date = parseUtc(transaction.created);
       const year = date.getFullYear();
       const month = date.getMonth() + 1; // getMonth() returns 0-11
-      const address = addressKey(transaction);
-      add(monthlyGroups, `${year}|${month}|${address}`, transaction, year, month);
-      add(yearlyGroups, `${year}|${address}`, transaction, year, month);
+      const groupKey = billingGroupKey(transaction);
+      add(monthlyGroups, `${year}|${month}|${groupKey}`, transaction, year, month);
+      add(yearlyGroups, `${year}|${groupKey}`, transaction, year, month);
     });
 
     const monthNames = [
@@ -92,42 +124,51 @@ const Charges: React.FC = () => {  const { message } = App.useApp();
         year: group.year,
         month: group.month,
         month_display: `${monthNames[group.month - 1]} '${group.year.toString().slice(2)}`,
+        group_key: group.group_key,
+        household_id: group.household_id,
         address_key: group.address_key,
         address: group.address,
+        main_resident: group.main_resident,
+        residency_start_date: group.residency_start_date,
+        residency_end_date: group.residency_end_date,
         residents: residentsOf(group),
         total_energy: group.total_energy,
         transaction_count: group.transaction_count,
         total_cost: group.total_cost
       }))
       .sort((a, b) => {
-        // Sort by year desc, then month desc, then by address
         if (a.year !== b.year) return b.year - a.year;
         if (a.month !== b.month) return b.month - a.month;
-        return compareAddresses(a, b);
+        return compareHouseholdAddresses(a, b);
       });
 
     const yearly_summaries: YearlySummary[] = Array.from(yearlyGroups.values())
       .map(group => ({
         year: group.year,
+        group_key: group.group_key,
+        household_id: group.household_id,
         address_key: group.address_key,
         address: group.address,
+        main_resident: group.main_resident,
+        residency_start_date: group.residency_start_date,
+        residency_end_date: group.residency_end_date,
         residents: residentsOf(group),
         total_energy: group.total_energy,
         transaction_count: group.transaction_count,
         total_cost: group.total_cost
       }))
       .sort((a, b) => {
-        // Sort by year desc, then by address
         if (a.year !== b.year) return b.year - a.year;
-        return compareAddresses(a, b);
+        return compareHouseholdAddresses(a, b);
       });
 
     return { monthly_data, yearly_summaries };
   }, [transactions]);
+
   const exportReport = async (summary: YearlySummary) => {
-    setExporting(`${summary.year}-${summary.address_key}`);
+    setExporting(`${summary.year}-${summary.group_key}`);
     try {
-      await downloadYearlyReportPdf(buildYearlyReport(transactions, summary.address_key, summary.year));
+      await downloadYearlyReportPdf(buildYearlyReport(transactions, summary.group_key, summary.year));
     } catch (error) {
       console.error("Failed to create the PDF report:", error);
       message.error("Failed to create the PDF report.");
@@ -136,12 +177,22 @@ const Charges: React.FC = () => {  const { message } = App.useApp();
     }
   };
 
+  const renderAddressCell = (record: { year: number; address: string; residency_start_date: string | null; residency_end_date: string | null }, showPeriod: boolean) => {
+    const period = showPeriod ? formatPeriodLabel(record.year, record.residency_start_date, record.residency_end_date) : null;
+    if (!period) return record.address;
+    return (
+      <Flex vertical>
+        <span>{record.address}</span>
+        <Text type="secondary" style={{ fontSize: 12 }}>{period}</Text>
+      </Flex>
+    );
+  };
+
   const monthlyColumns = [
     {
       title: "Month",
       dataIndex: "month_display",
       key: "month_display",
-      // Ascending comparison: the default 'descend' order then shows the newest month first.
       sorter: (a: MonthlyData, b: MonthlyData) => {
         if (a.year !== b.year) return a.year - b.year;
         return a.month - b.month;
@@ -152,7 +203,7 @@ const Charges: React.FC = () => {  const { message } = App.useApp();
       title: "Address",
       dataIndex: "address",
       key: "address",
-      sorter: (a: MonthlyData, b: MonthlyData) => compareAddresses(a, b),
+      sorter: (a: MonthlyData, b: MonthlyData) => compareHouseholdAddresses(a, b),
     },
     {
       title: "Residents",
@@ -197,7 +248,8 @@ const Charges: React.FC = () => {  const { message } = App.useApp();
       title: "Address",
       dataIndex: "address",
       key: "address",
-      sorter: (a: YearlySummary, b: YearlySummary) => compareAddresses(a, b),
+      sorter: (a: YearlySummary, b: YearlySummary) => compareHouseholdAddresses(a, b),
+      render: (_: unknown, record: YearlySummary) => renderAddressCell(record, true),
     },
     {
       title: "Residents",
@@ -232,18 +284,21 @@ const Charges: React.FC = () => {  const { message } = App.useApp();
       title: "Report",
       key: "report",
       align: "center" as const,
-      render: (_: unknown, record: YearlySummary) => (
-        <Button
-          size="small"
-          icon={<FilePdfOutlined />}
-          loading={exporting === `${record.year}-${record.address_key}`}
-          disabled={exporting !== null}
-          aria-label={`Export the ${record.year} report of ${record.address} as PDF`}
-          onClick={() => exportReport(record)}
-        >
-          PDF
-        </Button>
-      ),
+      render: (_: unknown, record: YearlySummary) => {
+        const who = record.main_resident ? ` (${record.main_resident})` : "";
+        return (
+          <Button
+            size="small"
+            icon={<FilePdfOutlined />}
+            loading={exporting === `${record.year}-${record.group_key}`}
+            disabled={exporting !== null}
+            aria-label={`Export the ${record.year} report of ${record.address}${who} as PDF`}
+            onClick={() => exportReport(record)}
+          >
+            PDF
+          </Button>
+        );
+      },
     },
   ];
 
@@ -261,7 +316,7 @@ const Charges: React.FC = () => {  const { message } = App.useApp();
         <Table
           columns={yearlyColumns}
           dataSource={reportData.yearly_summaries}
-          rowKey={(record) => `${record.year}-${record.address_key}`}
+          rowKey={(record) => `${record.year}-${record.group_key}`}
           loading={loading}
           pagination={false}
           size={isMobile ? "small" : "middle"}
@@ -282,7 +337,7 @@ const Charges: React.FC = () => {  const { message } = App.useApp();
         <Table
           columns={monthlyColumns}
           dataSource={reportData.monthly_data}
-          rowKey={(record) => `${record.year}-${record.month}-${record.address_key}`}
+          rowKey={(record) => `${record.year}-${record.month}-${record.group_key}`}
           loading={loading}
           pagination={{
             pageSize: isMobile ? 10 : 20,
@@ -300,4 +355,4 @@ const Charges: React.FC = () => {  const { message } = App.useApp();
   );
 };
 
-export default Charges; 
+export default Charges;

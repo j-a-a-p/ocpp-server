@@ -3,7 +3,7 @@
 Dal (off-peak) is the whole weekend and every day between 21:00 and 07:00. Everything else is normaal.
 The hours are local time, so the rule follows the clock in the Netherlands, also across daylight saving time.
 """
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 LOCAL_TIMEZONE = ZoneInfo("Europe/Amsterdam")
@@ -21,6 +21,11 @@ def to_local(moment: datetime) -> datetime:
     if moment.tzinfo is None:
         moment = moment.replace(tzinfo=timezone.utc)
     return moment.astimezone(LOCAL_TIMEZONE)
+
+
+def local_today() -> date:
+    """Today's date in the Netherlands, used for residency start/end date checks."""
+    return datetime.now(LOCAL_TIMEZONE).date()
 
 
 def tariff_at(moment: datetime) -> str:

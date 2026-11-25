@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import constants
 from models import Card, RefusedCard, ResidentStatus
+from tariff import local_today
 
 
 class TestAccess:
@@ -265,3 +266,41 @@ class TestSwitchingCardsOff:
         make_refused_card("04AABBCC", station_id="CP1")
 
         assert user.post("/cards/add_card/CP1").status_code == 409
+
+
+class TestResidencyDateWindowOnCards:
+    def test_upcoming_resident_cannot_charge_or_add_cards(self, client, login_as, api_key_headers, make_resident, make_card, make_refused_card):
+        tomorrow = local_today() + timedelta(days=1)
+        upcoming = make_resident(email="soon@example.com", roles="resident", residency_start_date=tomorrow)
+        make_card(upcoming, "04UP0001")
+        make_refused_card("04NEW001", station_id="CP1")
+
+        assert client.get("/cards/authenticate/04UP0001", params={"station_id": "CP1"}, headers=api_key_headers).status_code == 404
+        assert login_as(upcoming).post("/cards/add_card/CP1").status_code == 403
+
+    def test_ended_resident_cannot_charge_add_or_rename_cards_but_can_view_them(
+        self, client, login_as, api_key_headers, make_resident, make_card, make_refused_card
+    ):
+        yesterday = local_today() - timedelta(days=1)
+        ended = make_resident(
+            email="gone@example.com", roles="resident",
+            residency_start_date=yesterday - timedelta(days=30), residency_end_date=yesterday,
+        )
+        make_card(ended, "04OLD001", "Old Car")
+        make_refused_card("04NEW002", station_id="CP1")
+
+        assert client.get("/cards/authenticate/04OLD001", params={"station_id": "CP1"}, headers=api_key_headers).status_code == 404
+        portal = login_as(ended)
+        assert portal.post("/cards/add_card/CP1").status_code == 403
+        assert portal.put("/cards/04OLD001/name", json={"name": "Renamed"}).status_code == 403
+        assert portal.get("/cards/my_cards").json()["cards"][0]["rfid"] == "04OLD001"
+
+    def test_resident_on_end_date_can_still_charge(self, client, api_key_headers, make_resident, make_card):
+        today = local_today()
+        ending = make_resident(
+            email="ending@example.com", roles="resident",
+            residency_start_date=today - timedelta(days=10), residency_end_date=today,
+        )
+        make_card(ending, "04END001")
+
+        assert client.get("/cards/authenticate/04END001", params={"station_id": "CP1"}, headers=api_key_headers).status_code == 200

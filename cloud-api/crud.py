@@ -1,6 +1,9 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import and_, or_
-from models import Resident, ResidentStatus, Role, Card, RefusedCard, ChargingCost, ChargingProfile, ProfileType, ProfileStatus
+from models import (
+    Household, Resident, ResidentStatus, Role, Card, RefusedCard,
+    ChargingCost, ChargingProfile, ProfileType, ProfileStatus,
+)
 from schemas import CardBase, ChargingCostBase, ChargingProfileCreate, ChargingProfileUpdate
 from tariff import tariff_at, to_local
 from datetime import datetime, date
@@ -10,17 +13,27 @@ from typing import List, Optional
 Address = tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]
 EMPTY_ADDRESS: Address = (None, None, None, None, None)
 
+
+def _resident_query(db: Session):
+    return db.query(Resident).options(selectinload(Resident.household).selectinload(Household.members))
+
+
 def get_residents(db: Session, skip: int = 0, limit: int = 100):
-    # Only return non-deleted residents
-    return db.query(Resident).offset(skip).limit(limit).all()
+    return _resident_query(db).offset(skip).limit(limit).all()
 
 def get_resident(db: Session, resident_id: int):
-    # Only return non-deleted resident
-    return db.query(Resident).filter(Resident.id == resident_id).first()
+    return _resident_query(db).filter(Resident.id == resident_id).first()
 
 def get_resident_by_email(db: Session, email: str):
-    # Get resident by email address
-    return db.query(Resident).filter(Resident.email == email).first()
+    return _resident_query(db).filter(Resident.email == email).first()
+
+def get_household(db: Session, household_id: int) -> Optional[Household]:
+    return (
+        db.query(Household)
+        .options(selectinload(Household.members))
+        .filter(Household.id == household_id)
+        .first()
+    )
 
 def create_invited_resident(
     db: Session,
@@ -30,23 +43,31 @@ def create_invited_resident(
     invite_token: str,
     expires_at: datetime,
     address: Optional[Address] = None,
-    household_head_id: Optional[int] = None,
+    household_id: Optional[int] = None,
+    is_main_member: bool = False,
+    start_date: Optional[date] = None,
 ):
+    if household_id is None and address is not None:
+        household = Household(start_date=start_date, end_date=None)
+        household.set_address(address)
+        db.add(household)
+        db.flush()
+        household_id = household.id
+        is_main_member = True
+
     db_resident = Resident(
         full_name=full_name,
         email=email,
         status=ResidentStatus.INVITED,
         invite_token=invite_token,
         invite_expires_at=expires_at,
-        household_head_id=household_head_id,
+        household_id=household_id,
+        is_main_member=is_main_member,
     )
     db_resident.set_roles(roles)
-    if address:
-        db_resident.set_address(address)
     db.add(db_resident)
     db.commit()
-    db.refresh(db_resident)
-    return db_resident
+    return get_resident(db, db_resident.id)
 
 
 def _clean_address_value(value: Optional[str]) -> Optional[str]:
@@ -76,21 +97,84 @@ def normalize_address(
     """Clean an address entered by hand and reuse the spelling that is already used, so that 'hoofdstraat' and
     'Hoofdstraat' do not become two different streets."""
     return (
-        _stored_spelling(db, Resident.street_name, street_name),
-        _stored_spelling(db, Resident.house_number, house_number),
-        _stored_spelling(db, Resident.house_number_suffix, house_number_suffix),
-        _stored_spelling(db, Resident.zip_code, zip_code),
-        _stored_spelling(db, Resident.city, city),
+        _stored_spelling(db, Household.street_name, street_name),
+        _stored_spelling(db, Household.house_number, house_number),
+        _stored_spelling(db, Household.house_number_suffix, house_number_suffix),
+        _stored_spelling(db, Household.zip_code, zip_code),
+        _stored_spelling(db, Household.city, city),
     )
+
+
+def address_match_key(address: Address) -> Optional[tuple[str, str, str]]:
+    """Canonical identity of an address: street, house number, and optional suffix (case-insensitive)."""
+    street, number, suffix, _, _ = address
+    if not street:
+        return None
+    return (
+        street.strip().casefold(),
+        (number or "").strip().casefold(),
+        (suffix or "").strip().casefold(),
+    )
+
+
+def find_households_at_address(
+    db: Session,
+    address: Address,
+    exclude_household_id: Optional[int] = None,
+) -> list[Household]:
+    """All households living (or having lived) at the same street + house number + suffix."""
+    key = address_match_key(address)
+    if key is None:
+        return []
+    query = db.query(Household).filter(Household.street_name.isnot(None))
+    if exclude_household_id is not None:
+        query = query.filter(Household.id != exclude_household_id)
+    return [h for h in query.all() if address_match_key(h.address_of()) == key]
+
+
+def check_household_date_conflict(
+    db: Session,
+    address: Address,
+    start_date: Optional[date],
+    end_date: Optional[date],
+    exclude_household_id: Optional[int] = None,
+) -> Optional[str]:
+    """Return a human-readable conflict message if [start_date, end_date] overlaps another household at the address."""
+    if start_date is not None and end_date is not None and end_date < start_date:
+        return "End date cannot be before start date"
+
+    others = find_households_at_address(db, address, exclude_household_id=exclude_household_id)
+    for other in others:
+        s1, e1 = other.start_date, other.end_date
+        s2, e2 = start_date, end_date
+        overlaps = (e1 is None or s2 is None or s2 <= e1) and (e2 is None or s1 is None or s1 <= e2)
+        if not overlaps:
+            continue
+        if e1 is None and e2 is None:
+            return "This address already has an active resident. Terminate the current residency first."
+        if e1 is not None and s2 is not None and s2 <= e1 and (e2 is None or s1 is None or s1 <= e2):
+            return f"Start date must be after the previous residency's end date ({e1.isoformat()})."
+        if e2 is None and s1 is not None:
+            return f"Cannot clear end date because another residency starts on {s1.isoformat()} at this address."
+        if e2 is not None and s1 is not None and e2 >= s1:
+            return f"End date must be before the next residency's start date ({s1.isoformat()})."
+        return "Residency dates overlap with another household at this address."
+    return None
 
 
 def get_address_options(db: Session):
     """The distinct addresses that are in use, for the drop downs of the invite form."""
     return (
-        db.query(Resident.street_name, Resident.house_number, Resident.house_number_suffix, Resident.zip_code, Resident.city)
-        .filter(Resident.street_name.isnot(None))
+        db.query(
+            Household.street_name, Household.house_number, Household.house_number_suffix,
+            Household.zip_code, Household.city,
+        )
+        .filter(Household.street_name.isnot(None))
         .distinct()
-        .order_by(Resident.street_name, Resident.house_number, Resident.house_number_suffix, Resident.zip_code, Resident.city)
+        .order_by(
+            Household.street_name, Household.house_number, Household.house_number_suffix,
+            Household.zip_code, Household.city,
+        )
         .all()
     )
 
@@ -103,8 +187,16 @@ def count_other_active_managers(db: Session, resident_id: int) -> int:
     )
 
 
-def get_household_members(db: Session, head_id: int):
-    return db.query(Resident).filter(Resident.household_head_id == head_id).order_by(Resident.full_name).all()
+def get_household_members(db: Session, resident: Resident):
+    """The household members of a main member (everybody else in their household)."""
+    if not resident.household_id or not resident.is_main_member:
+        return []
+    return (
+        _resident_query(db)
+        .filter(Resident.household_id == resident.household_id, Resident.id != resident.id)
+        .order_by(Resident.full_name)
+        .all()
+    )
 
 def update_resident(db: Session, resident_id: int, updates: dict):
     resident = db.query(Resident).filter(Resident.id == resident_id).first()
@@ -115,8 +207,7 @@ def update_resident(db: Session, resident_id: int, updates: dict):
         setattr(resident, key, value)
     
     db.commit()
-    db.refresh(resident)
-    return resident
+    return get_resident(db, resident_id)
 
 def get_cards(db: Session, skip: int = 0, limit: int = 100):
     return db.query(Card).offset(skip).limit(limit).all()

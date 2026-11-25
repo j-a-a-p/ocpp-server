@@ -20,8 +20,13 @@ export interface AuthUser {
   email: string;
   full_name: string;
   roles: string[];
+  household_id?: number | null;
+  is_main_member?: boolean;
   /** Set for a household member: the resident who invited them. */
   household_head_id: number | null;
+  residency_start_date?: string | null;
+  residency_end_date?: string | null;
+  residency_state?: 'upcoming' | 'active' | 'ended' | null;
   street_name: string | null;
   house_number: string | null;
   house_number_suffix: string | null;
@@ -42,7 +47,12 @@ const readUser = async (response: Response): Promise<AuthUser | undefined> => {
     if (Array.isArray(data?.roles)) {
       return {
         ...data,
+        household_id: data.household_id ?? null,
+        is_main_member: data.is_main_member ?? data.household_head_id == null,
         household_head_id: data.household_head_id ?? null,
+        residency_start_date: data.residency_start_date ?? null,
+        residency_end_date: data.residency_end_date ?? null,
+        residency_state: data.residency_state ?? null,
         street_name: data.street_name ?? null,
         house_number: data.house_number ?? null,
         house_number_suffix: data.house_number_suffix ?? null,
