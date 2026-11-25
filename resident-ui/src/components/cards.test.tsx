@@ -26,6 +26,14 @@ describe("MyCardsCard", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
   });
 
+  it("says which card a manager switched off", () => {
+    renderWithProviders(
+      <MyCardsCard cards={[{ ...cards[0], enabled: true }, { ...cards[1], name: "Lost fob", enabled: false }]} loading={false} onRename={vi.fn()} />
+    );
+
+    expect(screen.getAllByText("Disabled by a manager")).toHaveLength(1);
+  });
+
   it("explains when there are no cards", () => {
     renderWithProviders(<MyCardsCard cards={[]} loading={false} onRename={vi.fn()} />);
 

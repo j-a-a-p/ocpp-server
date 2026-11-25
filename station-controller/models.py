@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Float, literal
+from sqlalchemy import Boolean, Column, Date, Integer, String, ForeignKey, DateTime, Enum, Float, literal
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
@@ -8,6 +8,15 @@ import enum
 class ResidentStatus(enum.Enum):
     INVITED = "invited"
     ACTIVE = "active"
+
+class Household(Base):
+    __tablename__ = "households"
+
+    id = Column(Integer, primary_key=True, index=True)
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+
+    members = relationship("Resident", back_populates="household")
 
 class Resident(Base):
     __tablename__ = "residents"
@@ -22,7 +31,9 @@ class Resident(Base):
     login_expires_at = Column(DateTime, nullable=True)
     # Comma separated role names, written by the cloud API. Only accounts with the "resident" role may charge.
     roles = Column(String, nullable=False, default="", server_default="")
+    household_id = Column(Integer, ForeignKey("households.id"), nullable=True)
 
+    household = relationship("Household", back_populates="members")
     cards = relationship("Card", back_populates="resident")
 
     @classmethod
@@ -36,6 +47,8 @@ class Card(Base):
     #TODO at some point you want to add a tenant id to this key
     rfid = Column(String, primary_key=True, index=True)  # Using RFID as primary key
     resident_id = Column(Integer, ForeignKey("residents.id", ondelete="RESTRICT"))
+    # A manager can switch a card off: it stays registered but cannot start a charge.
+    enabled = Column(Boolean, nullable=False, default=True, server_default="1")
     
     resident = relationship("Resident", back_populates="cards")
     charge_transactions = relationship("ChargeTransaction", back_populates="card")

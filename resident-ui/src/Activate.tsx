@@ -38,6 +38,12 @@ export default function Activate() {
         // Without this the app still believes nobody is signed in and asks for the email address again.
         await checkAuth();
         toast.success("Account activated");
+        // A manager who cannot charge has nothing to do here: the management portal is where they go.
+        const roles: string[] = data.roles ?? ["resident"];
+        if (roles.includes("manager") && !roles.includes("resident")) {
+          window.location.assign("/management-ui/");
+          return;
+        }
         navigate("/", { replace: true });
       })
       .catch((err) => setError(err.message));

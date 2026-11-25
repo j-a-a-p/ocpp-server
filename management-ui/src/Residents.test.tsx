@@ -16,11 +16,15 @@ const address = (
 const residents = [
   {
     id: 1, full_name: "Anna Anderson", email: "anna@example.com", status: "active",
-    roles: ["manager", "resident"], household_head_id: null, ...address("Hoofdstraat", "12"),
+    roles: ["manager", "resident"], household_id: 10, is_main_member: true, household_head_id: null,
+    residency_start_date: "2026-01-01", residency_end_date: null, residency_state: "active" as const,
+    ...address("Hoofdstraat", "12"),
   },
   {
     id: 2, full_name: "Bob Brown", email: "bob@example.com", status: "invited",
-    roles: ["resident"], household_head_id: null, ...address("Kerkstraat", "3", "A"),
+    roles: ["resident"], household_id: 20, is_main_member: true, household_head_id: null,
+    residency_start_date: "2026-01-01", residency_end_date: null, residency_state: "active" as const,
+    ...address("Kerkstraat", "3", "A"),
   },
 ];
 
@@ -30,8 +34,15 @@ const addressOptions = [
   { street_name: "Kerkstraat", house_number: "3", house_number_suffix: null, zip_code: "3512 CD", city: "Utrecht" },
 ];
 
-const routes = (list: unknown = residents) => ({
+const cards = [
+  { rfid: "04AABBCC", name: "Tesla", resident_id: 1, enabled: true },
+  { rfid: "04DDEEFF", name: "Old fob", resident_id: 1, enabled: false },
+  { rfid: "04112233", name: "Golf", resident_id: 2, enabled: true },
+];
+
+const routes = (list: unknown = residents, cardList: unknown = cards) => ({
   "GET /residents/address-options": json(addressOptions),
+  "GET /cards/": () => json(cardList),
   "GET /residents/": () => json(list),
 });
 
@@ -54,7 +65,7 @@ describe("Residents", () => {
     expect(within(anna).getByText("anna@example.com")).toBeInTheDocument();
     expect(within(anna).getByText("Active")).toBeInTheDocument();
     expect(within(anna).getByText("Manager")).toBeInTheDocument();
-    expect(within(anna).getByText("Resident")).toBeInTheDocument();
+    expect(within(anna).getByText("Main member")).toBeInTheDocument();
     expect(within(anna).getByText("AA")).toBeInTheDocument();
     const bob = screen.getByText("Bob Brown").closest("tr") as HTMLElement;
     expect(within(bob).getByText("Invited")).toBeInTheDocument();
@@ -73,11 +84,11 @@ describe("Residents", () => {
   it("groups the residents by address, in order, and puts accounts without an address last", async () => {
     mockFetch(
       routes([
-        { ...residents[1], id: 5, full_name: "Carol Clark", ...address("Kerkstraat", "10") },
-        { ...residents[1], id: 4, full_name: "Dave Dunn", roles: ["manager"], ...address(null) },
-        { ...residents[1], id: 3, full_name: "Eve Evans", household_head_id: 1, ...address("Hoofdstraat", "12") },
+        { ...residents[1], id: 5, full_name: "Carol Clark", household_id: 50, ...address("Kerkstraat", "10") },
+        { ...residents[1], id: 4, full_name: "Dave Dunn", roles: ["manager"], household_id: null, is_main_member: false, ...address(null) },
+        { ...residents[1], id: 3, full_name: "Eve Evans", household_id: 10, is_main_member: false, household_head_id: 1, ...address("Hoofdstraat", "12") },
         residents[0],
-        { ...residents[1], id: 6, full_name: "Bob Brown", ...address("Kerkstraat", "3", "A") },
+        { ...residents[1], id: 6, full_name: "Bob Brown", household_id: 20, ...address("Kerkstraat", "3", "A") },
       ])
     );
 
@@ -104,7 +115,10 @@ describe("Residents", () => {
       ...routes(),
       "GET /residents/": () => json(list),
       "POST /residents/": (_url, init) => {
-        const created = { id: 3, status: "invited", household_head_id: null, ...JSON.parse(String(init?.body)) };
+        const created = {
+          id: 3, status: "invited", household_id: 30, is_main_member: true, household_head_id: null,
+          residency_end_date: null, residency_state: "active", ...JSON.parse(String(init?.body)),
+        };
         list = [...residents, created];
         return json(created);
       },
@@ -135,6 +149,7 @@ describe("Residents", () => {
       house_number_suffix: "b",
       zip_code: "3511 AB",
       city: "Utrecht",
+      residency_start_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     });
     expect(post[1]).toMatchObject({ credentials: "include" });
   });
@@ -251,7 +266,120 @@ describe("Residents", () => {
       house_number_suffix: null,
       zip_code: "3511 AB",
       city: "Utrecht",
+      residency_start_date: "2026-01-01",
     });
+  });
+
+  it("shows how many cards each resident has below their name, and how many are disabled", async () => {
+    mockFetch(routes());
+
+    renderWithProviders(<Residents />);
+
+    const anna = (await screen.findByText("Anna Anderson")).closest("tr") as HTMLElement;
+    expect(await within(anna).findByRole("button", { name: /2 cards, 1 disabled/ })).toBeInTheDocument();
+    const bob = screen.getByText("Bob Brown").closest("tr") as HTMLElement;
+    expect(within(bob).getByRole("button", { name: /1 card$/ })).toBeInTheDocument();
+    // The cards themselves are in the dialog, not in the list.
+    expect(screen.queryByText("Tesla")).not.toBeInTheDocument();
+  });
+
+  it("shows nothing for a resident who has no cards", async () => {
+    mockFetch(routes(residents, []));
+
+    renderWithProviders(<Residents />);
+
+    const anna = (await screen.findByText("Anna Anderson")).closest("tr") as HTMLElement;
+    expect(within(anna).queryByRole("button", { name: /card/ })).not.toBeInTheDocument();
+  });
+
+  const openCardsOfAnna = async () => {
+    const anna = (await screen.findByText("Anna Anderson")).closest("tr") as HTMLElement;
+    await userEvent.click(await within(anna).findByRole("button", { name: /2 cards/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Cards of Anna Anderson")).toBeInTheDocument();
+    return dialog;
+  };
+
+  it("opens the cards of the resident in a dialog, with the disabled one marked", async () => {
+    mockFetch(routes());
+    renderWithProviders(<Residents />);
+
+    const dialog = await openCardsOfAnna();
+
+    expect(within(dialog).getByText("Tesla")).toBeInTheDocument();
+    expect(within(dialog).getByText("04AABBCC")).toBeInTheDocument();
+    expect(within(dialog).getByText("Old fob")).toBeInTheDocument();
+    expect(within(dialog).getByText("Disabled")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Golf")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("switch", { name: "Card Tesla enabled" })).toBeChecked();
+    expect(within(dialog).getByRole("switch", { name: "Card Old fob enabled" })).not.toBeChecked();
+  });
+
+  it("lets a manager disable a card in the dialog", async () => {
+    const fetchMock = mockFetch({ ...routes(), "PUT /cards/04AABBCC/enabled": json({ rfid: "04AABBCC", enabled: false }) });
+    renderWithProviders(<Residents />);
+    const dialog = await openCardsOfAnna();
+
+    await userEvent.click(within(dialog).getByRole("switch", { name: "Card Tesla enabled" }));
+
+    expect(await screen.findByText("Card Tesla disabled")).toBeInTheDocument();
+    expect(lastBody(fetchMock, "PUT")).toEqual({ enabled: false });
+    expect(within(dialog).getByRole("switch", { name: "Card Tesla enabled" })).not.toBeChecked();
+    expect(within(dialog).getAllByText("Disabled")).toHaveLength(2);
+    // The count in the list follows.
+    expect(screen.getByRole("button", { name: /2 cards, 2 disabled/ })).toBeInTheDocument();
+  });
+
+  it("lets a manager enable a card again", async () => {
+    const fetchMock = mockFetch({ ...routes(), "PUT /cards/04DDEEFF/enabled": json({ rfid: "04DDEEFF", enabled: true }) });
+    renderWithProviders(<Residents />);
+    const dialog = await openCardsOfAnna();
+
+    await userEvent.click(within(dialog).getByRole("switch", { name: "Card Old fob enabled" }));
+
+    expect(await screen.findByText("Card Old fob enabled")).toBeInTheDocument();
+    expect(lastBody(fetchMock, "PUT")).toEqual({ enabled: true });
+    expect(within(dialog).queryByText("Disabled")).not.toBeInTheDocument();
+  });
+
+  it("leaves the card as it was and says why when the change is refused", async () => {
+    mockFetch({ ...routes(), "PUT /cards/04AABBCC/enabled": json({ detail: "Card not found" }, 404) });
+    renderWithProviders(<Residents />);
+    const dialog = await openCardsOfAnna();
+
+    await userEvent.click(within(dialog).getByRole("switch", { name: "Card Tesla enabled" }));
+
+    expect(await screen.findByText("Card not found")).toBeInTheDocument();
+    expect(within(dialog).getByRole("switch", { name: "Card Tesla enabled" })).toBeChecked();
+  });
+  it("sends the invitation again to someone who has not activated yet", async () => {    const fetchMock = mockFetch({ ...routes(), "POST /residents/2/send-invitation": json({ id: 2 }) });
+    renderWithProviders(<Residents />);
+    const bob = (await screen.findByText("Bob Brown")).closest("tr") as HTMLElement;
+
+    await userEvent.click(within(bob).getByRole("button", { name: "Send the invitation again to Bob Brown" }));
+
+    expect(await screen.findByText("Invitation sent to bob@example.com")).toBeInTheDocument();
+    expect(requests(fetchMock)).toContainEqual(expect.stringMatching(/^POST .*\/residents\/2\/send-invitation$/));
+  });
+
+  it("offers no new invitation to an account that is active already", async () => {
+    mockFetch(routes());
+    renderWithProviders(<Residents />);
+
+    const anna = (await screen.findByText("Anna Anderson")).closest("tr") as HTMLElement;
+
+    expect(within(anna).queryByRole("button", { name: /send the invitation again/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /send the invitation again/i })).toHaveLength(1);
+  });
+
+  it("shows the reason when the invitation cannot be sent again", async () => {
+    mockFetch({ ...routes(), "POST /residents/2/send-invitation": json({ detail: "Failed to send invitation email. Please try again." }, 500) });
+    renderWithProviders(<Residents />);
+    await screen.findByText("Bob Brown");
+
+    await userEvent.click(screen.getByRole("button", { name: "Send the invitation again to Bob Brown" }));
+
+    expect(await screen.findByText("Failed to send invitation email. Please try again.")).toBeInTheDocument();
   });
 
   it("tells the user when the residents cannot be loaded", async () => {
@@ -260,5 +388,101 @@ describe("Residents", () => {
     renderWithProviders(<Residents />);
 
     await waitFor(() => expect(screen.getByText("Failed to load residents.")).toBeInTheDocument());
+  });
+
+  describe("resident lifecycle per address", () => {
+    it("lets a manager add a household member directly at an active address", async () => {
+      let list = residents;
+      const fetchMock = mockFetch({
+        ...routes(),
+        "GET /residents/": () => json(list),
+        "POST /households/10/members": (_url, init) => {
+          const created = {
+            id: 99, status: "invited", roles: ["resident"], household_id: 10, is_main_member: false, household_head_id: 1,
+            residency_start_date: "2026-01-01", residency_end_date: null, residency_state: "active" as const,
+            ...address("Hoofdstraat", "12"), ...JSON.parse(String(init?.body)),
+          };
+          list = [...list, created];
+          return json(created);
+        },
+      });
+      renderWithProviders(<Residents />);
+      await screen.findByText("Anna Anderson");
+
+      await userEvent.click(screen.getByRole("button", { name: "Add household member at Hoofdstraat 12" }));
+      const dialog = await screen.findByRole("dialog");
+      await userEvent.type(within(dialog).getByLabelText("Full name"), "Partner Person");
+      await userEvent.type(within(dialog).getByLabelText("Email"), "partner@example.com");
+      await userEvent.click(within(dialog).getByRole("button", { name: /send invitation/i }));
+
+      expect(await screen.findByText("Household member invited")).toBeInTheDocument();
+      expect(await screen.findByText("Partner Person")).toBeInTheDocument();
+      expect(lastBody(fetchMock, "POST")).toEqual({ full_name: "Partner Person", email: "partner@example.com" });
+    });
+
+    it("terminates residency for a household and then shows the Add new resident button at that address", async () => {
+      let list = residents;
+      const fetchMock = mockFetch({
+        ...routes(),
+        "GET /residents/": () => json(list),
+        "PUT /households/10/termination": (_url, init) => {
+          const { end_date } = JSON.parse(String(init?.body));
+          list = list.map((r) => (r.household_id === 10 ? { ...r, residency_end_date: end_date } : r));
+          return json(list.filter((r) => r.household_id === 10));
+        },
+      });
+      renderWithProviders(<Residents />);
+      await screen.findByText("Anna Anderson");
+
+      expect(screen.queryByRole("button", { name: "Add new resident at Hoofdstraat 12" })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Terminate residency at Hoofdstraat 12" }));
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText(/Anna Anderson/)).toBeInTheDocument();
+      await userEvent.click(within(dialog).getByRole("button", { name: "Terminate residency" }));
+
+      expect(await screen.findByText(/Residency end date set to/)).toBeInTheDocument();
+      expect(lastBody(fetchMock, "PUT")).toEqual({ end_date: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) });
+      expect(await screen.findByRole("button", { name: "Add new resident at Hoofdstraat 12" })).toBeInTheDocument();
+    });
+
+    it("pre-fills the address when clicking Add new resident on a terminated address", async () => {
+      const endingResidents = [
+        { ...residents[0], residency_end_date: "2026-12-31", residency_state: "active" as const },
+      ];
+      mockFetch(routes(endingResidents));
+      renderWithProviders(<Residents />);
+      await screen.findByText("Anna Anderson");
+
+      await userEvent.click(screen.getByRole("button", { name: "Add new resident at Hoofdstraat 12" }));
+      const dialog = await screen.findByRole("dialog");
+      expect(within(dialog).getByText("Add new resident at Hoofdstraat 12")).toBeInTheDocument();
+      expect(within(dialog).getByLabelText("Street name")).toHaveValue("Hoofdstraat");
+      expect(within(dialog).getByLabelText("Street name")).toBeDisabled();
+      expect(within(dialog).getByLabelText("House number")).toHaveValue("12");
+      expect(within(dialog).getByLabelText("Residency start date")).toBeInTheDocument();
+    });
+
+    it("hides ended households by default behind a Show past residents toggle while keeping vacant addresses visible", async () => {
+      const ended = [
+        {
+          ...residents[0],
+          residency_start_date: "2025-01-01",
+          residency_end_date: "2025-12-31",
+          residency_state: "ended" as const,
+        },
+        residents[1],
+      ];
+      mockFetch(routes(ended));
+      renderWithProviders(<Residents />);
+
+      await screen.findByText("Bob Brown");
+      expect(screen.getByText("Hoofdstraat 12")).toBeInTheDocument();
+      expect(screen.getByText(/Vacant since/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Add new resident at Hoofdstraat 12" })).toBeInTheDocument();
+      expect(screen.queryByText("Anna Anderson")).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("switch", { name: "Show past residents" }));
+      expect(await screen.findByText("Anna Anderson")).toBeInTheDocument();
+    });
   });
 });

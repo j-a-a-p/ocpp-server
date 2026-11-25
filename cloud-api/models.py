@@ -1,8 +1,8 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Enum, Float, Date, Numeric, literal
+from sqlalchemy import Boolean, Column, Integer, String, ForeignKey, DateTime, Enum, Float, Date, Numeric, literal
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
-from tariff import DAL, tariff_at
+from tariff import DAL, local_today, tariff_at
 from datetime import datetime, date
 import enum
 
@@ -49,6 +49,51 @@ class ChargingProfile(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+class Household(Base):
+    """One tenancy at an address, with a start date, optional end date, and one main member.
+
+    The main member is the first resident of the household, receives invoices and updates, and can invite
+    household members. Setting end_date ends the residency for the entire household.
+    """
+    __tablename__ = "households"
+
+    id = Column(Integer, primary_key=True, index=True)
+    street_name = Column(String, nullable=True)
+    house_number = Column(String, nullable=True)
+    house_number_suffix = Column(String, nullable=True)
+    zip_code = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+
+    members = relationship("Resident", back_populates="household")
+
+    def set_address(self, address) -> None:
+        """address is (street name, house number, suffix, zip code, city)."""
+        self.street_name, self.house_number, self.house_number_suffix, self.zip_code, self.city = address
+
+    def address_of(self):
+        return (self.street_name, self.house_number, self.house_number_suffix, self.zip_code, self.city)
+
+    def has_address(self) -> bool:
+        return bool(self.street_name and self.house_number and self.zip_code and self.city)
+
+    def state_on(self, day: date) -> str:
+        """'upcoming' before start_date, 'ended' after end_date, otherwise 'active'."""
+        if self.end_date is not None and day > self.end_date:
+            return "ended"
+        if self.start_date is not None and day < self.start_date:
+            return "upcoming"
+        return "active"
+
+    def can_charge_on(self, day: date) -> bool:
+        return self.state_on(day) == "active"
+
+    @property
+    def main_member(self):
+        return next((member for member in self.members if member.is_main_member), None)
+
+
 class Resident(Base):
     __tablename__ = "residents"
 
@@ -62,14 +107,11 @@ class Resident(Base):
     login_expires_at = Column(DateTime, nullable=True)
     # Comma separated role names, see Role. Use has_role / set_roles, and has_role_sql in queries.
     roles = Column(String, nullable=False, default="", server_default="")
-    street_name = Column(String, nullable=True)
-    house_number = Column(String, nullable=True)
-    house_number_suffix = Column(String, nullable=True)
-    zip_code = Column(String, nullable=True)
-    city = Column(String, nullable=True)
-    # Set for a household member: the resident who invited them. They live at the address of that resident.
-    household_head_id = Column(Integer, ForeignKey("residents.id"), nullable=True)
+    household_id = Column(Integer, ForeignKey("households.id"), nullable=True)
+    # True for the first resident of a household: receives invoices and updates, can invite household members.
+    is_main_member = Column(Boolean, nullable=False, default=False, server_default="0")
 
+    household = relationship("Household", back_populates="members")
     cards = relationship("Card", back_populates="resident")
 
     @property
@@ -82,16 +124,66 @@ class Resident(Base):
     def set_roles(self, roles) -> None:
         self.roles = format_roles(roles)
 
-    def set_address(self, address) -> None:
-        """address is (street name, house number, suffix, zip code, city)."""
-        self.street_name, self.house_number, self.house_number_suffix, self.zip_code, self.city = address
+    @property
+    def street_name(self):
+        return self.household.street_name if self.household else None
+
+    @property
+    def house_number(self):
+        return self.household.house_number if self.household else None
+
+    @property
+    def house_number_suffix(self):
+        return self.household.house_number_suffix if self.household else None
+
+    @property
+    def zip_code(self):
+        return self.household.zip_code if self.household else None
+
+    @property
+    def city(self):
+        return self.household.city if self.household else None
+
+    @property
+    def residency_start_date(self) -> date | None:
+        return self.household.start_date if self.household else None
+
+    @property
+    def residency_end_date(self) -> date | None:
+        return self.household.end_date if self.household else None
+
+    def residency_state_on(self, day: date) -> str | None:
+        if not self.household:
+            return None
+        return self.household.state_on(day)
+
+    @property
+    def residency_state(self) -> str | None:
+        return self.residency_state_on(local_today())
+
+    def can_charge_on(self, day: date) -> bool:
+        return (
+            self.status == ResidentStatus.ACTIVE
+            and self.has_role(Role.RESIDENT)
+            and self.household is not None
+            and self.household.can_charge_on(day)
+        )
 
     def address_of(self):
-        return (self.street_name, self.house_number, self.house_number_suffix, self.zip_code, self.city)
+        if not self.household:
+            return (None, None, None, None, None)
+        return self.household.address_of()
 
     @property
     def is_household_member(self) -> bool:
-        return self.household_head_id is not None
+        return self.household_id is not None and not self.is_main_member
+
+    @property
+    def household_head_id(self) -> int | None:
+        if not self.is_household_member or not self.household:
+            return None
+        main = self.household.main_member
+        return main.id if main else None
 
     @classmethod
     def has_role_sql(cls, role: Role):
@@ -105,6 +197,8 @@ class Card(Base):
     rfid = Column(String, primary_key=True, index=True)  # Using RFID as primary key
     name = Column(String, nullable=False)  # Card name for display
     resident_id = Column(Integer, ForeignKey("residents.id", ondelete="RESTRICT"))
+    # A manager can switch a card off: it stays registered but cannot start a charge.
+    enabled = Column(Boolean, nullable=False, default=True, server_default="1")
     
     resident = relationship("Resident", back_populates="cards")
     charge_transactions = relationship("ChargeTransaction", back_populates="card")

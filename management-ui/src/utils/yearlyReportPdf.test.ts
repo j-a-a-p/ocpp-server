@@ -7,6 +7,7 @@ const session = (index: number, overrides: Partial<ReportSession> = {}): ReportS
   started: new Date(2026, 10, 1 + (index % 28), 9, 0),
   ended: new Date(2026, 10, 1 + (index % 28), 10, 25),
   station: "ChargeBox-001",
+  resident: "Anna Anderson",
   card: "Tesla",
   energy: 10,
   cost: 3,
@@ -14,7 +15,9 @@ const session = (index: number, overrides: Partial<ReportSession> = {}): ReportS
 });
 
 const report = (sessions: ReportSession[], overrides: Partial<YearlyReport> = {}): YearlyReport => ({
-  resident_name: "Anna Anderson",
+  address: "Hoofdstraat 12",
+  address_key: "hoofdstraat|12|",
+  residents: ["Anna Anderson"],
   year: 2026,
   generated: new Date(2026, 11, 31, 10, 0),
   total_energy: sessions.reduce((sum, item) => sum + item.energy, 0),
@@ -25,14 +28,15 @@ const report = (sessions: ReportSession[], overrides: Partial<YearlyReport> = {}
 });
 
 describe("createYearlyReportPdf", () => {
-  it("makes a PDF with the resident, the amount to pay and when they charged", async () => {
+  it("makes a PDF with the address, the amount to pay and when they charged", async () => {
     const doc = await createYearlyReportPdf(
       report([session(1), session(2, { card: "Zoe", cost: 1234.5, energy: 1500 })], { total_cost: 1237.5, total_energy: 1510 })
     );
     const pdf = doc.output();
 
     expect(pdf.startsWith("%PDF-")).toBe(true);
-    expect(pdf).toContain("Anna Anderson");
+    expect(pdf).toContain("Hoofdstraat 12");
+    expect(pdf).toContain("Resident: Anna Anderson");
     expect(pdf).toContain("AMOUNT TO PAY");
     // The amount and the energy have thousands separators; the euro sign is one byte of the PDF's Windows encoding.
     expect(pdf).toContain("\u00801,237.50");
@@ -54,16 +58,48 @@ describe("createYearlyReportPdf", () => {
     for (let page = 1; page <= pages; page += 1) expect(pdf).toContain(`Page ${page} of ${pages}`);
   });
 
+  it("lists everybody at the address, with a column for who charged when there are more of them", async () => {
+    const together = report([session(1), session(2, { resident: "Bob Brown" })], { residents: ["Anna Anderson", "Bob Brown"] });
+
+    const pdf = (await createYearlyReportPdf(together)).output();
+
+    expect(pdf).toContain("Residents: Anna Anderson, Bob Brown");
+    expect(pdf).toContain("(Resident)");
+    expect(pdf).toContain("(Bob Brown)");
+  });
+
+  it("has no column for who charged when one person lives at the address", async () => {
+    const pdf = (await createYearlyReportPdf(report([session(1)]))).output();
+
+    expect(pdf).not.toContain("(Resident)");
+  });
+
   it("copes with a charge that has no end", async () => {
     const doc = await createYearlyReportPdf(report([session(1, { ended: null })]));
 
     expect(doc.output()).toContain("09:00");
   });
 
-  it("names the document after the resident and the year", async () => {
+  it("names the document after the address and the year", async () => {
     const doc = await createYearlyReportPdf(report([session(1)]));
 
-    expect(doc.output()).toContain("/Title (Charging report 2026 - Anna Anderson)");
+    expect(doc.output()).toContain("/Title (Charging report 2026 - Hoofdstraat 12)");
+  });
+
+  it("includes the main member and clipped residency period when provided", async () => {
+    const pdf = (
+      await createYearlyReportPdf(
+        report([session(1)], {
+          main_resident: "Anna Anderson",
+          main_resident_email: "anna@example.com",
+          period_start: "2026-01-01",
+          period_end: "2026-06-30",
+        }),
+      )
+    ).output();
+
+    expect(pdf).toContain("Main member: Anna Anderson \\(anna@example.com\\)");
+    expect(pdf).toContain("Period: 1 January 2026 to 30 June 2026");
   });
 });
 
@@ -79,15 +115,21 @@ describe("toPdfText", () => {
 });
 
 describe("reportFileName", () => {
-  it("is the year and the name of the resident", () => {
-    expect(reportFileName({ resident_name: "Anna Anderson", year: 2026 })).toBe("charging-report-2026-anna-anderson.pdf");
+  it("is the year and the address", () => {
+    expect(reportFileName({ address: "Hoofdstraat 12 A", year: 2026 })).toBe("charging-report-2026-hoofdstraat-12-a.pdf");
   });
 
   it("leaves out accents and odd characters", () => {
-    expect(reportFileName({ resident_name: "Zoë O'Brien-de Vries", year: 2025 })).toBe("charging-report-2025-zoe-o-brien-de-vries.pdf");
+    expect(reportFileName({ address: "Zoë O'Brienlaan 3", year: 2025 })).toBe("charging-report-2025-zoe-o-brienlaan-3.pdf");
   });
 
-  it("copes with a name without letters", () => {
-    expect(reportFileName({ resident_name: "李明", year: 2026 })).toBe("charging-report-2026-resident.pdf");
+  it("copes with an address without letters", () => {
+    expect(reportFileName({ address: "李明", year: 2026 })).toBe("charging-report-2026-address.pdf");
+  });
+
+  it("appends the main member name when provided so mid-year reports have distinct file names", () => {
+    expect(reportFileName({ address: "Hoofdstraat 12", year: 2026, main_resident: "Anna Anderson" })).toBe(
+      "charging-report-2026-hoofdstraat-12-anna-anderson.pdf",
+    );
   });
 });

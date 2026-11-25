@@ -6,6 +6,8 @@ from models import Role, format_roles, parse_roles
 MANAGEMENT_ENDPOINTS = [
     ("GET", "/residents/"),
     ("GET", "/residents/address-options"),
+    ("POST", "/households/1/members"),
+    ("PUT", "/households/1/termination"),
     ("GET", "/cards/"),
     ("GET", "/charge-transactions/all"),
     ("GET", "/power-logs/"),

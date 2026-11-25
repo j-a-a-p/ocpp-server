@@ -1,4 +1,5 @@
 """The OCPP messages a charger sends, handled one at a time."""
+from datetime import timedelta
 import json
 
 import pytest
@@ -6,7 +7,8 @@ import pytest
 import charge_point
 from charge_point import ChargePoint
 from conftest import add_card
-from models import ChargeTransaction, PowerLog, RefusedCard, Resident, ResidentStatus
+from models import Card, ChargeTransaction, Household, PowerLog, RefusedCard, Resident, ResidentStatus
+from rfid_manager import local_today
 
 
 def status_of(result) -> str:
@@ -81,12 +83,72 @@ class TestAuthorize:
         assert status_of(await cp.on_authorize(id_tag="04112233")) == "Invalid"
 
     async def test_card_of_a_manager_who_is_also_a_resident_is_accepted(self, cp, db):
-        both = Resident(email="both@example.com", full_name="Both", status=ResidentStatus.ACTIVE, roles="manager,resident")
+        household = Household()
+        db.add(household)
+        db.flush()
+        both = Resident(email="both@example.com", full_name="Both", status=ResidentStatus.ACTIVE, roles="manager,resident", household_id=household.id)
         db.add(both)
         db.commit()
         add_card(db, "04112233", both)
 
         assert status_of(await cp.on_authorize(id_tag="04112233")) == "Accepted"
+
+    async def test_card_before_residency_start_date_is_invalid(self, cp, db):
+        household = Household(start_date=local_today() + timedelta(days=1))
+        db.add(household)
+        db.flush()
+        upcoming = Resident(email="upcoming@example.com", full_name="Upcoming", status=ResidentStatus.ACTIVE, roles="resident", household_id=household.id)
+        db.add(upcoming)
+        db.commit()
+        add_card(db, "04UP0001", upcoming)
+
+        assert status_of(await cp.on_authorize(id_tag="04UP0001")) == "Invalid"
+
+    async def test_card_on_residency_end_date_is_still_accepted(self, cp, db):
+        today = local_today()
+        household = Household(start_date=today - timedelta(days=30), end_date=today)
+        db.add(household)
+        db.flush()
+        ending = Resident(email="ending@example.com", full_name="Ending", status=ResidentStatus.ACTIVE, roles="resident", household_id=household.id)
+        db.add(ending)
+        db.commit()
+        add_card(db, "04EN0001", ending)
+
+        assert status_of(await cp.on_authorize(id_tag="04EN0001")) == "Accepted"
+
+    async def test_card_after_residency_end_date_is_invalid(self, cp, db):
+        today = local_today()
+        household = Household(start_date=today - timedelta(days=30), end_date=today - timedelta(days=1))
+        db.add(household)
+        db.flush()
+        ended = Resident(email="ended@example.com", full_name="Ended", status=ResidentStatus.ACTIVE, roles="resident", household_id=household.id)
+        db.add(ended)
+        db.commit()
+        add_card(db, "04EX0001", ended)
+
+        assert status_of(await cp.on_authorize(id_tag="04EX0001")) == "Invalid"
+
+    async def test_a_card_that_a_manager_switched_off_is_invalid(self, cp, db, resident_with_card):
+        db.query(Card).filter_by(rfid="04AABBCC").update({"enabled": False})
+        db.commit()
+
+        assert status_of(await cp.on_authorize(id_tag="04AABBCC")) == "Invalid"
+
+    async def test_a_card_that_is_switched_off_cannot_start_a_charge(self, cp, db, resident_with_card):
+        db.query(Card).filter_by(rfid="04AABBCC").update({"enabled": False})
+        db.commit()
+
+        result = await cp.on_start_transaction(connector_id=1, id_tag="04AABBCC", meter_start=0, timestamp="t")
+
+        assert status_of(result) == "Invalid"
+        assert db.query(ChargeTransaction).count() == 0
+
+    async def test_the_other_cards_of_the_same_resident_keep_working(self, cp, db, resident_with_card):
+        add_card(db, "04DDEEFF", db.query(Resident).first())
+        db.query(Card).filter_by(rfid="04AABBCC").update({"enabled": False})
+        db.commit()
+
+        assert status_of(await cp.on_authorize(id_tag="04DDEEFF")) == "Accepted"
 
     async def test_a_role_that_only_contains_the_word_resident_does_not_count(self, cp, db):
         other = Resident(email="other@example.com", full_name="Other", status=ResidentStatus.ACTIVE, roles="non_resident")

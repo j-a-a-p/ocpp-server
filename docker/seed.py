@@ -35,24 +35,42 @@ def seed_residents(cur: sqlite3.Cursor, data: dict) -> list[tuple[str, str]]:
     """Returns (rfid, name) of every card of the seeded residents."""
     cards = []
     for resident in data["residents"]:
-        address = resident.get("address", {})
-        cur.execute(
-            "INSERT OR IGNORE INTO residents (full_name, email, status, roles, street_name, house_number, house_number_suffix, zip_code, city)"
-            " VALUES (?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ?)",
-            (
-                resident["full_name"], resident["email"], ",".join(sorted(resident["roles"])),
-                address.get("street_name"), address.get("house_number"), address.get("house_number_suffix"),
-                address.get("zip_code"), address.get("city"),
-            ),
-        )
-        resident_id = cur.execute(
-            "SELECT id FROM residents WHERE email = ?", (resident["email"],)
-        ).fetchone()[0]
-        if "household_head" in resident:  # a household member: the resident who invited them is listed earlier
+        existing = cur.execute("SELECT id FROM residents WHERE email = ?", (resident["email"],)).fetchone()
+        if existing:
+            resident_id = existing[0]
+        else:
+            roles = sorted(resident["roles"])
+            household_id = None
+            is_main_member = 0
+            if "household_head" in resident:
+                # A household member: the resident who invited them is listed earlier.
+                row = cur.execute(
+                    "SELECT household_id FROM residents WHERE email = ?", (resident["household_head"],)
+                ).fetchone()
+                household_id = row[0] if row else None
+            elif "resident" in roles:
+                address = resident.get("address", {})
+                cur.execute(
+                    "INSERT INTO households (street_name, house_number, house_number_suffix, zip_code, city, start_date, end_date)"
+                    " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        address.get("street_name"), address.get("house_number"), address.get("house_number_suffix"),
+                        address.get("zip_code"), address.get("city"),
+                        resident.get("residency_start_date"), resident.get("residency_end_date"),
+                    ),
+                )
+                household_id = cur.lastrowid
+                is_main_member = 1
+
             cur.execute(
-                "UPDATE residents SET household_head_id = (SELECT id FROM residents WHERE email = ?) WHERE id = ?",
-                (resident["household_head"], resident_id),
+                "INSERT INTO residents (full_name, email, status, roles, household_id, is_main_member)"
+                " VALUES (?, ?, 'ACTIVE', ?, ?, ?)",
+                (
+                    resident["full_name"], resident["email"], ",".join(roles),
+                    household_id, is_main_member,
+                ),
             )
+            resident_id = cur.lastrowid
         for card in resident.get("cards", []):
             rfid = card["rfid"].strip().upper()
             cur.execute(

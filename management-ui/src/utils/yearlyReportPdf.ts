@@ -35,14 +35,20 @@ export const toPdfText = (text: string): string =>
     })
     .join("");
 
-export const reportFileName = (report: Pick<YearlyReport, "resident_name" | "year">): string => {
-  const slug = report.resident_name
+const slugify = (value: string): string =>
+  value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return `charging-report-${report.year}-${slug || "resident"}.pdf`;
+
+export const reportFileName = (report: Pick<YearlyReport, "address" | "year" | "main_resident">): string => {
+  const slug = slugify(report.address) || "address";
+  const memberSlug = report.main_resident ? slugify(report.main_resident) : "";
+  return memberSlug
+    ? `charging-report-${report.year}-${slug}-${memberSlug}.pdf`
+    : `charging-report-${report.year}-${slug}.pdf`;
 };
 
 const formatDuration = (started: Date, ended: Date | null): string => {
@@ -56,20 +62,20 @@ const formatDuration = (started: Date, ended: Date | null): string => {
 const formatTimes = (started: Date, ended: Date | null): string =>
   ended ? `${dayjs(started).format("HH:mm")} - ${dayjs(ended).format("HH:mm")}` : dayjs(started).format("HH:mm");
 
-/** A nice report of what one resident charged in one year and has to pay for it. */
+/** A nice report of what was charged at one address in one year, and what has to be paid for it. */
 export const createYearlyReportPdf = async (report: YearlyReport): Promise<jsPDF> => {
   // Loaded when a report is made, so the PDF library is not part of the pages that do not need it.
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
 
   const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const name = toPdfText(report.resident_name);
+  const name = toPdfText(report.address);
   const title = `Charging report ${report.year}`;
   const text = (value: string, x: number, y: number, align: "left" | "right" = "left") =>
     doc.text(value, x, y, { align });
 
   doc.setProperties({
     title: `${title} - ${name}`,
-    subject: `Charging sessions and amount to pay of ${name} in ${report.year}`,
+    subject: `Charging sessions and amount to pay at ${name} in ${report.year}`,
   });
 
   // Header band with the logo
@@ -108,10 +114,25 @@ export const createYearlyReportPdf = async (report: YearlyReport): Promise<jsPDF
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(...MUTED);
-  text(`Period: 1 January ${report.year} to 31 December ${report.year}`, MARGIN, 63);
+  const periodStart = report.period_start ? dayjs(report.period_start).format("D MMMM YYYY") : `1 January ${report.year}`;
+  const periodEnd = report.period_end ? dayjs(report.period_end).format("D MMMM YYYY") : `31 December ${report.year}`;
+  text(`Period: ${periodStart} to ${periodEnd}`, MARGIN, 63);
+  let infoY = 68;
+  if (report.main_resident) {
+    const contact = report.main_resident_email
+      ? `${toPdfText(report.main_resident)} (${toPdfText(report.main_resident_email)})`
+      : toPdfText(report.main_resident);
+    text(`Main member: ${contact}`, MARGIN, infoY);
+    infoY += 5;
+  }
+  const residents = report.residents.map(toPdfText);
+  if (residents.length > 0) {
+    text(`${residents.length === 1 ? "Resident" : "Residents"}: ${residents.join(", ")}`, MARGIN, infoY);
+    infoY += 5;
+  }
 
   // The summary: the amount to pay stands out
-  const cardTop = 71;
+  const cardTop = Math.max(75, infoY + 2);
   const cardHeight = 27;
   const amountWidth = 84;
   const smallWidth = (CONTENT_WIDTH - amountWidth - 6) / 2;
@@ -208,20 +229,24 @@ export const createYearlyReportPdf = async (report: YearlyReport): Promise<jsPDF
 
   sectionTitle("When you charged");
   y += 3;
+  // Who charged is only worth a column when more than one person lives at the address.
+  const showResident = report.residents.length > 1;
+  const numberColumns = showResident ? [6, 7] : [5, 6];
   autoTable(doc, {
-    ...tableLook([5, 6]),
+    ...tableLook(numberColumns),
     startY: y,
-    head: [["Date", "Time", "Duration", "Station", "Card", "Energy (kWh)", "Cost"]],
+    head: [["Date", "Time", "Duration", "Station", "Card", ...(showResident ? ["Resident"] : []), "Energy (kWh)", "Cost"]],
     body: report.sessions.map((session) => [
       dayjs(session.started).format("ddd D MMM YYYY"),
       formatTimes(session.started, session.ended),
       formatDuration(session.started, session.ended),
       toPdfText(session.station),
       toPdfText(session.card),
+      ...(showResident ? [toPdfText(session.resident)] : []),
       formatNumber(session.energy),
       formatEuro(session.cost),
     ]),
-    foot: [["Total", "", "", "", "", formatNumber(report.total_energy), formatEuro(report.total_cost)]],
+    foot: [["Total", "", "", "", "", ...(showResident ? [""] : []), formatNumber(report.total_energy), formatEuro(report.total_cost)]],
   });
   y = endOfTable() + 10;
 

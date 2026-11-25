@@ -9,9 +9,10 @@ interface MyCardsCardProps {
   cards: CardType[];
   loading: boolean;
   onRename: (rfid: string, name: string) => void;
+  readOnly?: boolean;
 }
 
-const MyCardsCard: React.FC<MyCardsCardProps> = ({ cards, loading, onRename }) => {
+const MyCardsCard: React.FC<MyCardsCardProps> = ({ cards, loading, onRename, readOnly = false }) => {
   const { token } = theme.useToken();
 
   return (
@@ -41,16 +42,20 @@ const MyCardsCard: React.FC<MyCardsCardProps> = ({ cards, loading, onRename }) =
               <Flex vertical style={{ minWidth: 0, flex: 1 }}>
                 <Text
                   strong
-                  editable={{
-                    text: card.name,
-                    tooltip: "Rename card",
-                    onChange: (name) => {
-                      const trimmed = name.trim();
-                      if (trimmed && trimmed !== card.name) {
-                        onRename(card.rfid, trimmed);
-                      }
-                    },
-                  }}
+                  editable={
+                    readOnly
+                      ? false
+                      : {
+                          text: card.name,
+                          tooltip: "Rename card",
+                          onChange: (name) => {
+                            const trimmed = name.trim();
+                            if (trimmed && trimmed !== card.name) {
+                              onRename(card.rfid, trimmed);
+                            }
+                          },
+                        }
+                  }
                 >
                   {card.name || "Unnamed card"}
                 </Text>
@@ -58,6 +63,7 @@ const MyCardsCard: React.FC<MyCardsCardProps> = ({ cards, loading, onRename }) =
                   {card.rfid}
                 </Text>
               </Flex>
+              {card.enabled === false && <Tag color="error">Disabled by a manager</Tag>}
             </Flex>
           ))}
         </Flex>

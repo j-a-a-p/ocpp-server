@@ -155,7 +155,13 @@ class TestLogin:
         assert validated.json() == {
             "resident_id": resident.id, "email": resident.email,
             "full_name": resident.full_name, "status": "active",
-            "roles": ["manager", "resident"], "household_head_id": None,
+            "roles": ["manager", "resident"],
+            "household_id": resident.household_id,
+            "is_main_member": True,
+            "household_head_id": None,
+            "residency_start_date": None,
+            "residency_end_date": None,
+            "residency_state": "active",
             "street_name": None, "house_number": None, "house_number_suffix": None,
             "zip_code": None, "city": None,
         }

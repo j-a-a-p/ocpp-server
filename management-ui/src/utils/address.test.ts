@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressSuggestions, formatAddress, groupByAddress } from "./address";
+import { addressKey, addressLabel, addressSuggestions, formatAddress, groupByAddress, NO_ADDRESS } from "./address";
 
 const at = (
   street_name: string | null,
@@ -13,6 +13,24 @@ describe("formatAddress", () => {
   it("joins street, number and suffix", () => {
     expect(formatAddress(at("Hoofdstraat", "12", "A"))).toBe("Hoofdstraat 12 A");
     expect(formatAddress(at("Hoofdstraat", "12"))).toBe("Hoofdstraat 12");
+  });
+});
+
+describe("addressKey and addressLabel", () => {
+  it("is the same for spellings that differ in case or spaces, and for another zip code or city", () => {
+    expect(addressKey(at(" hoofdstraat ", "12", "a", "1111 AA", "X"))).toBe(addressKey(at("Hoofdstraat", "12", "A", "2222 BB", "Y")));
+  });
+
+  it("tells apart another number or suffix", () => {
+    expect(addressKey(at("Hoofdstraat", "12"))).not.toBe(addressKey(at("Hoofdstraat", "12", "A")));
+    expect(addressKey(at("Hoofdstraat", "12"))).not.toBe(addressKey(at("Hoofdstraat", "14")));
+  });
+
+  it("is one shared key for everybody without an address", () => {
+    expect(addressKey(at(null))).toBe(NO_ADDRESS);
+    expect(addressKey({})).toBe(NO_ADDRESS);
+    expect(addressLabel(at(null))).toBe("No address");
+    expect(addressLabel(at("Hoofdstraat", "12", "A"))).toBe("Hoofdstraat 12 A");
   });
 });
 
@@ -84,5 +102,21 @@ describe("groupByAddress", () => {
     ]);
 
     expect(group.members.map((member) => member.full_name)).toEqual(["Wim", "Ann", "Zoe"]);
+  });
+
+  it("orders active households before upcoming and ended households, and picks the open-ended one as latest", () => {
+    const home = at("Hoofdstraat", "12");
+    const [group] = groupByAddress(
+      [
+        { ...person(1, "Past", home), household_id: 1, is_main_member: true, residency_start_date: "2025-01-01", residency_end_date: "2025-12-31", residency_state: "ended" as const },
+        { ...person(2, "Next", home), household_id: 3, is_main_member: true, residency_start_date: "2026-07-01", residency_end_date: null, residency_state: "upcoming" as const },
+        { ...person(3, "Now", home), household_id: 2, is_main_member: true, residency_start_date: "2026-01-01", residency_end_date: "2026-06-30", residency_state: "active" as const },
+      ],
+      "2026-05-01",
+    );
+
+    expect(group.households.map((h) => h.household_id)).toEqual([2, 3, 1]);
+    expect(group.latestHousehold?.household_id).toBe(3);
+    expect(group.endedHouseholds.map((h) => h.household_id)).toEqual([1]);
   });
 });

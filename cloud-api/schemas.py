@@ -22,13 +22,23 @@ class ResidentFields(BaseModel):
 
 class ResidentCreate(ResidentFields):
     email: str
+    residency_start_date: Optional[date] = None
+
+    @model_validator(mode="after")
+    def residents_need_a_start_date(self):
+        if Role.RESIDENT in self.roles and self.residency_start_date is None:
+            raise ValueError("A resident needs a residency start date")
+        return self
 
 class ResidentUpdate(ResidentFields):
-    pass
+    residency_start_date: Optional[date] = None
 
 class HouseholdMemberCreate(BaseModel):
     full_name: str = Field(min_length=1)
     email: str
+
+class HouseholdTerminationUpdate(BaseModel):
+    end_date: Optional[date] = None
 
 class ResidentResponse(BaseModel):
     id: int
@@ -41,7 +51,12 @@ class ResidentResponse(BaseModel):
     house_number_suffix: Optional[str] = None
     zip_code: Optional[str] = None
     city: Optional[str] = None
+    household_id: Optional[int] = None
+    is_main_member: bool = False
     household_head_id: Optional[int] = None
+    residency_start_date: Optional[date] = None
+    residency_end_date: Optional[date] = None
+    residency_state: Optional[str] = None
     invite_expires_at: Optional[datetime] = None
     deleted_at: Optional[datetime] = None
 
@@ -66,11 +81,16 @@ class CardBase(BaseModel):
     resident_id: int
 
 class CardResponse(CardBase):
+    enabled: bool = True
+
     class Config:
         from_attributes = True
 
 class CardUpdate(BaseModel):
     name: str
+
+class CardEnabledUpdate(BaseModel):
+    enabled: bool
 
 class RefusedCardBase(BaseModel):
     rfid: str
